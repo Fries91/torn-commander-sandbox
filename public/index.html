@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+
+  <meta
+    name="viewport"
+    content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no"
+  >
+
+  <meta
+    name="description"
+    content="A mobile-friendly 2–6 player MTG Commander sandbox for the Torn community."
+  >
+
+  <meta name="theme-color" content="#15181c">
+
+  <title>Torn Commander Sandbox</title>
+
+  <link rel="stylesheet" href="/styles.css">
+</head>
+
+<body>
+  <div class="app-shell">
+
+    <header class="top-header">
+      <div class="brand-area">
+        <div class="brand-icon" aria-hidden="true">🃏</div>
+
+        <div class="brand-text">
+          <h1>Torn Commander</h1>
+          <p>MTG Multiplayer Sandbox</p>
+        </div>
+      </div>
+
+      <div
+        id="connectionStatus"
+        class="connection-status connecting"
+        aria-live="polite"
+      >
+        <span class="status-dot"></span>
+        <span id="connectionText">Connecting</span>
+      </div>
+    </header>
+
+    <main class="main-content">
+
+      <section class="hero-panel">
+        <div class="hero-badge">2–6 Players</div>
+
+        <h2>Play Commander with Torn players</h2>
+
+        <p>
+          Create private multiplayer rooms, import Commander decks and play
+          from your phone, tablet or computer.
+        </p>
+      </section>
+
+      <section class="action-grid" aria-label="Commander actions">
+
+        <button
+          id="createGameButton"
+          class="action-card primary-card"
+          type="button"
+        >
+          <span class="action-icon" aria-hidden="true">⚔️</span>
+
+          <span class="action-content">
+            <strong>Create Game</strong>
+            <small>Start a new Commander room</small>
+          </span>
+
+          <span class="action-arrow" aria-hidden="true">›</span>
+        </button>
+
+        <button
+          id="joinGameButton"
+          class="action-card"
+          type="button"
+        >
+          <span class="action-icon" aria-hidden="true">🔗</span>
+
+          <span class="action-content">
+            <strong>Join Game</strong>
+            <small>Enter a room code</small>
+          </span>
+
+          <span class="action-arrow" aria-hidden="true">›</span>
+        </button>
+
+        <button
+          id="myDecksButton"
+          class="action-card"
+          type="button"
+        >
+          <span class="action-icon" aria-hidden="true">📚</span>
+
+          <span class="action-content">
+            <strong>My Decks</strong>
+            <small>Import and manage decks</small>
+          </span>
+
+          <span class="action-arrow" aria-hidden="true">›</span>
+        </button>
+      </section>
+
+      <section class="information-panel">
+        <div class="section-heading">
+          <h3>Commander Sandbox</h3>
+          <span class="unofficial-label">Unofficial</span>
+        </div>
+
+        <div class="feature-list">
+
+          <div class="feature-row">
+            <span class="feature-icon" aria-hidden="true">👥</span>
+
+            <div>
+              <strong>Six-player support</strong>
+              <p>Play Commander with two to six players.</p>
+            </div>
+          </div>
+
+          <div class="feature-row">
+            <span class="feature-icon" aria-hidden="true">🙈</span>
+
+            <div>
+              <strong>Private cards</strong>
+              <p>Your hand and library remain hidden from opponents.</p>
+            </div>
+          </div>
+
+          <div class="feature-row">
+            <span class="feature-icon" aria-hidden="true">📱</span>
+
+            <div>
+              <strong>Mobile friendly</strong>
+              <p>Designed for TornPDA, phones, tablets and computers.</p>
+            </div>
+          </div>
+
+        </div>
+      </section>
+
+      <section class="development-panel">
+        <div class="development-header">
+          <span>Development progress</span>
+          <strong>Step 1</strong>
+        </div>
+
+        <div class="progress-track">
+          <div class="progress-fill"></div>
+        </div>
+
+        <p>
+          The app foundation and multiplayer server connection are active.
+        </p>
+      </section>
+
+    </main>
+
+    <nav class="bottom-navigation" aria-label="Main navigation">
+
+      <button class="nav-button active" type="button">
+        <span aria-hidden="true">🏠</span>
+        <small>Home</small>
+      </button>
+
+      <button id="bottomDecksButton" class="nav-button" type="button">
+        <span aria-hidden="true">📚</span>
+        <small>Decks</small>
+      </button>
+
+      <button id="bottomGamesButton" class="nav-button" type="button">
+        <span aria-hidden="true">🎲</span>
+        <small>Games</small>
+      </button>
+
+      <button id="bottomSettingsButton" class="nav-button" type="button">
+        <span aria-hidden="true">⚙️</span>
+        <small>Settings</small>
+      </button>
+
+    </nav>
+
+  </div>
+
+  <div
+    id="messageToast"
+    class="message-toast"
+    role="status"
+    aria-live="polite"
+  ></div>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="/app.js"></script>
+</body>
+</html>
