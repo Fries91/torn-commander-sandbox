@@ -2,21 +2,21 @@
 
 /*
   Torn Commander Sandbox
-  Step 2 backend server
+  Step 3 backend server
 
-  This version provides:
+  Features:
   - Express hosting
   - Socket.IO multiplayer rooms
-  - Six-character room codes
-  - 2–6 player lobbies
-  - Ready status
-  - Host controls
-  - Reconnection sessions
-  - Player removal and host transfer
-  - Automatic cleanup of abandoned rooms
+  - Six-character private room codes
+  - Two to six players
+  - Ready status and host controls
+  - Saved-session reconnection
+  - Public deck metadata syncing
+  - Deck selection required before readying
+  - Automatic abandoned-room cleanup
 
-  Step 2 stores active rooms in memory. A later step will
-  move persistent information into a database.
+  Active rooms are stored in memory for now. A later step can
+  move room and player information into persistent storage.
 */
 
 const path = require("path");
@@ -50,6 +50,13 @@ const ALLOWED_MAX_PLAYERS =
 const ALLOWED_STARTING_LIFE =
   new Set([20, 30, 40, 50, 60]);
 
+const ALLOWED_DECK_VALIDATION =
+  new Set([
+    "valid",
+    "warning",
+    "missing"
+  ]);
+
 const rooms = new Map();
 const disconnectTimers = new Map();
 
@@ -80,23 +87,36 @@ const io = new Server(server, {
 app.disable("x-powered-by");
 app.set("trust proxy", 1);
 
-app.use(express.json({
-  limit: "1mb"
-}));
+app.use(
+  express.json({
+    limit: "1mb"
+  })
+);
 
-app.use(express.urlencoded({
-  extended: true,
-  limit: "1mb"
-}));
+app.use(
+  express.urlencoded({
+    extended: true,
+    limit: "1mb"
+  })
+);
 
-app.use(express.static(PUBLIC_DIRECTORY, {
-  extensions: ["html"],
+app.use(
+  express.static(
+    PUBLIC_DIRECTORY,
+    {
+      extensions: ["html"],
+      maxAge: 0,
+      etag: true,
 
-  maxAge:
-    process.env.NODE_ENV === "production"
-      ? "1h"
-      : 0
-}));
+      setHeaders(response) {
+        response.setHeader(
+          "Cache-Control",
+          "no-cache, no-store, must-revalidate"
+        );
+      }
+    }
+  )
+);
 
 /* ==========================================
    General helpers
@@ -120,10 +140,22 @@ function normalizeRoomCode(value) {
     .slice(0, ROOM_CODE_LENGTH);
 }
 
+function normalizeText(
+  value,
+  maximumLength
+) {
+  return String(value || "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, maximumLength);
+}
+
 function normalizeMaximumPlayers(value) {
   const parsedValue = Number(value);
 
-  return ALLOWED_MAX_PLAYERS.has(parsedValue)
+  return ALLOWED_MAX_PLAYERS.has(
+    parsedValue
+  )
     ? parsedValue
     : 6;
 }
@@ -131,9 +163,87 @@ function normalizeMaximumPlayers(value) {
 function normalizeStartingLife(value) {
   const parsedValue = Number(value);
 
-  return ALLOWED_STARTING_LIFE.has(parsedValue)
+  return ALLOWED_STARTING_LIFE.has(
+    parsedValue
+  )
     ? parsedValue
     : 40;
+}
+
+function normalizeDeckMetadata(value) {
+  if (
+    !value ||
+    typeof value !== "object"
+  ) {
+    return null;
+  }
+
+  const id = normalizeText(
+    value.id,
+    100
+  );
+
+  const name = normalizeText(
+    value.name,
+    50
+  );
+
+  const commander = normalizeText(
+    value.commander,
+    150
+  );
+
+  const totalCards = Math.max(
+    0,
+    Math.min(
+      1000,
+      Math.floor(
+        Number(value.totalCards) || 0
+      )
+    )
+  );
+
+  const uniqueCards = Math.max(
+    0,
+    Math.min(
+      1000,
+      Math.floor(
+        Number(value.uniqueCards) || 0
+      )
+    )
+  );
+
+  const requestedValidation =
+    normalizeText(
+      value.validation,
+      20
+    ).toLowerCase();
+
+  const validation =
+    ALLOWED_DECK_VALIDATION.has(
+      requestedValidation
+    )
+      ? requestedValidation
+      : totalCards === 100
+        ? "valid"
+        : "warning";
+
+  if (
+    !id ||
+    !name ||
+    !commander
+  ) {
+    return null;
+  }
+
+  return {
+    id,
+    name,
+    commander,
+    totalCards,
+    uniqueCards,
+    validation
+  };
 }
 
 function createPlayerId() {
@@ -181,6 +291,31 @@ function createRoomCode() {
   );
 }
 
+function createPublicPlayer(player) {
+  return {
+    id: player.id,
+    name: player.name,
+    ready: player.ready,
+    connected: player.connected,
+    joinedAt: player.joinedAt,
+
+    deck: player.deck
+      ? {
+          id: player.deck.id,
+          name: player.deck.name,
+          commander:
+            player.deck.commander,
+          totalCards:
+            player.deck.totalCards,
+          uniqueCards:
+            player.deck.uniqueCards,
+          validation:
+            player.deck.validation
+        }
+      : null
+  };
+}
+
 function createPublicRoom(room) {
   return {
     code: room.code,
@@ -191,20 +326,20 @@ function createPublicRoom(room) {
     status: room.status,
     createdAt: room.createdAt,
     updatedAt: room.updatedAt,
+    startedAt:
+      room.startedAt || null,
 
-    players: room.players.map(
-      (player) => ({
-        id: player.id,
-        name: player.name,
-        ready: player.ready,
-        connected: player.connected,
-        joinedAt: player.joinedAt
-      })
-    )
+    players:
+      room.players.map(
+        createPublicPlayer
+      )
   };
 }
 
-function findPlayer(room, playerId) {
+function findPlayer(
+  room,
+  playerId
+) {
   if (
     !room ||
     !Array.isArray(room.players)
@@ -220,8 +355,13 @@ function findPlayer(room, playerId) {
   );
 }
 
-function acknowledge(callback, response) {
-  if (typeof callback === "function") {
+function acknowledge(
+  callback,
+  response
+) {
+  if (
+    typeof callback === "function"
+  ) {
     callback(response);
   }
 }
@@ -248,10 +388,12 @@ function clearDisconnectTimer(
   const timer =
     disconnectTimers.get(timerKey);
 
-  if (timer) {
-    clearTimeout(timer);
-    disconnectTimers.delete(timerKey);
+  if (!timer) {
+    return;
   }
+
+  clearTimeout(timer);
+  disconnectTimers.delete(timerKey);
 }
 
 function transferHostIfNeeded(room) {
@@ -263,7 +405,10 @@ function transferHostIfNeeded(room) {
   }
 
   const currentHost =
-    findPlayer(room, room.hostId);
+    findPlayer(
+      room,
+      room.hostId
+    );
 
   if (
     currentHost &&
@@ -303,7 +448,9 @@ function detachSocketFromRoom(
     roomChannel(roomCode)
   );
 
-  removeSocketRoomAssociation(socket);
+  removeSocketRoomAssociation(
+    socket
+  );
 }
 
 function getAuthenticatedRoomPlayer(
@@ -311,16 +458,25 @@ function getAuthenticatedRoomPlayer(
 ) {
   const roomCode =
     normalizeRoomCode(
-      payload && payload.roomCode
+      payload &&
+      payload.roomCode
     );
 
-  const playerId = String(
-    payload && payload.playerId || ""
-  );
+  const playerId =
+    String(
+      (
+        payload &&
+        payload.playerId
+      ) || ""
+    );
 
-  const sessionToken = String(
-    payload && payload.sessionToken || ""
-  );
+  const sessionToken =
+    String(
+      (
+        payload &&
+        payload.sessionToken
+      ) || ""
+    );
 
   if (
     roomCode.length !==
@@ -328,11 +484,13 @@ function getAuthenticatedRoomPlayer(
   ) {
     return {
       success: false,
-      error: "The room code is invalid."
+      error:
+        "The room code is invalid."
     };
   }
 
-  const room = rooms.get(roomCode);
+  const room =
+    rooms.get(roomCode);
 
   if (!room) {
     return {
@@ -343,11 +501,15 @@ function getAuthenticatedRoomPlayer(
   }
 
   const player =
-    findPlayer(room, playerId);
+    findPlayer(
+      room,
+      playerId
+    );
 
   if (
     !player ||
-    player.sessionToken !== sessionToken
+    player.sessionToken !==
+      sessionToken
   ) {
     return {
       success: false,
@@ -363,8 +525,13 @@ function getAuthenticatedRoomPlayer(
   };
 }
 
-function ensureHost(room, player) {
-  if (room.hostId !== player.id) {
+function ensureHost(
+  room,
+  player
+) {
+  if (
+    room.hostId !== player.id
+  ) {
     return {
       success: false,
       error:
@@ -384,7 +551,8 @@ function joinSocketToPlayer(
 ) {
   if (
     socket.data.roomCode &&
-    socket.data.roomCode !== room.code
+    socket.data.roomCode !==
+      room.code
   ) {
     socket.leave(
       roomChannel(
@@ -397,10 +565,15 @@ function joinSocketToPlayer(
     roomChannel(room.code)
   );
 
-  socket.data.roomCode = room.code;
-  socket.data.playerId = player.id;
+  socket.data.roomCode =
+    room.code;
 
-  player.socketId = socket.id;
+  socket.data.playerId =
+    player.id;
+
+  player.socketId =
+    socket.id;
+
   player.connected = true;
 
   player.lastSeenAt =
@@ -437,8 +610,11 @@ function removePlayerFromRoom(
     removedPlayer.id
   );
 
-  if (room.players.length === 0) {
+  if (
+    room.players.length === 0
+  ) {
     rooms.delete(room.code);
+
     return removedPlayer;
   }
 
@@ -460,34 +636,37 @@ function scheduleDisconnectedPlayerCleanup(
   const timerKey =
     `${room.code}:${player.id}`;
 
-  const timer = setTimeout(() => {
-    disconnectTimers.delete(timerKey);
-
-    const currentRoom =
-      rooms.get(room.code);
-
-    if (!currentRoom) {
-      return;
-    }
-
-    const currentPlayer =
-      findPlayer(
-        currentRoom,
-        player.id
+  const timer =
+    setTimeout(() => {
+      disconnectTimers.delete(
+        timerKey
       );
 
-    if (
-      !currentPlayer ||
-      currentPlayer.connected
-    ) {
-      return;
-    }
+      const currentRoom =
+        rooms.get(room.code);
 
-    removePlayerFromRoom(
-      currentRoom,
-      currentPlayer.id
-    );
-  }, PLAYER_RECONNECT_GRACE_MS);
+      if (!currentRoom) {
+        return;
+      }
+
+      const currentPlayer =
+        findPlayer(
+          currentRoom,
+          player.id
+        );
+
+      if (
+        !currentPlayer ||
+        currentPlayer.connected
+      ) {
+        return;
+      }
+
+      removePlayerFromRoom(
+        currentRoom,
+        currentPlayer.id
+      );
+    }, PLAYER_RECONNECT_GRACE_MS);
 
   timer.unref();
 
@@ -507,11 +686,14 @@ function handleUnexpectedSocketError(
     error
   );
 
-  acknowledge(callback, {
-    success: false,
-    error:
-      "An unexpected server error occurred."
-  });
+  acknowledge(
+    callback,
+    {
+      success: false,
+      error:
+        "An unexpected server error occurred."
+    }
+  );
 }
 
 /* ==========================================
@@ -531,41 +713,46 @@ app.get(
         0
       );
 
-    response.status(200).json({
-      success: true,
-      status: "online",
-      app: "Torn Commander Sandbox",
-      step: 2,
+    response
+      .status(200)
+      .json({
+        success: true,
+        status: "online",
+        app:
+          "Torn Commander Sandbox",
+        step: 3,
 
-      connectedSockets:
-        io.engine.clientsCount,
+        connectedSockets:
+          io.engine.clientsCount,
 
-      activeRooms:
-        rooms.size,
+        activeRooms:
+          rooms.size,
 
-      activeLobbyPlayers,
+        activeLobbyPlayers,
 
-      timestamp:
-        new Date().toISOString()
-    });
+        timestamp:
+          new Date().toISOString()
+      });
   }
 );
 
 app.get(
   "/api",
   (request, response) => {
-    response.status(200).json({
-      success: true,
-      name:
-        "Torn Commander Sandbox API",
-      version: "2.0.0",
-      step: 2
-    });
+    response
+      .status(200)
+      .json({
+        success: true,
+        name:
+          "Torn Commander Sandbox API",
+        version: "3.0.0",
+        step: 3
+      });
   }
 );
 
 /* ==========================================
-   Socket.IO lobby system
+   Socket.IO room system
 ========================================== */
 
 io.on(
@@ -575,11 +762,14 @@ io.on(
       `Player connected: ${socket.id}`
     );
 
-    socket.emit("server-message", {
-      type: "success",
-      message:
-        "Connected to the Commander server."
-    });
+    socket.emit(
+      "server-message",
+      {
+        type: "success",
+        message:
+          "Connected to the Commander server."
+      }
+    );
 
     /* --------------------------------------
        Create room
@@ -589,13 +779,17 @@ io.on(
       "create-room",
       (payload, callback) => {
         try {
-          if (socket.data.roomCode) {
-            acknowledge(callback, {
-              success: false,
-
-              error:
-                "Leave your current room before creating another one."
-            });
+          if (
+            socket.data.roomCode
+          ) {
+            acknowledge(
+              callback,
+              {
+                success: false,
+                error:
+                  "Leave your current room before creating another one."
+              }
+            );
 
             return;
           }
@@ -606,13 +800,17 @@ io.on(
               payload.playerName
             );
 
-          if (playerName.length < 2) {
-            acknowledge(callback, {
-              success: false,
-
-              error:
-                "Enter a player name with at least two characters."
-            });
+          if (
+            playerName.length < 2
+          ) {
+            acknowledge(
+              callback,
+              {
+                success: false,
+                error:
+                  "Enter a player name with at least two characters."
+              }
+            );
 
             return;
           }
@@ -636,6 +834,7 @@ io.on(
             connected: true,
             socketId: socket.id,
             sessionToken,
+            deck: null,
             joinedAt: timestamp,
             lastSeenAt: timestamp
           };
@@ -646,7 +845,8 @@ io.on(
 
             privateRoom:
               payload &&
-              payload.privateRoom !== false,
+              payload.privateRoom !==
+                false,
 
             maxPlayers:
               normalizeMaximumPlayers(
@@ -663,6 +863,7 @@ io.on(
             status: "waiting",
             createdAt: timestamp,
             updatedAt: timestamp,
+            startedAt: null,
             players: [player]
           };
 
@@ -677,12 +878,19 @@ io.on(
             player
           );
 
-          acknowledge(callback, {
-            success: true,
-            playerId,
-            sessionToken,
-            room: createPublicRoom(room)
-          });
+          acknowledge(
+            callback,
+            {
+              success: true,
+              playerId,
+              sessionToken,
+
+              room:
+                createPublicRoom(
+                  room
+                )
+            }
+          );
 
           console.log(
             `Room ${roomCode} created by ${playerName}`
@@ -705,13 +913,17 @@ io.on(
       "join-room",
       (payload, callback) => {
         try {
-          if (socket.data.roomCode) {
-            acknowledge(callback, {
-              success: false,
-
-              error:
-                "Leave your current room before joining another one."
-            });
+          if (
+            socket.data.roomCode
+          ) {
+            acknowledge(
+              callback,
+              {
+                success: false,
+                error:
+                  "Leave your current room before joining another one."
+              }
+            );
 
             return;
           }
@@ -728,13 +940,17 @@ io.on(
               payload.roomCode
             );
 
-          if (playerName.length < 2) {
-            acknowledge(callback, {
-              success: false,
-
-              error:
-                "Enter a player name with at least two characters."
-            });
+          if (
+            playerName.length < 2
+          ) {
+            acknowledge(
+              callback,
+              {
+                success: false,
+                error:
+                  "Enter a player name with at least two characters."
+              }
+            );
 
             return;
           }
@@ -743,12 +959,14 @@ io.on(
             roomCode.length !==
             ROOM_CODE_LENGTH
           ) {
-            acknowledge(callback, {
-              success: false,
-
-              error:
-                "Enter the complete six-character room code."
-            });
+            acknowledge(
+              callback,
+              {
+                success: false,
+                error:
+                  "Enter the complete six-character room code."
+              }
+            );
 
             return;
           }
@@ -757,12 +975,14 @@ io.on(
             rooms.get(roomCode);
 
           if (!room) {
-            acknowledge(callback, {
-              success: false,
-
-              error:
-                "No Commander room was found with that code."
-            });
+            acknowledge(
+              callback,
+              {
+                success: false,
+                error:
+                  "No Commander room was found with that code."
+              }
+            );
 
             return;
           }
@@ -770,12 +990,14 @@ io.on(
           if (
             room.status !== "waiting"
           ) {
-            acknowledge(callback, {
-              success: false,
-
-              error:
-                "That Commander game has already started."
-            });
+            acknowledge(
+              callback,
+              {
+                success: false,
+                error:
+                  "That Commander game has already started."
+              }
+            );
 
             return;
           }
@@ -784,12 +1006,14 @@ io.on(
             room.players.length >=
             room.maxPlayers
           ) {
-            acknowledge(callback, {
-              success: false,
-
-              error:
-                "That Commander room is full."
-            });
+            acknowledge(
+              callback,
+              {
+                success: false,
+                error:
+                  "That Commander room is full."
+              }
+            );
 
             return;
           }
@@ -804,13 +1028,15 @@ io.on(
             );
 
           if (duplicateName) {
-            acknowledge(callback, {
-              success: false,
-
-              error:
-                "That player name is already being used in this room. " +
-                "Use Rejoin Room if it is your saved session."
-            });
+            acknowledge(
+              callback,
+              {
+                success: false,
+                error:
+                  "That player name is already being used in this room. " +
+                  "Use Rejoin Room if it is your saved session."
+              }
+            );
 
             return;
           }
@@ -831,6 +1057,7 @@ io.on(
             connected: true,
             socketId: socket.id,
             sessionToken,
+            deck: null,
             joinedAt: timestamp,
             lastSeenAt: timestamp
           };
@@ -843,12 +1070,19 @@ io.on(
             player
           );
 
-          acknowledge(callback, {
-            success: true,
-            playerId,
-            sessionToken,
-            room: createPublicRoom(room)
-          });
+          acknowledge(
+            callback,
+            {
+              success: true,
+              playerId,
+              sessionToken,
+
+              room:
+                createPublicRoom(
+                  room
+                )
+            }
+          );
 
           emitRoomUpdate(room);
 
@@ -899,7 +1133,8 @@ io.on(
 
           if (
             previousSocketId &&
-            previousSocketId !== socket.id
+            previousSocketId !==
+              socket.id
           ) {
             const previousSocket =
               io.sockets.sockets.get(
@@ -954,22 +1189,163 @@ io.on(
             player
           );
 
-          acknowledge(callback, {
-            success: true,
-            playerId: player.id,
+          acknowledge(
+            callback,
+            {
+              success: true,
+              playerId: player.id,
 
-            sessionToken:
-              player.sessionToken,
+              sessionToken:
+                player.sessionToken,
 
-            room:
-              createPublicRoom(room)
-          });
+              room:
+                createPublicRoom(
+                  room
+                )
+            }
+          );
 
           emitRoomUpdate(room);
 
           console.log(
             `${player.name} rejoined room ${room.code}`
           );
+        } catch (error) {
+          handleUnexpectedSocketError(
+            socket,
+            error,
+            callback
+          );
+        }
+      }
+    );
+
+    /* --------------------------------------
+       Set or clear player deck
+    -------------------------------------- */
+
+    socket.on(
+      "set-player-deck",
+      (payload, callback) => {
+        try {
+          const authentication =
+            getAuthenticatedRoomPlayer(
+              payload
+            );
+
+          if (
+            !authentication.success
+          ) {
+            acknowledge(
+              callback,
+              authentication
+            );
+
+            return;
+          }
+
+          const {
+            room,
+            player
+          } = authentication;
+
+          if (
+            room.status !== "waiting"
+          ) {
+            acknowledge(
+              callback,
+              {
+                success: false,
+                error:
+                  "Deck selection cannot change after the game starts."
+              }
+            );
+
+            return;
+          }
+
+          const requestedDeck =
+            payload
+              ? payload.deck
+              : null;
+
+          if (
+            requestedDeck === null
+          ) {
+            player.deck = null;
+            player.ready = false;
+
+            player.lastSeenAt =
+              new Date().toISOString();
+
+            acknowledge(
+              callback,
+              {
+                success: true,
+
+                room:
+                  createPublicRoom(
+                    room
+                  )
+              }
+            );
+
+            emitRoomUpdate(room);
+
+            return;
+          }
+
+          const deck =
+            normalizeDeckMetadata(
+              requestedDeck
+            );
+
+          if (!deck) {
+            acknowledge(
+              callback,
+              {
+                success: false,
+                error:
+                  "The selected deck information is incomplete."
+              }
+            );
+
+            return;
+          }
+
+          const deckChanged =
+            !player.deck ||
+            player.deck.id !==
+              deck.id ||
+            player.deck.name !==
+              deck.name ||
+            player.deck.commander !==
+              deck.commander ||
+            player.deck.totalCards !==
+              deck.totalCards;
+
+          player.deck = deck;
+
+          player.lastSeenAt =
+            new Date().toISOString();
+
+          if (deckChanged) {
+            player.ready = false;
+          }
+
+          acknowledge(
+            callback,
+            {
+              success: true,
+
+              room:
+                createPublicRoom(
+                  room
+                )
+            }
+          );
+
+          emitRoomUpdate(room);
         } catch (error) {
           handleUnexpectedSocketError(
             socket,
@@ -1012,23 +1388,43 @@ io.on(
           if (
             room.status !== "waiting"
           ) {
-            acknowledge(callback, {
-              success: false,
-
-              error:
-                "Ready status cannot change after the game starts."
-            });
+            acknowledge(
+              callback,
+              {
+                success: false,
+                error:
+                  "Ready status cannot change after the game starts."
+              }
+            );
 
             return;
           }
 
           if (!player.connected) {
-            acknowledge(callback, {
-              success: false,
+            acknowledge(
+              callback,
+              {
+                success: false,
+                error:
+                  "Reconnect to the room before changing status."
+              }
+            );
 
-              error:
-                "Reconnect to the room before changing status."
-            });
+            return;
+          }
+
+          if (
+            !player.ready &&
+            !player.deck
+          ) {
+            acknowledge(
+              callback,
+              {
+                success: false,
+                error:
+                  "Select a Commander deck before marking ready."
+              }
+            );
 
             return;
           }
@@ -1039,11 +1435,17 @@ io.on(
           player.lastSeenAt =
             new Date().toISOString();
 
-          acknowledge(callback, {
-            success: true,
-            room:
-              createPublicRoom(room)
-          });
+          acknowledge(
+            callback,
+            {
+              success: true,
+
+              room:
+                createPublicRoom(
+                  room
+                )
+            }
+          );
 
           emitRoomUpdate(room);
         } catch (error) {
@@ -1091,7 +1493,9 @@ io.on(
               player
             );
 
-          if (!hostCheck.success) {
+          if (
+            !hostCheck.success
+          ) {
             acknowledge(
               callback,
               hostCheck
@@ -1103,12 +1507,14 @@ io.on(
           if (
             room.status !== "waiting"
           ) {
-            acknowledge(callback, {
-              success: false,
-
-              error:
-                "Room settings cannot change after the game starts."
-            });
+            acknowledge(
+              callback,
+              {
+                success: false,
+                error:
+                  "Room settings cannot change after the game starts."
+              }
+            );
 
             return;
           }
@@ -1123,13 +1529,15 @@ io.on(
             maximumPlayers <
             room.players.length
           ) {
-            acknowledge(callback, {
-              success: false,
-
-              error:
-                `The room already has ${room.players.length} players. ` +
-                "Choose a larger maximum."
-            });
+            acknowledge(
+              callback,
+              {
+                success: false,
+                error:
+                  `The room already has ${room.players.length} players. ` +
+                  "Choose a larger maximum."
+              }
+            );
 
             return;
           }
@@ -1143,12 +1551,17 @@ io.on(
               payload.startingLife
             );
 
-          acknowledge(callback, {
-            success: true,
+          acknowledge(
+            callback,
+            {
+              success: true,
 
-            room:
-              createPublicRoom(room)
-          });
+              room:
+                createPublicRoom(
+                  room
+                )
+            }
+          );
 
           emitRoomUpdate(room);
         } catch (error) {
@@ -1196,7 +1609,9 @@ io.on(
               player
             );
 
-          if (!hostCheck.success) {
+          if (
+            !hostCheck.success
+          ) {
             acknowledge(
               callback,
               hostCheck
@@ -1208,12 +1623,14 @@ io.on(
           if (
             room.status !== "waiting"
           ) {
-            acknowledge(callback, {
-              success: false,
-
-              error:
-                "This Commander game has already started."
-            });
+            acknowledge(
+              callback,
+              {
+                success: false,
+                error:
+                  "This Commander game has already started."
+              }
+            );
 
             return;
           }
@@ -1221,12 +1638,14 @@ io.on(
           if (
             room.players.length < 2
           ) {
-            acknowledge(callback, {
-              success: false,
-
-              error:
-                "At least two players are required to start."
-            });
+            acknowledge(
+              callback,
+              {
+                success: false,
+                error:
+                  "At least two players are required to start."
+              }
+            );
 
             return;
           }
@@ -1238,13 +1657,35 @@ io.on(
             );
 
           if (disconnectedPlayer) {
-            acknowledge(callback, {
-              success: false,
+            acknowledge(
+              callback,
+              {
+                success: false,
+                error:
+                  `${disconnectedPlayer.name} must reconnect ` +
+                  "before the game can start."
+              }
+            );
 
-              error:
-                `${disconnectedPlayer.name} must reconnect ` +
-                "before the game can start."
-            });
+            return;
+          }
+
+          const playerWithoutDeck =
+            room.players.find(
+              (roomPlayer) =>
+                !roomPlayer.deck
+            );
+
+          if (playerWithoutDeck) {
+            acknowledge(
+              callback,
+              {
+                success: false,
+                error:
+                  `${playerWithoutDeck.name} must select a ` +
+                  "Commander deck before the game can start."
+              }
+            );
 
             return;
           }
@@ -1256,13 +1697,15 @@ io.on(
             );
 
           if (unreadyPlayer) {
-            acknowledge(callback, {
-              success: false,
-
-              error:
-                `${unreadyPlayer.name} must mark ready ` +
-                "before the game can start."
-            });
+            acknowledge(
+              callback,
+              {
+                success: false,
+                error:
+                  `${unreadyPlayer.name} must mark ready ` +
+                  "before the game can start."
+              }
+            );
 
             return;
           }
@@ -1278,10 +1721,13 @@ io.on(
           const publicRoom =
             createPublicRoom(room);
 
-          acknowledge(callback, {
-            success: true,
-            room: publicRoom
-          });
+          acknowledge(
+            callback,
+            {
+              success: true,
+              room: publicRoom
+            }
+          );
 
           io.to(
             roomChannel(room.code)
@@ -1340,7 +1786,9 @@ io.on(
               player
             );
 
-          if (!hostCheck.success) {
+          if (
+            !hostCheck.success
+          ) {
             acknowledge(
               callback,
               hostCheck
@@ -1352,33 +1800,39 @@ io.on(
           if (
             room.status !== "waiting"
           ) {
-            acknowledge(callback, {
-              success: false,
-
-              error:
-                "Players cannot be removed after the game starts."
-            });
+            acknowledge(
+              callback,
+              {
+                success: false,
+                error:
+                  "Players cannot be removed after the game starts."
+              }
+            );
 
             return;
           }
 
           const targetPlayerId =
             String(
-              payload &&
-              payload.targetPlayerId ||
-              ""
+              (
+                payload &&
+                payload.targetPlayerId
+              ) || ""
             );
 
           if (
             !targetPlayerId ||
-            targetPlayerId === player.id
+            targetPlayerId ===
+              player.id
           ) {
-            acknowledge(callback, {
-              success: false,
-
-              error:
-                "The host cannot remove themselves."
-            });
+            acknowledge(
+              callback,
+              {
+                success: false,
+                error:
+                  "The host cannot remove themselves."
+              }
+            );
 
             return;
           }
@@ -1390,12 +1844,14 @@ io.on(
             );
 
           if (!targetPlayer) {
-            acknowledge(callback, {
-              success: false,
-
-              error:
-                "That player is no longer in the room."
-            });
+            acknowledge(
+              callback,
+              {
+                success: false,
+                error:
+                  "That player is no longer in the room."
+              }
+            );
 
             return;
           }
@@ -1427,14 +1883,19 @@ io.on(
             targetPlayer.id
           );
 
-          acknowledge(callback, {
-            success: true,
+          acknowledge(
+            callback,
+            {
+              success: true,
 
-            room:
-              rooms.has(room.code)
-                ? createPublicRoom(room)
-                : null
-          });
+              room:
+                rooms.has(room.code)
+                  ? createPublicRoom(
+                      room
+                    )
+                  : null
+            }
+          );
 
           console.log(
             `${targetPlayer.name} was removed from room ${room.code}`
@@ -1488,9 +1949,12 @@ io.on(
             player.id
           );
 
-          acknowledge(callback, {
-            success: true
-          });
+          acknowledge(
+            callback,
+            {
+              success: true
+            }
+          );
 
           console.log(
             `${player.name} left room ${room.code}`
@@ -1512,13 +1976,16 @@ io.on(
     socket.on(
       "connection-test",
       (callback) => {
-        acknowledge(callback, {
-          success: true,
-          socketId: socket.id,
+        acknowledge(
+          callback,
+          {
+            success: true,
+            socketId: socket.id,
 
-          timestamp:
-            new Date().toISOString()
-        });
+            timestamp:
+              new Date().toISOString()
+          }
+        );
       }
     );
 
@@ -1558,7 +2025,8 @@ io.on(
         if (
           !room ||
           !player ||
-          player.socketId !== socket.id
+          player.socketId !==
+            socket.id
         ) {
           return;
         }
@@ -1592,7 +2060,7 @@ io.on(
 );
 
 /* ==========================================
-   Abandoned room cleanup
+   Abandoned-room cleanup
 ========================================== */
 
 const roomCleanupInterval =
@@ -1610,16 +2078,21 @@ const roomCleanupInterval =
         );
 
       const updatedTime =
-        Date.parse(room.updatedAt);
+        Date.parse(
+          room.updatedAt
+        );
 
       const roomAge =
-        Number.isFinite(updatedTime)
+        Number.isFinite(
+          updatedTime
+        )
           ? now - updatedTime
           : 0;
 
       if (
         !hasConnectedPlayer &&
-        roomAge >= EMPTY_ROOM_MAX_AGE_MS
+        roomAge >=
+          EMPTY_ROOM_MAX_AGE_MS
       ) {
         room.players.forEach(
           (player) => {
@@ -1656,6 +2129,11 @@ app.get(
       return next();
     }
 
+    response.setHeader(
+      "Cache-Control",
+      "no-cache, no-store, must-revalidate"
+    );
+
     return response.sendFile(
       path.join(
         PUBLIC_DIRECTORY,
@@ -1672,10 +2150,13 @@ app.get(
 app.use(
   "/api",
   (request, response) => {
-    response.status(404).json({
-      success: false,
-      error: "API route not found."
-    });
+    response
+      .status(404)
+      .json({
+        success: false,
+        error:
+          "API route not found."
+      });
   }
 );
 
@@ -1695,16 +2176,19 @@ app.use(
       error
     );
 
-    if (response.headersSent) {
+    if (
+      response.headersSent
+    ) {
       return next(error);
     }
 
-    return response.status(500).json({
-      success: false,
-
-      error:
-        "An unexpected server error occurred."
-    });
+    return response
+      .status(500)
+      .json({
+        success: false,
+        error:
+          "An unexpected server error occurred."
+      });
   }
 );
 
@@ -1721,10 +2205,12 @@ server.listen(
     );
 
     console.log(
-      "Torn Commander Sandbox Step 2 is running"
+      "Torn Commander Sandbox Step 3 is running"
     );
 
-    console.log(`Port: ${PORT}`);
+    console.log(
+      `Port: ${PORT}`
+    );
 
     console.log(
       `Local address: http://localhost:${PORT}`
