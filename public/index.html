@@ -23,13 +23,17 @@
 <body>
   <div class="app-shell">
 
+    <!-- =========================================
+         Top header
+    ========================================== -->
+
     <header class="top-header">
       <div class="brand-area">
         <div class="brand-icon" aria-hidden="true">🃏</div>
 
         <div class="brand-text">
           <h1>Torn Commander</h1>
-          <p>MTG Multiplayer Sandbox</p>
+          <p id="headerSubtitle">MTG Multiplayer Sandbox</p>
         </div>
       </div>
 
@@ -43,147 +47,693 @@
       </div>
     </header>
 
+    <!-- =========================================
+         Main content
+    ========================================== -->
+
     <main class="main-content">
 
-      <section class="hero-panel">
-        <div class="hero-badge">2–6 Players</div>
+      <!-- =====================================
+           Home screen
+      ====================================== -->
 
-        <h2>Play Commander with Torn players</h2>
+      <section
+        id="homeView"
+        class="app-view active-view"
+        aria-labelledby="homeTitle"
+      >
+        <section class="hero-panel">
+          <div class="hero-badge">2–6 Players</div>
 
-        <p>
-          Create private multiplayer rooms, import Commander decks and play
-          from your phone, tablet or computer.
-        </p>
+          <h2 id="homeTitle">Play Commander with Torn players</h2>
+
+          <p>
+            Create private multiplayer rooms, invite other players and prepare
+            for a six-player Commander game.
+          </p>
+        </section>
+
+        <section class="action-grid" aria-label="Commander actions">
+
+          <button
+            id="createGameButton"
+            class="action-card primary-card"
+            type="button"
+          >
+            <span class="action-icon" aria-hidden="true">⚔️</span>
+
+            <span class="action-content">
+              <strong>Create Game</strong>
+              <small>Start a new Commander room</small>
+            </span>
+
+            <span class="action-arrow" aria-hidden="true">›</span>
+          </button>
+
+          <button
+            id="joinGameButton"
+            class="action-card"
+            type="button"
+          >
+            <span class="action-icon" aria-hidden="true">🔗</span>
+
+            <span class="action-content">
+              <strong>Join Game</strong>
+              <small>Enter a six-character room code</small>
+            </span>
+
+            <span class="action-arrow" aria-hidden="true">›</span>
+          </button>
+
+          <button
+            id="myDecksButton"
+            class="action-card"
+            type="button"
+          >
+            <span class="action-icon" aria-hidden="true">📚</span>
+
+            <span class="action-content">
+              <strong>My Decks</strong>
+              <small>Deck importing will be added next</small>
+            </span>
+
+            <span class="action-arrow" aria-hidden="true">›</span>
+          </button>
+        </section>
+
+        <!-- Rejoin room panel -->
+
+        <section
+          id="rejoinPanel"
+          class="rejoin-panel hidden"
+          aria-labelledby="rejoinTitle"
+        >
+          <div>
+            <span class="panel-label">Active room found</span>
+            <h3 id="rejoinTitle">Rejoin your Commander lobby</h3>
+            <p id="rejoinRoomDetails">
+              Room information will appear here.
+            </p>
+          </div>
+
+          <button
+            id="rejoinRoomButton"
+            class="secondary-button"
+            type="button"
+          >
+            Rejoin Room
+          </button>
+        </section>
+
+        <section class="information-panel">
+          <div class="section-heading">
+            <h3>Commander Lobby</h3>
+            <span class="unofficial-label">Unofficial</span>
+          </div>
+
+          <div class="feature-list">
+
+            <div class="feature-row">
+              <span class="feature-icon" aria-hidden="true">🔐</span>
+
+              <div>
+                <strong>Private room codes</strong>
+                <p>Create a six-character code to share with players.</p>
+              </div>
+            </div>
+
+            <div class="feature-row">
+              <span class="feature-icon" aria-hidden="true">👥</span>
+
+              <div>
+                <strong>Live player lobby</strong>
+                <p>See players join, leave and change ready status.</p>
+              </div>
+            </div>
+
+            <div class="feature-row">
+              <span class="feature-icon" aria-hidden="true">👑</span>
+
+              <div>
+                <strong>Host controls</strong>
+                <p>The host controls room size and starts the game.</p>
+              </div>
+            </div>
+
+          </div>
+        </section>
+
+        <section class="development-panel">
+          <div class="development-header">
+            <span>Development progress</span>
+            <strong>Step 2</strong>
+          </div>
+
+          <div class="progress-track">
+            <div class="progress-fill step-two-progress"></div>
+          </div>
+
+          <p>
+            Multiplayer room creation, joining and lobby controls are being
+            activated.
+          </p>
+        </section>
       </section>
 
-      <section class="action-grid" aria-label="Commander actions">
+      <!-- =====================================
+           Multiplayer lobby screen
+      ====================================== -->
 
-        <button
-          id="createGameButton"
-          class="action-card primary-card"
-          type="button"
-        >
-          <span class="action-icon" aria-hidden="true">⚔️</span>
+      <section
+        id="lobbyView"
+        class="app-view"
+        aria-labelledby="lobbyTitle"
+      >
+        <div class="lobby-toolbar">
+          <button
+            id="leaveLobbyButton"
+            class="icon-button"
+            type="button"
+            aria-label="Leave lobby"
+          >
+            ←
+          </button>
 
-          <span class="action-content">
-            <strong>Create Game</strong>
-            <small>Start a new Commander room</small>
-          </span>
+          <div class="lobby-title-area">
+            <span class="panel-label">Commander Lobby</span>
+            <h2 id="lobbyTitle">Waiting for players</h2>
+          </div>
 
-          <span class="action-arrow" aria-hidden="true">›</span>
-        </button>
-
-        <button
-          id="joinGameButton"
-          class="action-card"
-          type="button"
-        >
-          <span class="action-icon" aria-hidden="true">🔗</span>
-
-          <span class="action-content">
-            <strong>Join Game</strong>
-            <small>Enter a room code</small>
-          </span>
-
-          <span class="action-arrow" aria-hidden="true">›</span>
-        </button>
-
-        <button
-          id="myDecksButton"
-          class="action-card"
-          type="button"
-        >
-          <span class="action-icon" aria-hidden="true">📚</span>
-
-          <span class="action-content">
-            <strong>My Decks</strong>
-            <small>Import and manage decks</small>
-          </span>
-
-          <span class="action-arrow" aria-hidden="true">›</span>
-        </button>
-      </section>
-
-      <section class="information-panel">
-        <div class="section-heading">
-          <h3>Commander Sandbox</h3>
-          <span class="unofficial-label">Unofficial</span>
+          <button
+            id="shareRoomButton"
+            class="icon-button"
+            type="button"
+            aria-label="Share room"
+          >
+            ↗
+          </button>
         </div>
 
-        <div class="feature-list">
+        <!-- Room code -->
 
-          <div class="feature-row">
-            <span class="feature-icon" aria-hidden="true">👥</span>
+        <section class="room-code-panel">
+          <div>
+            <span class="panel-label">Room code</span>
 
-            <div>
-              <strong>Six-player support</strong>
-              <p>Play Commander with two to six players.</p>
+            <div class="room-code-line">
+              <strong id="roomCodeDisplay">------</strong>
+
+              <button
+                id="copyRoomCodeButton"
+                class="small-button"
+                type="button"
+              >
+                Copy
+              </button>
             </div>
           </div>
 
-          <div class="feature-row">
-            <span class="feature-icon" aria-hidden="true">🙈</span>
+          <div class="room-status-summary">
+            <div>
+              <span>Players</span>
+              <strong id="playerCountDisplay">0 / 6</strong>
+            </div>
 
             <div>
-              <strong>Private cards</strong>
-              <p>Your hand and library remain hidden from opponents.</p>
+              <span>Starting life</span>
+              <strong id="startingLifeDisplay">40</strong>
+            </div>
+          </div>
+        </section>
+
+        <!-- Player list -->
+
+        <section class="lobby-panel">
+          <div class="section-heading">
+            <div>
+              <h3>Players</h3>
+              <p id="lobbyStatusText">
+                Waiting for at least two players.
+              </p>
+            </div>
+
+            <span
+              id="readyCountBadge"
+              class="count-badge"
+            >
+              0 ready
+            </span>
+          </div>
+
+          <div
+            id="playerList"
+            class="player-list"
+            aria-live="polite"
+          >
+            <div class="empty-player-state">
+              <span aria-hidden="true">⌛</span>
+              <p>Waiting for player information...</p>
+            </div>
+          </div>
+        </section>
+
+        <!-- Local player controls -->
+
+        <section class="lobby-panel">
+          <div class="section-heading">
+            <div>
+              <h3>Your status</h3>
+              <p>Select ready when your deck is prepared.</p>
             </div>
           </div>
 
-          <div class="feature-row">
-            <span class="feature-icon" aria-hidden="true">📱</span>
+          <button
+            id="readyButton"
+            class="ready-button"
+            type="button"
+          >
+            <span id="readyButtonIcon" aria-hidden="true">○</span>
+            <span id="readyButtonText">Mark Ready</span>
+          </button>
+        </section>
 
+        <!-- Host settings -->
+
+        <section
+          id="hostControlsPanel"
+          class="lobby-panel hidden"
+        >
+          <div class="section-heading">
             <div>
-              <strong>Mobile friendly</strong>
-              <p>Designed for TornPDA, phones, tablets and computers.</p>
+              <h3>Host controls</h3>
+              <p>Manage the lobby and begin the game.</p>
             </div>
+
+            <span class="host-badge">Host only</span>
           </div>
 
-        </div>
-      </section>
+          <div class="host-settings-grid">
 
-      <section class="development-panel">
-        <div class="development-header">
-          <span>Development progress</span>
-          <strong>Step 1</strong>
-        </div>
+            <label class="field-group">
+              <span>Maximum players</span>
 
-        <div class="progress-track">
-          <div class="progress-fill"></div>
-        </div>
+              <select id="hostMaxPlayersSelect">
+                <option value="2">2 players</option>
+                <option value="3">3 players</option>
+                <option value="4">4 players</option>
+                <option value="5">5 players</option>
+                <option value="6" selected>6 players</option>
+              </select>
+            </label>
 
-        <p>
-          The app foundation and multiplayer server connection are active.
-        </p>
+            <label class="field-group">
+              <span>Starting life</span>
+
+              <select id="hostStartingLifeSelect">
+                <option value="20">20 life</option>
+                <option value="30">30 life</option>
+                <option value="40" selected>40 life</option>
+                <option value="50">50 life</option>
+                <option value="60">60 life</option>
+              </select>
+            </label>
+
+          </div>
+
+          <button
+            id="saveRoomSettingsButton"
+            class="secondary-button full-width-button"
+            type="button"
+          >
+            Save Room Settings
+          </button>
+
+          <button
+            id="startGameButton"
+            class="primary-button full-width-button"
+            type="button"
+            disabled
+          >
+            Start Commander Game
+          </button>
+
+          <p
+            id="startGameRequirement"
+            class="requirement-message"
+          >
+            At least two players must join and everyone must be ready.
+          </p>
+        </section>
+
+        <!-- Invite panel -->
+
+        <section class="invite-panel">
+          <div class="invite-icon" aria-hidden="true">📨</div>
+
+          <div>
+            <strong>Invite other players</strong>
+            <p>
+              Share the room code or copy the direct invitation link.
+            </p>
+          </div>
+
+          <button
+            id="copyInviteLinkButton"
+            class="small-button"
+            type="button"
+          >
+            Copy Link
+          </button>
+        </section>
       </section>
 
     </main>
 
-    <nav class="bottom-navigation" aria-label="Main navigation">
+    <!-- =========================================
+         Bottom navigation
+    ========================================== -->
 
-      <button class="nav-button active" type="button">
+    <nav
+      id="bottomNavigation"
+      class="bottom-navigation"
+      aria-label="Main navigation"
+    >
+
+      <button
+        id="bottomHomeButton"
+        class="nav-button active"
+        type="button"
+      >
         <span aria-hidden="true">🏠</span>
         <small>Home</small>
       </button>
 
-      <button id="bottomDecksButton" class="nav-button" type="button">
+      <button
+        id="bottomDecksButton"
+        class="nav-button"
+        type="button"
+      >
         <span aria-hidden="true">📚</span>
         <small>Decks</small>
       </button>
 
-      <button id="bottomGamesButton" class="nav-button" type="button">
+      <button
+        id="bottomGamesButton"
+        class="nav-button"
+        type="button"
+      >
         <span aria-hidden="true">🎲</span>
         <small>Games</small>
       </button>
 
-      <button id="bottomSettingsButton" class="nav-button" type="button">
+      <button
+        id="bottomSettingsButton"
+        class="nav-button"
+        type="button"
+      >
         <span aria-hidden="true">⚙️</span>
         <small>Settings</small>
       </button>
 
     </nav>
-
   </div>
+
+  <!-- =========================================
+       Create-room modal
+  ========================================== -->
+
+  <div
+    id="createRoomModal"
+    class="modal-backdrop hidden"
+    role="dialog"
+    aria-modal="true"
+    aria-labelledby="createRoomTitle"
+  >
+    <section class="modal-card">
+      <div class="modal-header">
+        <div>
+          <span class="panel-label">New Commander lobby</span>
+          <h2 id="createRoomTitle">Create Game</h2>
+        </div>
+
+        <button
+          class="modal-close-button"
+          type="button"
+          data-close-modal="createRoomModal"
+          aria-label="Close create game form"
+        >
+          ×
+        </button>
+      </div>
+
+      <form id="createRoomForm">
+        <label class="field-group">
+          <span>Player name</span>
+
+          <input
+            id="createPlayerNameInput"
+            name="playerName"
+            type="text"
+            minlength="2"
+            maxlength="24"
+            autocomplete="nickname"
+            placeholder="Enter your Torn name"
+            required
+          >
+
+          <small>
+            This name will be shown to everyone in the lobby.
+          </small>
+        </label>
+
+        <div class="form-grid">
+          <label class="field-group">
+            <span>Maximum players</span>
+
+            <select
+              id="createMaxPlayersSelect"
+              name="maxPlayers"
+            >
+              <option value="2">2 players</option>
+              <option value="3">3 players</option>
+              <option value="4">4 players</option>
+              <option value="5">5 players</option>
+              <option value="6" selected>6 players</option>
+            </select>
+          </label>
+
+          <label class="field-group">
+            <span>Starting life</span>
+
+            <select
+              id="createStartingLifeSelect"
+              name="startingLife"
+            >
+              <option value="20">20 life</option>
+              <option value="30">30 life</option>
+              <option value="40" selected>40 life</option>
+              <option value="50">50 life</option>
+              <option value="60">60 life</option>
+            </select>
+          </label>
+        </div>
+
+        <label class="checkbox-row">
+          <input
+            id="privateRoomCheckbox"
+            name="privateRoom"
+            type="checkbox"
+            checked
+          >
+
+          <span>
+            <strong>Private room</strong>
+            <small>Players must use the room code to join.</small>
+          </span>
+        </label>
+
+        <button
+          id="submitCreateRoomButton"
+          class="primary-button full-width-button"
+          type="submit"
+        >
+          Create Commander Room
+        </button>
+      </form>
+    </section>
+  </div>
+
+  <!-- =========================================
+       Join-room modal
+  ========================================== -->
+
+  <div
+    id="joinRoomModal"
+    class="modal-backdrop hidden"
+    role="dialog"
+    aria-modal="true"
+    aria-labelledby="joinRoomTitle"
+  >
+    <section class="modal-card">
+      <div class="modal-header">
+        <div>
+          <span class="panel-label">Enter an existing lobby</span>
+          <h2 id="joinRoomTitle">Join Game</h2>
+        </div>
+
+        <button
+          class="modal-close-button"
+          type="button"
+          data-close-modal="joinRoomModal"
+          aria-label="Close join game form"
+        >
+          ×
+        </button>
+      </div>
+
+      <form id="joinRoomForm">
+        <label class="field-group">
+          <span>Player name</span>
+
+          <input
+            id="joinPlayerNameInput"
+            name="playerName"
+            type="text"
+            minlength="2"
+            maxlength="24"
+            autocomplete="nickname"
+            placeholder="Enter your Torn name"
+            required
+          >
+        </label>
+
+        <label class="field-group">
+          <span>Room code</span>
+
+          <input
+            id="joinRoomCodeInput"
+            class="room-code-input"
+            name="roomCode"
+            type="text"
+            minlength="6"
+            maxlength="6"
+            inputmode="text"
+            autocomplete="off"
+            autocapitalize="characters"
+            spellcheck="false"
+            placeholder="ABC123"
+            required
+          >
+
+          <small>
+            Ask the host for the six-character room code.
+          </small>
+        </label>
+
+        <button
+          id="submitJoinRoomButton"
+          class="primary-button full-width-button"
+          type="submit"
+        >
+          Join Commander Room
+        </button>
+      </form>
+    </section>
+  </div>
+
+  <!-- =========================================
+       Leave-room confirmation modal
+  ========================================== -->
+
+  <div
+    id="leaveRoomModal"
+    class="modal-backdrop hidden"
+    role="dialog"
+    aria-modal="true"
+    aria-labelledby="leaveRoomTitle"
+  >
+    <section class="modal-card small-modal-card">
+      <div class="modal-header">
+        <div>
+          <span class="panel-label">Leave multiplayer room</span>
+          <h2 id="leaveRoomTitle">Leave this lobby?</h2>
+        </div>
+
+        <button
+          class="modal-close-button"
+          type="button"
+          data-close-modal="leaveRoomModal"
+          aria-label="Cancel leaving room"
+        >
+          ×
+        </button>
+      </div>
+
+      <p class="modal-description">
+        You will return to the home screen. If you are the host, another player
+        may become the new host.
+      </p>
+
+      <div class="modal-button-row">
+        <button
+          id="cancelLeaveRoomButton"
+          class="secondary-button"
+          type="button"
+        >
+          Stay
+        </button>
+
+        <button
+          id="confirmLeaveRoomButton"
+          class="danger-button"
+          type="button"
+        >
+          Leave Room
+        </button>
+      </div>
+    </section>
+  </div>
+
+  <!-- =========================================
+       Player-row template
+  ========================================== -->
+
+  <template id="playerRowTemplate">
+    <article class="player-row">
+      <div class="player-avatar">
+        <span class="player-avatar-letter">P</span>
+      </div>
+
+      <div class="player-information">
+        <div class="player-name-line">
+          <strong class="player-name">Player</strong>
+          <span class="player-self-label hidden">You</span>
+          <span class="player-host-label hidden">Host</span>
+        </div>
+
+        <small class="player-connection-text">
+          Connected
+        </small>
+      </div>
+
+      <div class="player-ready-state waiting">
+        <span class="player-ready-icon">○</span>
+        <span class="player-ready-text">Waiting</span>
+      </div>
+
+      <button
+        class="remove-player-button hidden"
+        type="button"
+        aria-label="Remove player"
+      >
+        ×
+      </button>
+    </article>
+  </template>
+
+  <!-- =========================================
+       Toast notification
+  ========================================== -->
 
   <div
     id="messageToast"
