@@ -2,17 +2,26 @@
 
 /*
   Torn Commander Sandbox
-  Step 1 backend server
+  Step 2 backend server
 
-  This server handles:
-  - Hosting the frontend files
-  - Socket.IO multiplayer connections
-  - Health checks for Render
-  - Basic connection and disconnection logging
+  This version provides:
+  - Express hosting
+  - Socket.IO multiplayer rooms
+  - Six-character room codes
+  - 2–6 player lobbies
+  - Ready status
+  - Host controls
+  - Reconnection sessions
+  - Player removal and host transfer
+  - Automatic cleanup of abandoned rooms
+
+  Step 2 stores active rooms in memory. A later step will
+  move persistent information into a database.
 */
 
 const path = require("path");
 const http = require("http");
+const crypto = require("crypto");
 const express = require("express");
 const { Server } = require("socket.io");
 
@@ -22,24 +31,55 @@ const server = http.createServer(app);
 const PORT = Number(process.env.PORT) || 3000;
 const PUBLIC_DIRECTORY = path.join(__dirname, "public");
 
-/*
-  Create the Socket.IO multiplayer server.
-*/
+const ROOM_CODE_LENGTH = 6;
+const ROOM_CODE_CHARACTERS =
+  "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+
+const PLAYER_RECONNECT_GRACE_MS =
+  10 * 60 * 1000;
+
+const EMPTY_ROOM_MAX_AGE_MS =
+  30 * 60 * 1000;
+
+const ROOM_CLEANUP_INTERVAL_MS =
+  5 * 60 * 1000;
+
+const ALLOWED_MAX_PLAYERS =
+  new Set([2, 3, 4, 5, 6]);
+
+const ALLOWED_STARTING_LIFE =
+  new Set([20, 30, 40, 50, 60]);
+
+const rooms = new Map();
+const disconnectTimers = new Map();
+
+/* ==========================================
+   Socket.IO setup
+========================================== */
+
 const io = new Server(server, {
   cors: {
     origin: true,
     methods: ["GET", "POST"]
   },
 
-  transports: ["websocket", "polling"],
+  transports: [
+    "websocket",
+    "polling"
+  ],
 
   pingTimeout: 20000,
-  pingInterval: 25000
+  pingInterval: 25000,
+  maxHttpBufferSize: 1e6
 });
 
-/*
-  Allow Express to understand JSON requests.
-*/
+/* ==========================================
+   Express setup
+========================================== */
+
+app.disable("x-powered-by");
+app.set("trust proxy", 1);
+
 app.use(express.json({
   limit: "1mb"
 }));
@@ -49,179 +89,1724 @@ app.use(express.urlencoded({
   limit: "1mb"
 }));
 
-/*
-  Serve the frontend files from the public folder.
-*/
 app.use(express.static(PUBLIC_DIRECTORY, {
   extensions: ["html"],
-  maxAge: process.env.NODE_ENV === "production"
-    ? "1h"
-    : 0
+
+  maxAge:
+    process.env.NODE_ENV === "production"
+      ? "1h"
+      : 0
 }));
 
-/*
-  Health-check route.
+/* ==========================================
+   General helpers
+========================================== */
 
-  Render can use this route to confirm that the
-  Commander server is online.
-*/
-app.get("/api/health", (request, response) => {
-  response.status(200).json({
-    success: true,
-    status: "online",
-    app: "Torn Commander Sandbox",
-    connectedPlayers: io.engine.clientsCount,
-    timestamp: new Date().toISOString()
-  });
-});
+function roomChannel(roomCode) {
+  return `commander-room:${roomCode}`;
+}
 
-/*
-  Basic API information route.
-*/
-app.get("/api", (request, response) => {
-  response.status(200).json({
-    success: true,
-    name: "Torn Commander Sandbox API",
-    version: "1.0.0",
-    step: 1
-  });
-});
+function normalizePlayerName(value) {
+  return String(value || "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 24);
+}
 
-/*
-  Socket.IO player connections.
-*/
-io.on("connection", (socket) => {
-  console.log(`Player connected: ${socket.id}`);
+function normalizeRoomCode(value) {
+  return String(value || "")
+    .toUpperCase()
+    .replace(/[^A-Z0-9]/g, "")
+    .slice(0, ROOM_CODE_LENGTH);
+}
 
-  /*
-    Send a welcome message to the newly connected player.
-  */
-  socket.emit("server-message", {
-    type: "success",
-    message: "Connected to the Commander server."
-  });
+function normalizeMaximumPlayers(value) {
+  const parsedValue = Number(value);
 
-  /*
-    Simple connection test for future development.
-  */
-  socket.on("connection-test", (callback) => {
-    const response = {
-      success: true,
-      socketId: socket.id,
-      timestamp: new Date().toISOString()
-    };
+  return ALLOWED_MAX_PLAYERS.has(parsedValue)
+    ? parsedValue
+    : 6;
+}
 
-    if (typeof callback === "function") {
-      callback(response);
+function normalizeStartingLife(value) {
+  const parsedValue = Number(value);
+
+  return ALLOWED_STARTING_LIFE.has(parsedValue)
+    ? parsedValue
+    : 40;
+}
+
+function createPlayerId() {
+  return crypto.randomUUID();
+}
+
+function createSessionToken() {
+  return crypto
+    .randomBytes(32)
+    .toString("hex");
+}
+
+function createRoomCode() {
+  for (
+    let attempt = 0;
+    attempt < 100;
+    attempt += 1
+  ) {
+    let code = "";
+
+    for (
+      let index = 0;
+      index < ROOM_CODE_LENGTH;
+      index += 1
+    ) {
+      const characterIndex =
+        crypto.randomInt(
+          0,
+          ROOM_CODE_CHARACTERS.length
+        );
+
+      code +=
+        ROOM_CODE_CHARACTERS[
+          characterIndex
+        ];
     }
-  });
 
-  /*
-    Log player disconnections.
-  */
-  socket.on("disconnect", (reason) => {
-    console.log(
-      `Player disconnected: ${socket.id}. Reason: ${reason}`
+    if (!rooms.has(code)) {
+      return code;
+    }
+  }
+
+  throw new Error(
+    "Unable to generate a unique room code."
+  );
+}
+
+function createPublicRoom(room) {
+  return {
+    code: room.code,
+    hostId: room.hostId,
+    privateRoom: room.privateRoom,
+    maxPlayers: room.maxPlayers,
+    startingLife: room.startingLife,
+    status: room.status,
+    createdAt: room.createdAt,
+    updatedAt: room.updatedAt,
+
+    players: room.players.map(
+      (player) => ({
+        id: player.id,
+        name: player.name,
+        ready: player.ready,
+        connected: player.connected,
+        joinedAt: player.joinedAt
+      })
+    )
+  };
+}
+
+function findPlayer(room, playerId) {
+  if (
+    !room ||
+    !Array.isArray(room.players)
+  ) {
+    return null;
+  }
+
+  return (
+    room.players.find(
+      (player) =>
+        player.id === playerId
+    ) || null
+  );
+}
+
+function acknowledge(callback, response) {
+  if (typeof callback === "function") {
+    callback(response);
+  }
+}
+
+function emitRoomUpdate(room) {
+  room.updatedAt =
+    new Date().toISOString();
+
+  io.to(
+    roomChannel(room.code)
+  ).emit(
+    "room-updated",
+    createPublicRoom(room)
+  );
+}
+
+function clearDisconnectTimer(
+  roomCode,
+  playerId
+) {
+  const timerKey =
+    `${roomCode}:${playerId}`;
+
+  const timer =
+    disconnectTimers.get(timerKey);
+
+  if (timer) {
+    clearTimeout(timer);
+    disconnectTimers.delete(timerKey);
+  }
+}
+
+function transferHostIfNeeded(room) {
+  if (
+    !room ||
+    room.players.length === 0
+  ) {
+    return;
+  }
+
+  const currentHost =
+    findPlayer(room, room.hostId);
+
+  if (
+    currentHost &&
+    currentHost.connected
+  ) {
+    return;
+  }
+
+  const nextHost =
+    room.players.find(
+      (player) => player.connected
+    ) || room.players[0];
+
+  room.hostId = nextHost.id;
+}
+
+function removeSocketRoomAssociation(
+  socket
+) {
+  if (!socket) {
+    return;
+  }
+
+  socket.data.roomCode = null;
+  socket.data.playerId = null;
+}
+
+function detachSocketFromRoom(
+  socket,
+  roomCode
+) {
+  if (!socket) {
+    return;
+  }
+
+  socket.leave(
+    roomChannel(roomCode)
+  );
+
+  removeSocketRoomAssociation(socket);
+}
+
+function getAuthenticatedRoomPlayer(
+  payload
+) {
+  const roomCode =
+    normalizeRoomCode(
+      payload && payload.roomCode
     );
-  });
 
-  /*
-    Catch socket-level errors without crashing the server.
-  */
-  socket.on("error", (error) => {
+  const playerId = String(
+    payload && payload.playerId || ""
+  );
+
+  const sessionToken = String(
+    payload && payload.sessionToken || ""
+  );
+
+  if (
+    roomCode.length !==
+    ROOM_CODE_LENGTH
+  ) {
+    return {
+      success: false,
+      error: "The room code is invalid."
+    };
+  }
+
+  const room = rooms.get(roomCode);
+
+  if (!room) {
+    return {
+      success: false,
+      error:
+        "That Commander room no longer exists."
+    };
+  }
+
+  const player =
+    findPlayer(room, playerId);
+
+  if (
+    !player ||
+    player.sessionToken !== sessionToken
+  ) {
+    return {
+      success: false,
+      error:
+        "Your room session could not be verified."
+    };
+  }
+
+  return {
+    success: true,
+    room,
+    player
+  };
+}
+
+function ensureHost(room, player) {
+  if (room.hostId !== player.id) {
+    return {
+      success: false,
+      error:
+        "Only the room host can perform that action."
+    };
+  }
+
+  return {
+    success: true
+  };
+}
+
+function joinSocketToPlayer(
+  socket,
+  room,
+  player
+) {
+  if (
+    socket.data.roomCode &&
+    socket.data.roomCode !== room.code
+  ) {
+    socket.leave(
+      roomChannel(
+        socket.data.roomCode
+      )
+    );
+  }
+
+  socket.join(
+    roomChannel(room.code)
+  );
+
+  socket.data.roomCode = room.code;
+  socket.data.playerId = player.id;
+
+  player.socketId = socket.id;
+  player.connected = true;
+
+  player.lastSeenAt =
+    new Date().toISOString();
+
+  clearDisconnectTimer(
+    room.code,
+    player.id
+  );
+}
+
+function removePlayerFromRoom(
+  room,
+  playerId
+) {
+  const playerIndex =
+    room.players.findIndex(
+      (player) =>
+        player.id === playerId
+    );
+
+  if (playerIndex === -1) {
+    return null;
+  }
+
+  const [removedPlayer] =
+    room.players.splice(
+      playerIndex,
+      1
+    );
+
+  clearDisconnectTimer(
+    room.code,
+    removedPlayer.id
+  );
+
+  if (room.players.length === 0) {
+    rooms.delete(room.code);
+    return removedPlayer;
+  }
+
+  transferHostIfNeeded(room);
+  emitRoomUpdate(room);
+
+  return removedPlayer;
+}
+
+function scheduleDisconnectedPlayerCleanup(
+  room,
+  player
+) {
+  clearDisconnectTimer(
+    room.code,
+    player.id
+  );
+
+  const timerKey =
+    `${room.code}:${player.id}`;
+
+  const timer = setTimeout(() => {
+    disconnectTimers.delete(timerKey);
+
+    const currentRoom =
+      rooms.get(room.code);
+
+    if (!currentRoom) {
+      return;
+    }
+
+    const currentPlayer =
+      findPlayer(
+        currentRoom,
+        player.id
+      );
+
+    if (
+      !currentPlayer ||
+      currentPlayer.connected
+    ) {
+      return;
+    }
+
+    removePlayerFromRoom(
+      currentRoom,
+      currentPlayer.id
+    );
+  }, PLAYER_RECONNECT_GRACE_MS);
+
+  timer.unref();
+
+  disconnectTimers.set(
+    timerKey,
+    timer
+  );
+}
+
+function handleUnexpectedSocketError(
+  socket,
+  error,
+  callback
+) {
+  console.error(
+    `Socket action failed for ${socket.id}:`,
+    error
+  );
+
+  acknowledge(callback, {
+    success: false,
+    error:
+      "An unexpected server error occurred."
+  });
+}
+
+/* ==========================================
+   HTTP routes
+========================================== */
+
+app.get(
+  "/api/health",
+  (request, response) => {
+    const activeLobbyPlayers =
+      Array.from(
+        rooms.values()
+      ).reduce(
+        (total, room) =>
+          total +
+          room.players.length,
+        0
+      );
+
+    response.status(200).json({
+      success: true,
+      status: "online",
+      app: "Torn Commander Sandbox",
+      step: 2,
+
+      connectedSockets:
+        io.engine.clientsCount,
+
+      activeRooms:
+        rooms.size,
+
+      activeLobbyPlayers,
+
+      timestamp:
+        new Date().toISOString()
+    });
+  }
+);
+
+app.get(
+  "/api",
+  (request, response) => {
+    response.status(200).json({
+      success: true,
+      name:
+        "Torn Commander Sandbox API",
+      version: "2.0.0",
+      step: 2
+    });
+  }
+);
+
+/* ==========================================
+   Socket.IO lobby system
+========================================== */
+
+io.on(
+  "connection",
+  (socket) => {
+    console.log(
+      `Player connected: ${socket.id}`
+    );
+
+    socket.emit("server-message", {
+      type: "success",
+      message:
+        "Connected to the Commander server."
+    });
+
+    /* --------------------------------------
+       Create room
+    -------------------------------------- */
+
+    socket.on(
+      "create-room",
+      (payload, callback) => {
+        try {
+          if (socket.data.roomCode) {
+            acknowledge(callback, {
+              success: false,
+
+              error:
+                "Leave your current room before creating another one."
+            });
+
+            return;
+          }
+
+          const playerName =
+            normalizePlayerName(
+              payload &&
+              payload.playerName
+            );
+
+          if (playerName.length < 2) {
+            acknowledge(callback, {
+              success: false,
+
+              error:
+                "Enter a player name with at least two characters."
+            });
+
+            return;
+          }
+
+          const roomCode =
+            createRoomCode();
+
+          const playerId =
+            createPlayerId();
+
+          const sessionToken =
+            createSessionToken();
+
+          const timestamp =
+            new Date().toISOString();
+
+          const player = {
+            id: playerId,
+            name: playerName,
+            ready: false,
+            connected: true,
+            socketId: socket.id,
+            sessionToken,
+            joinedAt: timestamp,
+            lastSeenAt: timestamp
+          };
+
+          const room = {
+            code: roomCode,
+            hostId: playerId,
+
+            privateRoom:
+              payload &&
+              payload.privateRoom !== false,
+
+            maxPlayers:
+              normalizeMaximumPlayers(
+                payload &&
+                payload.maxPlayers
+              ),
+
+            startingLife:
+              normalizeStartingLife(
+                payload &&
+                payload.startingLife
+              ),
+
+            status: "waiting",
+            createdAt: timestamp,
+            updatedAt: timestamp,
+            players: [player]
+          };
+
+          rooms.set(
+            roomCode,
+            room
+          );
+
+          joinSocketToPlayer(
+            socket,
+            room,
+            player
+          );
+
+          acknowledge(callback, {
+            success: true,
+            playerId,
+            sessionToken,
+            room: createPublicRoom(room)
+          });
+
+          console.log(
+            `Room ${roomCode} created by ${playerName}`
+          );
+        } catch (error) {
+          handleUnexpectedSocketError(
+            socket,
+            error,
+            callback
+          );
+        }
+      }
+    );
+
+    /* --------------------------------------
+       Join room
+    -------------------------------------- */
+
+    socket.on(
+      "join-room",
+      (payload, callback) => {
+        try {
+          if (socket.data.roomCode) {
+            acknowledge(callback, {
+              success: false,
+
+              error:
+                "Leave your current room before joining another one."
+            });
+
+            return;
+          }
+
+          const playerName =
+            normalizePlayerName(
+              payload &&
+              payload.playerName
+            );
+
+          const roomCode =
+            normalizeRoomCode(
+              payload &&
+              payload.roomCode
+            );
+
+          if (playerName.length < 2) {
+            acknowledge(callback, {
+              success: false,
+
+              error:
+                "Enter a player name with at least two characters."
+            });
+
+            return;
+          }
+
+          if (
+            roomCode.length !==
+            ROOM_CODE_LENGTH
+          ) {
+            acknowledge(callback, {
+              success: false,
+
+              error:
+                "Enter the complete six-character room code."
+            });
+
+            return;
+          }
+
+          const room =
+            rooms.get(roomCode);
+
+          if (!room) {
+            acknowledge(callback, {
+              success: false,
+
+              error:
+                "No Commander room was found with that code."
+            });
+
+            return;
+          }
+
+          if (
+            room.status !== "waiting"
+          ) {
+            acknowledge(callback, {
+              success: false,
+
+              error:
+                "That Commander game has already started."
+            });
+
+            return;
+          }
+
+          if (
+            room.players.length >=
+            room.maxPlayers
+          ) {
+            acknowledge(callback, {
+              success: false,
+
+              error:
+                "That Commander room is full."
+            });
+
+            return;
+          }
+
+          const duplicateName =
+            room.players.some(
+              (player) =>
+                player.name
+                  .toLowerCase() ===
+                playerName
+                  .toLowerCase()
+            );
+
+          if (duplicateName) {
+            acknowledge(callback, {
+              success: false,
+
+              error:
+                "That player name is already being used in this room. " +
+                "Use Rejoin Room if it is your saved session."
+            });
+
+            return;
+          }
+
+          const playerId =
+            createPlayerId();
+
+          const sessionToken =
+            createSessionToken();
+
+          const timestamp =
+            new Date().toISOString();
+
+          const player = {
+            id: playerId,
+            name: playerName,
+            ready: false,
+            connected: true,
+            socketId: socket.id,
+            sessionToken,
+            joinedAt: timestamp,
+            lastSeenAt: timestamp
+          };
+
+          room.players.push(player);
+
+          joinSocketToPlayer(
+            socket,
+            room,
+            player
+          );
+
+          acknowledge(callback, {
+            success: true,
+            playerId,
+            sessionToken,
+            room: createPublicRoom(room)
+          });
+
+          emitRoomUpdate(room);
+
+          console.log(
+            `${playerName} joined room ${roomCode}`
+          );
+        } catch (error) {
+          handleUnexpectedSocketError(
+            socket,
+            error,
+            callback
+          );
+        }
+      }
+    );
+
+    /* --------------------------------------
+       Rejoin room
+    -------------------------------------- */
+
+    socket.on(
+      "rejoin-room",
+      (payload, callback) => {
+        try {
+          const authentication =
+            getAuthenticatedRoomPlayer(
+              payload
+            );
+
+          if (
+            !authentication.success
+          ) {
+            acknowledge(
+              callback,
+              authentication
+            );
+
+            return;
+          }
+
+          const {
+            room,
+            player
+          } = authentication;
+
+          const previousSocketId =
+            player.socketId;
+
+          if (
+            previousSocketId &&
+            previousSocketId !== socket.id
+          ) {
+            const previousSocket =
+              io.sockets.sockets.get(
+                previousSocketId
+              );
+
+            if (previousSocket) {
+              previousSocket.emit(
+                "removed-from-room",
+                {
+                  message:
+                    "This room session was opened on another device."
+                }
+              );
+
+              detachSocketFromRoom(
+                previousSocket,
+                room.code
+              );
+            }
+          }
+
+          const suppliedName =
+            normalizePlayerName(
+              payload &&
+              payload.playerName
+            );
+
+          if (
+            suppliedName.length >= 2
+          ) {
+            const duplicateName =
+              room.players.some(
+                (otherPlayer) =>
+                  otherPlayer.id !==
+                    player.id &&
+                  otherPlayer.name
+                    .toLowerCase() ===
+                    suppliedName
+                      .toLowerCase()
+              );
+
+            if (!duplicateName) {
+              player.name =
+                suppliedName;
+            }
+          }
+
+          joinSocketToPlayer(
+            socket,
+            room,
+            player
+          );
+
+          acknowledge(callback, {
+            success: true,
+            playerId: player.id,
+
+            sessionToken:
+              player.sessionToken,
+
+            room:
+              createPublicRoom(room)
+          });
+
+          emitRoomUpdate(room);
+
+          console.log(
+            `${player.name} rejoined room ${room.code}`
+          );
+        } catch (error) {
+          handleUnexpectedSocketError(
+            socket,
+            error,
+            callback
+          );
+        }
+      }
+    );
+
+    /* --------------------------------------
+       Ready status
+    -------------------------------------- */
+
+    socket.on(
+      "toggle-ready",
+      (payload, callback) => {
+        try {
+          const authentication =
+            getAuthenticatedRoomPlayer(
+              payload
+            );
+
+          if (
+            !authentication.success
+          ) {
+            acknowledge(
+              callback,
+              authentication
+            );
+
+            return;
+          }
+
+          const {
+            room,
+            player
+          } = authentication;
+
+          if (
+            room.status !== "waiting"
+          ) {
+            acknowledge(callback, {
+              success: false,
+
+              error:
+                "Ready status cannot change after the game starts."
+            });
+
+            return;
+          }
+
+          if (!player.connected) {
+            acknowledge(callback, {
+              success: false,
+
+              error:
+                "Reconnect to the room before changing status."
+            });
+
+            return;
+          }
+
+          player.ready =
+            !player.ready;
+
+          player.lastSeenAt =
+            new Date().toISOString();
+
+          acknowledge(callback, {
+            success: true,
+            room:
+              createPublicRoom(room)
+          });
+
+          emitRoomUpdate(room);
+        } catch (error) {
+          handleUnexpectedSocketError(
+            socket,
+            error,
+            callback
+          );
+        }
+      }
+    );
+
+    /* --------------------------------------
+       Host room settings
+    -------------------------------------- */
+
+    socket.on(
+      "update-room-settings",
+      (payload, callback) => {
+        try {
+          const authentication =
+            getAuthenticatedRoomPlayer(
+              payload
+            );
+
+          if (
+            !authentication.success
+          ) {
+            acknowledge(
+              callback,
+              authentication
+            );
+
+            return;
+          }
+
+          const {
+            room,
+            player
+          } = authentication;
+
+          const hostCheck =
+            ensureHost(
+              room,
+              player
+            );
+
+          if (!hostCheck.success) {
+            acknowledge(
+              callback,
+              hostCheck
+            );
+
+            return;
+          }
+
+          if (
+            room.status !== "waiting"
+          ) {
+            acknowledge(callback, {
+              success: false,
+
+              error:
+                "Room settings cannot change after the game starts."
+            });
+
+            return;
+          }
+
+          const maximumPlayers =
+            normalizeMaximumPlayers(
+              payload &&
+              payload.maxPlayers
+            );
+
+          if (
+            maximumPlayers <
+            room.players.length
+          ) {
+            acknowledge(callback, {
+              success: false,
+
+              error:
+                `The room already has ${room.players.length} players. ` +
+                "Choose a larger maximum."
+            });
+
+            return;
+          }
+
+          room.maxPlayers =
+            maximumPlayers;
+
+          room.startingLife =
+            normalizeStartingLife(
+              payload &&
+              payload.startingLife
+            );
+
+          acknowledge(callback, {
+            success: true,
+
+            room:
+              createPublicRoom(room)
+          });
+
+          emitRoomUpdate(room);
+        } catch (error) {
+          handleUnexpectedSocketError(
+            socket,
+            error,
+            callback
+          );
+        }
+      }
+    );
+
+    /* --------------------------------------
+       Start game
+    -------------------------------------- */
+
+    socket.on(
+      "start-game",
+      (payload, callback) => {
+        try {
+          const authentication =
+            getAuthenticatedRoomPlayer(
+              payload
+            );
+
+          if (
+            !authentication.success
+          ) {
+            acknowledge(
+              callback,
+              authentication
+            );
+
+            return;
+          }
+
+          const {
+            room,
+            player
+          } = authentication;
+
+          const hostCheck =
+            ensureHost(
+              room,
+              player
+            );
+
+          if (!hostCheck.success) {
+            acknowledge(
+              callback,
+              hostCheck
+            );
+
+            return;
+          }
+
+          if (
+            room.status !== "waiting"
+          ) {
+            acknowledge(callback, {
+              success: false,
+
+              error:
+                "This Commander game has already started."
+            });
+
+            return;
+          }
+
+          if (
+            room.players.length < 2
+          ) {
+            acknowledge(callback, {
+              success: false,
+
+              error:
+                "At least two players are required to start."
+            });
+
+            return;
+          }
+
+          const disconnectedPlayer =
+            room.players.find(
+              (roomPlayer) =>
+                !roomPlayer.connected
+            );
+
+          if (disconnectedPlayer) {
+            acknowledge(callback, {
+              success: false,
+
+              error:
+                `${disconnectedPlayer.name} must reconnect ` +
+                "before the game can start."
+            });
+
+            return;
+          }
+
+          const unreadyPlayer =
+            room.players.find(
+              (roomPlayer) =>
+                !roomPlayer.ready
+            );
+
+          if (unreadyPlayer) {
+            acknowledge(callback, {
+              success: false,
+
+              error:
+                `${unreadyPlayer.name} must mark ready ` +
+                "before the game can start."
+            });
+
+            return;
+          }
+
+          room.status = "started";
+
+          room.startedAt =
+            new Date().toISOString();
+
+          room.updatedAt =
+            room.startedAt;
+
+          const publicRoom =
+            createPublicRoom(room);
+
+          acknowledge(callback, {
+            success: true,
+            room: publicRoom
+          });
+
+          io.to(
+            roomChannel(room.code)
+          ).emit(
+            "game-started",
+            {
+              room: publicRoom
+            }
+          );
+
+          console.log(
+            `Game started in room ${room.code}`
+          );
+        } catch (error) {
+          handleUnexpectedSocketError(
+            socket,
+            error,
+            callback
+          );
+        }
+      }
+    );
+
+    /* --------------------------------------
+       Remove player
+    -------------------------------------- */
+
+    socket.on(
+      "remove-player",
+      (payload, callback) => {
+        try {
+          const authentication =
+            getAuthenticatedRoomPlayer(
+              payload
+            );
+
+          if (
+            !authentication.success
+          ) {
+            acknowledge(
+              callback,
+              authentication
+            );
+
+            return;
+          }
+
+          const {
+            room,
+            player
+          } = authentication;
+
+          const hostCheck =
+            ensureHost(
+              room,
+              player
+            );
+
+          if (!hostCheck.success) {
+            acknowledge(
+              callback,
+              hostCheck
+            );
+
+            return;
+          }
+
+          if (
+            room.status !== "waiting"
+          ) {
+            acknowledge(callback, {
+              success: false,
+
+              error:
+                "Players cannot be removed after the game starts."
+            });
+
+            return;
+          }
+
+          const targetPlayerId =
+            String(
+              payload &&
+              payload.targetPlayerId ||
+              ""
+            );
+
+          if (
+            !targetPlayerId ||
+            targetPlayerId === player.id
+          ) {
+            acknowledge(callback, {
+              success: false,
+
+              error:
+                "The host cannot remove themselves."
+            });
+
+            return;
+          }
+
+          const targetPlayer =
+            findPlayer(
+              room,
+              targetPlayerId
+            );
+
+          if (!targetPlayer) {
+            acknowledge(callback, {
+              success: false,
+
+              error:
+                "That player is no longer in the room."
+            });
+
+            return;
+          }
+
+          const targetSocket =
+            targetPlayer.socketId
+              ? io.sockets.sockets.get(
+                  targetPlayer.socketId
+                )
+              : null;
+
+          if (targetSocket) {
+            targetSocket.emit(
+              "removed-from-room",
+              {
+                message:
+                  `You were removed from room ${room.code} by the host.`
+              }
+            );
+
+            detachSocketFromRoom(
+              targetSocket,
+              room.code
+            );
+          }
+
+          removePlayerFromRoom(
+            room,
+            targetPlayer.id
+          );
+
+          acknowledge(callback, {
+            success: true,
+
+            room:
+              rooms.has(room.code)
+                ? createPublicRoom(room)
+                : null
+          });
+
+          console.log(
+            `${targetPlayer.name} was removed from room ${room.code}`
+          );
+        } catch (error) {
+          handleUnexpectedSocketError(
+            socket,
+            error,
+            callback
+          );
+        }
+      }
+    );
+
+    /* --------------------------------------
+       Leave room
+    -------------------------------------- */
+
+    socket.on(
+      "leave-room",
+      (payload, callback) => {
+        try {
+          const authentication =
+            getAuthenticatedRoomPlayer(
+              payload
+            );
+
+          if (
+            !authentication.success
+          ) {
+            acknowledge(
+              callback,
+              authentication
+            );
+
+            return;
+          }
+
+          const {
+            room,
+            player
+          } = authentication;
+
+          detachSocketFromRoom(
+            socket,
+            room.code
+          );
+
+          removePlayerFromRoom(
+            room,
+            player.id
+          );
+
+          acknowledge(callback, {
+            success: true
+          });
+
+          console.log(
+            `${player.name} left room ${room.code}`
+          );
+        } catch (error) {
+          handleUnexpectedSocketError(
+            socket,
+            error,
+            callback
+          );
+        }
+      }
+    );
+
+    /* --------------------------------------
+       Connection test
+    -------------------------------------- */
+
+    socket.on(
+      "connection-test",
+      (callback) => {
+        acknowledge(callback, {
+          success: true,
+          socketId: socket.id,
+
+          timestamp:
+            new Date().toISOString()
+        });
+      }
+    );
+
+    /* --------------------------------------
+       Disconnection handling
+    -------------------------------------- */
+
+    socket.on(
+      "disconnect",
+      (reason) => {
+        console.log(
+          `Player disconnected: ${socket.id}. Reason: ${reason}`
+        );
+
+        const roomCode =
+          socket.data.roomCode;
+
+        const playerId =
+          socket.data.playerId;
+
+        if (
+          !roomCode ||
+          !playerId
+        ) {
+          return;
+        }
+
+        const room =
+          rooms.get(roomCode);
+
+        const player =
+          findPlayer(
+            room,
+            playerId
+          );
+
+        if (
+          !room ||
+          !player ||
+          player.socketId !== socket.id
+        ) {
+          return;
+        }
+
+        player.connected = false;
+        player.ready = false;
+
+        player.lastSeenAt =
+          new Date().toISOString();
+
+        transferHostIfNeeded(room);
+        emitRoomUpdate(room);
+
+        scheduleDisconnectedPlayerCleanup(
+          room,
+          player
+        );
+      }
+    );
+
+    socket.on(
+      "error",
+      (error) => {
+        console.error(
+          `Socket error for ${socket.id}:`,
+          error
+        );
+      }
+    );
+  }
+);
+
+/* ==========================================
+   Abandoned room cleanup
+========================================== */
+
+const roomCleanupInterval =
+  setInterval(() => {
+    const now = Date.now();
+
+    for (
+      const [roomCode, room]
+      of rooms.entries()
+    ) {
+      const hasConnectedPlayer =
+        room.players.some(
+          (player) =>
+            player.connected
+        );
+
+      const updatedTime =
+        Date.parse(room.updatedAt);
+
+      const roomAge =
+        Number.isFinite(updatedTime)
+          ? now - updatedTime
+          : 0;
+
+      if (
+        !hasConnectedPlayer &&
+        roomAge >= EMPTY_ROOM_MAX_AGE_MS
+      ) {
+        room.players.forEach(
+          (player) => {
+            clearDisconnectTimer(
+              roomCode,
+              player.id
+            );
+          }
+        );
+
+        rooms.delete(roomCode);
+
+        console.log(
+          `Removed abandoned room ${roomCode}`
+        );
+      }
+    }
+  }, ROOM_CLEANUP_INTERVAL_MS);
+
+roomCleanupInterval.unref();
+
+/* ==========================================
+   Browser route fallback
+========================================== */
+
+app.get(
+  "*",
+  (request, response, next) => {
+    if (
+      request.path.startsWith(
+        "/api/"
+      )
+    ) {
+      return next();
+    }
+
+    return response.sendFile(
+      path.join(
+        PUBLIC_DIRECTORY,
+        "index.html"
+      )
+    );
+  }
+);
+
+/* ==========================================
+   Missing API route
+========================================== */
+
+app.use(
+  "/api",
+  (request, response) => {
+    response.status(404).json({
+      success: false,
+      error: "API route not found."
+    });
+  }
+);
+
+/* ==========================================
+   Express error handler
+========================================== */
+
+app.use(
+  (
+    error,
+    request,
+    response,
+    next
+  ) => {
     console.error(
-      `Socket error for ${socket.id}:`,
+      "Server error:",
       error
     );
-  });
-});
 
-/*
-  Return the main application for browser routes that
-  are not API requests.
+    if (response.headersSent) {
+      return next(error);
+    }
 
-  This will become important later when we add lobby,
-  deck and game-table pages.
-*/
-app.get("*", (request, response, next) => {
-  if (request.path.startsWith("/api/")) {
-    return next();
+    return response.status(500).json({
+      success: false,
+
+      error:
+        "An unexpected server error occurred."
+    });
   }
+);
 
-  return response.sendFile(
-    path.join(PUBLIC_DIRECTORY, "index.html")
-  );
-});
+/* ==========================================
+   Start server
+========================================== */
 
-/*
-  API route-not-found response.
-*/
-app.use("/api", (request, response) => {
-  response.status(404).json({
-    success: false,
-    error: "API route not found."
-  });
-});
+server.listen(
+  PORT,
+  "0.0.0.0",
+  () => {
+    console.log(
+      "-----------------------------------------"
+    );
 
-/*
-  General Express error handler.
-*/
-app.use((error, request, response, next) => {
-  console.error("Server error:", error);
+    console.log(
+      "Torn Commander Sandbox Step 2 is running"
+    );
 
-  if (response.headersSent) {
-    return next(error);
+    console.log(`Port: ${PORT}`);
+
+    console.log(
+      `Local address: http://localhost:${PORT}`
+    );
+
+    console.log(
+      "-----------------------------------------"
+    );
   }
+);
 
-  return response.status(500).json({
-    success: false,
-    error: "An unexpected server error occurred."
-  });
-});
+/* ==========================================
+   Graceful shutdown
+========================================== */
 
-/*
-  Start the application.
-*/
-server.listen(PORT, "0.0.0.0", () => {
-  console.log("-----------------------------------------");
-  console.log("Torn Commander Sandbox is running");
-  console.log(`Port: ${PORT}`);
-  console.log(`Local address: http://localhost:${PORT}`);
-  console.log("-----------------------------------------");
-});
-
-/*
-  Shut down cleanly when Render or another host
-  restarts the application.
-*/
 function shutdownServer(signal) {
-  console.log(`${signal} received. Closing server...`);
+  console.log(
+    `${signal} received. Closing server...`
+  );
+
+  clearInterval(
+    roomCleanupInterval
+  );
+
+  for (
+    const timer
+    of disconnectTimers.values()
+  ) {
+    clearTimeout(timer);
+  }
+
+  disconnectTimers.clear();
 
   io.close(() => {
     server.close(() => {
-      console.log("Commander server closed.");
+      console.log(
+        "Commander server closed."
+      );
+
       process.exit(0);
     });
   });
 
   setTimeout(() => {
-    console.error("Forced server shutdown.");
+    console.error(
+      "Forced server shutdown."
+    );
+
     process.exit(1);
   }, 10000).unref();
 }
 
-process.on("SIGTERM", () => {
-  shutdownServer("SIGTERM");
-});
+process.on(
+  "SIGTERM",
+  () => {
+    shutdownServer("SIGTERM");
+  }
+);
 
-process.on("SIGINT", () => {
-  shutdownServer("SIGINT");
-});
+process.on(
+  "SIGINT",
+  () => {
+    shutdownServer("SIGINT");
+  }
+);
 
-process.on("uncaughtException", (error) => {
-  console.error("Uncaught exception:", error);
-});
+process.on(
+  "uncaughtException",
+  (error) => {
+    console.error(
+      "Uncaught exception:",
+      error
+    );
+  }
+);
 
-process.on("unhandledRejection", (reason) => {
-  console.error("Unhandled rejection:", reason);
-});
+process.on(
+  "unhandledRejection",
+  (reason) => {
+    console.error(
+      "Unhandled rejection:",
+      reason
+    );
+  }
+);
