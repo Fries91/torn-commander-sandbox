@@ -24,7 +24,7 @@
   <div class="app-shell">
 
     <!-- =========================================
-         Top header
+         Header
     ========================================== -->
 
     <header class="top-header">
@@ -54,7 +54,7 @@
     <main class="main-content">
 
       <!-- =====================================
-           Home screen
+           Home view
       ====================================== -->
 
       <section
@@ -65,16 +65,20 @@
         <section class="hero-panel">
           <div class="hero-badge">2–6 Players</div>
 
-          <h2 id="homeTitle">Play Commander with Torn players</h2>
+          <h2 id="homeTitle">
+            Play Commander with Torn players
+          </h2>
 
           <p>
-            Create private multiplayer rooms, invite other players and prepare
-            for a six-player Commander game.
+            Create multiplayer rooms, import Commander decks and prepare for
+            games with up to six players.
           </p>
         </section>
 
-        <section class="action-grid" aria-label="Commander actions">
-
+        <section
+          class="action-grid"
+          aria-label="Commander actions"
+        >
           <button
             id="createGameButton"
             class="action-card primary-card"
@@ -114,14 +118,14 @@
 
             <span class="action-content">
               <strong>My Decks</strong>
-              <small>Deck importing will be added next</small>
+              <small>Import and manage Commander decks</small>
             </span>
 
             <span class="action-arrow" aria-hidden="true">›</span>
           </button>
         </section>
 
-        <!-- Rejoin room panel -->
+        <!-- Rejoin panel -->
 
         <section
           id="rejoinPanel"
@@ -130,7 +134,11 @@
         >
           <div>
             <span class="panel-label">Active room found</span>
-            <h3 id="rejoinTitle">Rejoin your Commander lobby</h3>
+
+            <h3 id="rejoinTitle">
+              Rejoin your Commander lobby
+            </h3>
+
             <p id="rejoinRoomDetails">
               Room information will appear here.
             </p>
@@ -145,29 +153,60 @@
           </button>
         </section>
 
+        <!-- Active deck preview -->
+
+        <section
+          id="homeActiveDeckPanel"
+          class="active-deck-panel hidden"
+        >
+          <div class="active-deck-icon" aria-hidden="true">
+            📖
+          </div>
+
+          <div class="active-deck-information">
+            <span class="panel-label">Selected deck</span>
+            <strong id="homeActiveDeckName">No deck selected</strong>
+            <small id="homeActiveCommanderName">
+              Choose a deck before entering a game.
+            </small>
+          </div>
+
+          <button
+            id="homeChangeDeckButton"
+            class="small-button"
+            type="button"
+          >
+            Change
+          </button>
+        </section>
+
         <section class="information-panel">
           <div class="section-heading">
-            <h3>Commander Lobby</h3>
+            <h3>Commander Features</h3>
             <span class="unofficial-label">Unofficial</span>
           </div>
 
           <div class="feature-list">
 
             <div class="feature-row">
-              <span class="feature-icon" aria-hidden="true">🔐</span>
+              <span class="feature-icon" aria-hidden="true">📥</span>
 
               <div>
-                <strong>Private room codes</strong>
-                <p>Create a six-character code to share with players.</p>
+                <strong>Deck importing</strong>
+                <p>
+                  Paste standard Commander deck lists and save them.
+                </p>
               </div>
             </div>
 
             <div class="feature-row">
-              <span class="feature-icon" aria-hidden="true">👥</span>
+              <span class="feature-icon" aria-hidden="true">🔐</span>
 
               <div>
-                <strong>Live player lobby</strong>
-                <p>See players join, leave and change ready status.</p>
+                <strong>Private room codes</strong>
+                <p>
+                  Invite up to five other Commander players.
+                </p>
               </div>
             </div>
 
@@ -175,8 +214,10 @@
               <span class="feature-icon" aria-hidden="true">👑</span>
 
               <div>
-                <strong>Host controls</strong>
-                <p>The host controls room size and starts the game.</p>
+                <strong>Commander support</strong>
+                <p>
+                  Select your commander and prepare your 100-card deck.
+                </p>
               </div>
             </div>
 
@@ -186,22 +227,177 @@
         <section class="development-panel">
           <div class="development-header">
             <span>Development progress</span>
-            <strong>Step 2</strong>
+            <strong>Step 3</strong>
           </div>
 
           <div class="progress-track">
-            <div class="progress-fill step-two-progress"></div>
+            <div class="progress-fill step-three-progress"></div>
           </div>
 
           <p>
-            Multiplayer room creation, joining and lobby controls are being
-            activated.
+            Deck importing, saved decks and active-deck selection are being
+            added.
           </p>
         </section>
       </section>
 
       <!-- =====================================
-           Multiplayer lobby screen
+           Deck library view
+      ====================================== -->
+
+      <section
+        id="decksView"
+        class="app-view"
+        aria-labelledby="decksTitle"
+      >
+        <div class="page-toolbar">
+          <button
+            id="decksBackButton"
+            class="icon-button"
+            type="button"
+            aria-label="Return home"
+          >
+            ←
+          </button>
+
+          <div class="page-title-area">
+            <span class="panel-label">Commander collection</span>
+            <h2 id="decksTitle">My Decks</h2>
+          </div>
+
+          <button
+            id="toolbarImportDeckButton"
+            class="icon-button"
+            type="button"
+            aria-label="Import a deck"
+          >
+            +
+          </button>
+        </div>
+
+        <!-- Deck summary -->
+
+        <section class="deck-summary-panel">
+          <div class="deck-summary-stat">
+            <span>Saved decks</span>
+            <strong id="savedDeckCount">0</strong>
+          </div>
+
+          <div class="deck-summary-stat">
+            <span>Active deck</span>
+            <strong id="activeDeckStatus">None</strong>
+          </div>
+
+          <div class="deck-summary-stat">
+            <span>Total cards</span>
+            <strong id="savedCardCount">0</strong>
+          </div>
+        </section>
+
+        <!-- Selected deck -->
+
+        <section
+          id="selectedDeckPanel"
+          class="selected-deck-panel hidden"
+        >
+          <div class="selected-deck-heading">
+            <div>
+              <span class="panel-label">Currently selected</span>
+              <h3 id="selectedDeckName">Deck name</h3>
+              <p id="selectedDeckCommander">
+                Commander name
+              </p>
+            </div>
+
+            <span class="selected-badge">Active</span>
+          </div>
+
+          <div class="selected-deck-stats">
+            <div>
+              <span>Cards</span>
+              <strong id="selectedDeckCardCount">0</strong>
+            </div>
+
+            <div>
+              <span>Commander</span>
+              <strong id="selectedDeckCommanderCount">1</strong>
+            </div>
+
+            <div>
+              <span>Status</span>
+              <strong id="selectedDeckValidation">Checking</strong>
+            </div>
+          </div>
+        </section>
+
+        <!-- Deck list controls -->
+
+        <section class="deck-library-panel">
+          <div class="section-heading">
+            <div>
+              <h3>Saved Commander Decks</h3>
+              <p>
+                Choose one deck to use in multiplayer rooms.
+              </p>
+            </div>
+
+            <button
+              id="importDeckButton"
+              class="small-button"
+              type="button"
+            >
+              Import Deck
+            </button>
+          </div>
+
+          <div
+            id="emptyDeckState"
+            class="empty-deck-state"
+          >
+            <span aria-hidden="true">📚</span>
+
+            <h3>No decks saved</h3>
+
+            <p>
+              Import a Commander deck list to begin building your collection.
+            </p>
+
+            <button
+              id="emptyImportDeckButton"
+              class="primary-button"
+              type="button"
+            >
+              Import First Deck
+            </button>
+          </div>
+
+          <div
+            id="savedDeckList"
+            class="saved-deck-list hidden"
+            aria-live="polite"
+          ></div>
+        </section>
+
+        <section class="deck-help-panel">
+          <div class="deck-help-icon" aria-hidden="true">
+            💡
+          </div>
+
+          <div>
+            <strong>Accepted deck-list format</strong>
+
+            <p>
+              Paste one card per line using a quantity followed by the card
+              name. Set codes and collector numbers may also be included.
+            </p>
+
+            <code>1 Sol Ring</code>
+          </div>
+        </section>
+      </section>
+
+      <!-- =====================================
+           Multiplayer lobby view
       ====================================== -->
 
       <section
@@ -297,13 +493,52 @@
           </div>
         </section>
 
-        <!-- Local player controls -->
+        <!-- Player deck -->
 
         <section class="lobby-panel">
           <div class="section-heading">
             <div>
-              <h3>Your status</h3>
-              <p>Select ready when your deck is prepared.</p>
+              <h3>Your Commander Deck</h3>
+              <p>
+                Select the deck you will use in this game.
+              </p>
+            </div>
+          </div>
+
+          <div
+            id="lobbyDeckSelection"
+            class="lobby-deck-selection"
+          >
+            <div class="lobby-deck-placeholder">
+              <span aria-hidden="true">📚</span>
+
+              <div>
+                <strong>No deck selected</strong>
+                <p>
+                  Import or choose a deck before marking ready.
+                </p>
+              </div>
+            </div>
+
+            <button
+              id="chooseLobbyDeckButton"
+              class="secondary-button full-width-button"
+              type="button"
+            >
+              Choose Commander Deck
+            </button>
+          </div>
+        </section>
+
+        <!-- Ready status -->
+
+        <section class="lobby-panel">
+          <div class="section-heading">
+            <div>
+              <h3>Your Status</h3>
+              <p>
+                Mark ready after selecting and checking your deck.
+              </p>
             </div>
           </div>
 
@@ -317,7 +552,7 @@
           </button>
         </section>
 
-        <!-- Host settings -->
+        <!-- Host controls -->
 
         <section
           id="hostControlsPanel"
@@ -325,8 +560,10 @@
         >
           <div class="section-heading">
             <div>
-              <h3>Host controls</h3>
-              <p>Manage the lobby and begin the game.</p>
+              <h3>Host Controls</h3>
+              <p>
+                Manage the lobby and begin the game.
+              </p>
             </div>
 
             <span class="host-badge">Host only</span>
@@ -381,7 +618,7 @@
             id="startGameRequirement"
             class="requirement-message"
           >
-            At least two players must join and everyone must be ready.
+            At least two players must join, select decks and be ready.
           </p>
         </section>
 
@@ -418,7 +655,6 @@
       class="bottom-navigation"
       aria-label="Main navigation"
     >
-
       <button
         id="bottomHomeButton"
         class="nav-button active"
@@ -454,7 +690,6 @@
         <span aria-hidden="true">⚙️</span>
         <small>Settings</small>
       </button>
-
     </nav>
   </div>
 
@@ -548,7 +783,9 @@
 
           <span>
             <strong>Private room</strong>
-            <small>Players must use the room code to join.</small>
+            <small>
+              Players must use the room code to join.
+            </small>
           </span>
         </label>
 
@@ -642,7 +879,226 @@
   </div>
 
   <!-- =========================================
-       Leave-room confirmation modal
+       Import-deck modal
+  ========================================== -->
+
+  <div
+    id="importDeckModal"
+    class="modal-backdrop hidden"
+    role="dialog"
+    aria-modal="true"
+    aria-labelledby="importDeckTitle"
+  >
+    <section class="modal-card deck-import-modal">
+      <div class="modal-header">
+        <div>
+          <span class="panel-label">Add to your collection</span>
+          <h2 id="importDeckTitle">Import Commander Deck</h2>
+        </div>
+
+        <button
+          class="modal-close-button"
+          type="button"
+          data-close-modal="importDeckModal"
+          aria-label="Close deck importer"
+        >
+          ×
+        </button>
+      </div>
+
+      <form id="importDeckForm">
+
+        <label class="field-group">
+          <span>Deck name</span>
+
+          <input
+            id="deckNameInput"
+            name="deckName"
+            type="text"
+            minlength="2"
+            maxlength="50"
+            placeholder="Example: Atraxa Counters"
+            required
+          >
+        </label>
+
+        <label class="field-group">
+          <span>Commander</span>
+
+          <input
+            id="commanderNameInput"
+            name="commanderName"
+            type="text"
+            minlength="2"
+            maxlength="100"
+            placeholder="Example: Atraxa, Praetors' Voice"
+            required
+          >
+
+          <small>
+            Enter the commander exactly as it appears on the card.
+          </small>
+        </label>
+
+        <label class="field-group">
+          <span>Deck list</span>
+
+          <textarea
+            id="deckListInput"
+            name="deckList"
+            rows="14"
+            spellcheck="false"
+            placeholder="1 Sol Ring&#10;1 Arcane Signet&#10;1 Command Tower&#10;1 Swords to Plowshares"
+            required
+          ></textarea>
+
+          <small id="deckImportLineCount">
+            Paste the 99 main-deck cards. Your commander is added separately.
+          </small>
+        </label>
+
+        <div
+          id="deckImportPreview"
+          class="deck-import-preview hidden"
+        >
+          <div>
+            <span>Recognized cards</span>
+            <strong id="previewRecognizedCards">0</strong>
+          </div>
+
+          <div>
+            <span>Total quantity</span>
+            <strong id="previewTotalCards">0</strong>
+          </div>
+
+          <div>
+            <span>Possible errors</span>
+            <strong id="previewErrorCount">0</strong>
+          </div>
+        </div>
+
+        <label class="checkbox-row">
+          <input
+            id="selectImportedDeckCheckbox"
+            name="selectImportedDeck"
+            type="checkbox"
+            checked
+          >
+
+          <span>
+            <strong>Select after importing</strong>
+            <small>
+              Use this as your active Commander deck.
+            </small>
+          </span>
+        </label>
+
+        <button
+          id="submitImportDeckButton"
+          class="primary-button full-width-button"
+          type="submit"
+        >
+          Import Commander Deck
+        </button>
+      </form>
+    </section>
+  </div>
+
+  <!-- =========================================
+       Deck-details modal
+  ========================================== -->
+
+  <div
+    id="deckDetailsModal"
+    class="modal-backdrop hidden"
+    role="dialog"
+    aria-modal="true"
+    aria-labelledby="deckDetailsTitle"
+  >
+    <section class="modal-card deck-details-modal">
+      <div class="modal-header">
+        <div>
+          <span class="panel-label">Commander deck</span>
+          <h2 id="deckDetailsTitle">Deck Details</h2>
+        </div>
+
+        <button
+          class="modal-close-button"
+          type="button"
+          data-close-modal="deckDetailsModal"
+          aria-label="Close deck details"
+        >
+          ×
+        </button>
+      </div>
+
+      <section class="deck-details-commander">
+        <span class="deck-details-icon" aria-hidden="true">👑</span>
+
+        <div>
+          <small>Commander</small>
+          <strong id="deckDetailsCommander">
+            Commander name
+          </strong>
+        </div>
+      </section>
+
+      <div class="deck-details-stats">
+        <div>
+          <span>Total cards</span>
+          <strong id="deckDetailsCardCount">0</strong>
+        </div>
+
+        <div>
+          <span>Unique cards</span>
+          <strong id="deckDetailsUniqueCount">0</strong>
+        </div>
+
+        <div>
+          <span>Imported</span>
+          <strong id="deckDetailsDate">Today</strong>
+        </div>
+      </div>
+
+      <div class="deck-card-list-heading">
+        <h3>Card List</h3>
+
+        <button
+          id="copyDeckListButton"
+          class="small-button"
+          type="button"
+        >
+          Copy List
+        </button>
+      </div>
+
+      <div
+        id="deckDetailsCardList"
+        class="deck-details-card-list"
+      ></div>
+
+      <div class="deck-details-actions">
+        <button
+          id="selectDeckButton"
+          class="primary-button"
+          type="button"
+        >
+          Select This Deck
+        </button>
+
+        <button
+          id="deleteDeckButton"
+          class="danger-button"
+          type="button"
+        >
+          Delete Deck
+        </button>
+      </div>
+    </section>
+  </div>
+
+  <!-- =========================================
+       Leave-room modal
   ========================================== -->
 
   <div
@@ -670,8 +1126,8 @@
       </div>
 
       <p class="modal-description">
-        You will return to the home screen. If you are the host, another player
-        may become the new host.
+        You will return to the home screen. If you are the host, another
+        connected player may become the new host.
       </p>
 
       <div class="modal-button-row">
@@ -711,6 +1167,10 @@
           <span class="player-host-label hidden">Host</span>
         </div>
 
+        <small class="player-deck-name">
+          No deck selected
+        </small>
+
         <small class="player-connection-text">
           Connected
         </small>
@@ -732,7 +1192,60 @@
   </template>
 
   <!-- =========================================
-       Toast notification
+       Saved-deck template
+  ========================================== -->
+
+  <template id="savedDeckTemplate">
+    <article class="saved-deck-card">
+      <button
+        class="saved-deck-open-button"
+        type="button"
+      >
+        <span
+          class="saved-deck-commander-icon"
+          aria-hidden="true"
+        >
+          👑
+        </span>
+
+        <span class="saved-deck-information">
+          <strong class="saved-deck-name">
+            Deck name
+          </strong>
+
+          <small class="saved-deck-commander">
+            Commander name
+          </small>
+
+          <span class="saved-deck-meta">
+            <span class="saved-deck-count">
+              100 cards
+            </span>
+
+            <span class="saved-deck-validity">
+              Imported
+            </span>
+          </span>
+        </span>
+
+        <span
+          class="saved-deck-selected-badge hidden"
+        >
+          Active
+        </span>
+
+        <span
+          class="saved-deck-arrow"
+          aria-hidden="true"
+        >
+          ›
+        </span>
+      </button>
+    </article>
+  </template>
+
+  <!-- =========================================
+       Toast
   ========================================== -->
 
   <div
