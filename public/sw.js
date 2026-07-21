@@ -1,6 +1,6 @@
 "use strict";
 
-const CACHE_NAME = "torn-commander-v5";
+const CACHE_NAME = "torn-commander-v6";
 const CORE = ["/", "/index.html", "/styles.css", "/app.js", "/manifest.webmanifest", "/icon.svg"];
 
 self.addEventListener("install", (event) => {
