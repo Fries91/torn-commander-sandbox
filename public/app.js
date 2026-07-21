@@ -1,3435 +1,1140 @@
-"use strict";
+(() => {
+  "use strict";
 
-/*
-  Torn Commander Sandbox
-  Step 3 frontend controller
-
-  Features:
-  - Step 2 multiplayer rooms
-  - Local Commander deck importing
-  - Saved deck library
-  - Active deck selection
-  - Commander and card-count tracking
-  - Lobby deck synchronization
-  - Ready-status deck requirement
-  - Room reconnection
-*/
-
-document.addEventListener("DOMContentLoaded", () => {
-  const STORAGE_KEYS = {
-    playerName: "tcs-player-name",
-    roomSession: "tcs-room-session",
-    decks: "tcs-commander-decks",
-    activeDeckId: "tcs-active-deck-id"
+  const STORAGE = {
+    decks: "tornCommander.decks.v5",
+    session: "tornCommander.session.v5",
+    playerName: "tornCommander.playerName.v5"
   };
 
-  const MAX_SAVED_DECKS = 30;
-
-  const elements = {
-    connectionStatus: document.getElementById("connectionStatus"),
-    connectionText: document.getElementById("connectionText"),
-    headerSubtitle: document.getElementById("headerSubtitle"),
-    messageToast: document.getElementById("messageToast"),
-
-    homeView: document.getElementById("homeView"),
-    decksView: document.getElementById("decksView"),
-    lobbyView: document.getElementById("lobbyView"),
-    bottomNavigation: document.getElementById("bottomNavigation"),
-
-    createGameButton: document.getElementById("createGameButton"),
-    joinGameButton: document.getElementById("joinGameButton"),
-    myDecksButton: document.getElementById("myDecksButton"),
-
-    bottomHomeButton: document.getElementById("bottomHomeButton"),
-    bottomDecksButton: document.getElementById("bottomDecksButton"),
-    bottomGamesButton: document.getElementById("bottomGamesButton"),
-    bottomSettingsButton: document.getElementById(
-      "bottomSettingsButton"
-    ),
-
-    rejoinPanel: document.getElementById("rejoinPanel"),
-    rejoinRoomDetails: document.getElementById(
-      "rejoinRoomDetails"
-    ),
-    rejoinRoomButton: document.getElementById("rejoinRoomButton"),
-
-    homeActiveDeckPanel: document.getElementById(
-      "homeActiveDeckPanel"
-    ),
-    homeActiveDeckName: document.getElementById(
-      "homeActiveDeckName"
-    ),
-    homeActiveCommanderName: document.getElementById(
-      "homeActiveCommanderName"
-    ),
-    homeChangeDeckButton: document.getElementById(
-      "homeChangeDeckButton"
-    ),
-
-    decksBackButton: document.getElementById("decksBackButton"),
-    toolbarImportDeckButton: document.getElementById(
-      "toolbarImportDeckButton"
-    ),
-    importDeckButton: document.getElementById("importDeckButton"),
-    emptyImportDeckButton: document.getElementById(
-      "emptyImportDeckButton"
-    ),
-
-    savedDeckCount: document.getElementById("savedDeckCount"),
-    activeDeckStatus: document.getElementById("activeDeckStatus"),
-    savedCardCount: document.getElementById("savedCardCount"),
-
-    selectedDeckPanel: document.getElementById(
-      "selectedDeckPanel"
-    ),
-    selectedDeckName: document.getElementById("selectedDeckName"),
-    selectedDeckCommander: document.getElementById(
-      "selectedDeckCommander"
-    ),
-    selectedDeckCardCount: document.getElementById(
-      "selectedDeckCardCount"
-    ),
-    selectedDeckCommanderCount: document.getElementById(
-      "selectedDeckCommanderCount"
-    ),
-    selectedDeckValidation: document.getElementById(
-      "selectedDeckValidation"
-    ),
-
-    emptyDeckState: document.getElementById("emptyDeckState"),
-    savedDeckList: document.getElementById("savedDeckList"),
-    savedDeckTemplate: document.getElementById("savedDeckTemplate"),
-
-    importDeckModal: document.getElementById("importDeckModal"),
-    importDeckForm: document.getElementById("importDeckForm"),
-    deckNameInput: document.getElementById("deckNameInput"),
-    commanderNameInput: document.getElementById(
-      "commanderNameInput"
-    ),
-    deckListInput: document.getElementById("deckListInput"),
-    deckImportLineCount: document.getElementById(
-      "deckImportLineCount"
-    ),
-    deckImportPreview: document.getElementById(
-      "deckImportPreview"
-    ),
-    previewRecognizedCards: document.getElementById(
-      "previewRecognizedCards"
-    ),
-    previewTotalCards: document.getElementById(
-      "previewTotalCards"
-    ),
-    previewErrorCount: document.getElementById(
-      "previewErrorCount"
-    ),
-    selectImportedDeckCheckbox: document.getElementById(
-      "selectImportedDeckCheckbox"
-    ),
-    submitImportDeckButton: document.getElementById(
-      "submitImportDeckButton"
-    ),
-
-    deckDetailsModal: document.getElementById("deckDetailsModal"),
-    deckDetailsTitle: document.getElementById("deckDetailsTitle"),
-    deckDetailsCommander: document.getElementById(
-      "deckDetailsCommander"
-    ),
-    deckDetailsCardCount: document.getElementById(
-      "deckDetailsCardCount"
-    ),
-    deckDetailsUniqueCount: document.getElementById(
-      "deckDetailsUniqueCount"
-    ),
-    deckDetailsDate: document.getElementById("deckDetailsDate"),
-    deckDetailsCardList: document.getElementById(
-      "deckDetailsCardList"
-    ),
-    copyDeckListButton: document.getElementById(
-      "copyDeckListButton"
-    ),
-    selectDeckButton: document.getElementById("selectDeckButton"),
-    deleteDeckButton: document.getElementById("deleteDeckButton"),
-
-    createRoomModal: document.getElementById("createRoomModal"),
-    createRoomForm: document.getElementById("createRoomForm"),
-    createPlayerNameInput: document.getElementById(
-      "createPlayerNameInput"
-    ),
-    createMaxPlayersSelect: document.getElementById(
-      "createMaxPlayersSelect"
-    ),
-    createStartingLifeSelect: document.getElementById(
-      "createStartingLifeSelect"
-    ),
-    privateRoomCheckbox: document.getElementById(
-      "privateRoomCheckbox"
-    ),
-    submitCreateRoomButton: document.getElementById(
-      "submitCreateRoomButton"
-    ),
-
-    joinRoomModal: document.getElementById("joinRoomModal"),
-    joinRoomForm: document.getElementById("joinRoomForm"),
-    joinPlayerNameInput: document.getElementById(
-      "joinPlayerNameInput"
-    ),
-    joinRoomCodeInput: document.getElementById(
-      "joinRoomCodeInput"
-    ),
-    submitJoinRoomButton: document.getElementById(
-      "submitJoinRoomButton"
-    ),
-
-    leaveRoomModal: document.getElementById("leaveRoomModal"),
-    leaveLobbyButton: document.getElementById("leaveLobbyButton"),
-    cancelLeaveRoomButton: document.getElementById(
-      "cancelLeaveRoomButton"
-    ),
-    confirmLeaveRoomButton: document.getElementById(
-      "confirmLeaveRoomButton"
-    ),
-
-    lobbyTitle: document.getElementById("lobbyTitle"),
-    lobbyStatusText: document.getElementById("lobbyStatusText"),
-
-    roomCodeDisplay: document.getElementById("roomCodeDisplay"),
-    copyRoomCodeButton: document.getElementById(
-      "copyRoomCodeButton"
-    ),
-    shareRoomButton: document.getElementById("shareRoomButton"),
-    copyInviteLinkButton: document.getElementById(
-      "copyInviteLinkButton"
-    ),
-
-    playerCountDisplay: document.getElementById(
-      "playerCountDisplay"
-    ),
-    startingLifeDisplay: document.getElementById(
-      "startingLifeDisplay"
-    ),
-    readyCountBadge: document.getElementById("readyCountBadge"),
-    playerList: document.getElementById("playerList"),
-    playerRowTemplate: document.getElementById(
-      "playerRowTemplate"
-    ),
-
-    lobbyDeckSelection: document.getElementById(
-      "lobbyDeckSelection"
-    ),
-    chooseLobbyDeckButton: document.getElementById(
-      "chooseLobbyDeckButton"
-    ),
-
-    readyButton: document.getElementById("readyButton"),
-    readyButtonIcon: document.getElementById("readyButtonIcon"),
-    readyButtonText: document.getElementById("readyButtonText"),
-
-    hostControlsPanel: document.getElementById(
-      "hostControlsPanel"
-    ),
-    hostMaxPlayersSelect: document.getElementById(
-      "hostMaxPlayersSelect"
-    ),
-    hostStartingLifeSelect: document.getElementById(
-      "hostStartingLifeSelect"
-    ),
-    saveRoomSettingsButton: document.getElementById(
-      "saveRoomSettingsButton"
-    ),
-    startGameButton: document.getElementById("startGameButton"),
-    startGameRequirement: document.getElementById(
-      "startGameRequirement"
-    )
-  };
+  const app = document.getElementById("app");
+  const bottomNav = document.getElementById("bottomNav");
+  const connectionStatus = document.getElementById("connectionStatus");
+  const connectionText = document.getElementById("connectionText");
+  const modalBackdrop = document.getElementById("modalBackdrop");
+  const modalTitle = document.getElementById("modalTitle");
+  const modalBody = document.getElementById("modalBody");
+  const toastRegion = document.getElementById("toastRegion");
+  const installButton = document.getElementById("installButton");
+  const brandButton = document.getElementById("brandButton");
 
   const state = {
-    socket: null,
+    view: "home",
     room: null,
-    playerId: null,
-    sessionToken: null,
-
-    decks: [],
-    activeDeckId: "",
-    openDeckId: "",
-
-    deckSelectionReturnView: null,
-    deckSyncInProgress: false,
-    autoRejoinInProgress: false,
-
-    toastTimer: null
+    session: loadJson(STORAGE.session, null),
+    decks: loadJson(STORAGE.decks, []),
+    activeGameTab: "table",
+    reconnecting: false,
+    deferredInstallPrompt: null,
+    toolResult: "—",
+    chatDraft: "",
+    tokenDraft: { name: "Soldier", power: "1", toughness: "1" }
   };
 
-  function saveTextValue(key, value) {
+  const socket = io({ transports: ["websocket", "polling"] });
+
+  function loadJson(key, fallback) {
     try {
-      window.localStorage.setItem(key, String(value));
-      return true;
+      const value = JSON.parse(localStorage.getItem(key));
+      return value === null ? fallback : value;
     } catch (error) {
-      console.warn("Unable to save local value:", error);
-      return false;
+      console.warn(`Unable to read ${key}`, error);
+      return fallback;
     }
   }
 
-  function readTextValue(key) {
-    try {
-      return window.localStorage.getItem(key) || "";
-    } catch (error) {
-      console.warn("Unable to read local value:", error);
-      return "";
-    }
+  function saveJson(key, value) {
+    localStorage.setItem(key, JSON.stringify(value));
   }
 
-  function removeStoredValue(key) {
-    try {
-      window.localStorage.removeItem(key);
-    } catch (error) {
-      console.warn("Unable to remove local value:", error);
-    }
+  function escapeHtml(value) {
+    return String(value ?? "")
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#039;");
   }
 
-  function saveJsonValue(key, value) {
-    try {
-      window.localStorage.setItem(
-        key,
-        JSON.stringify(value)
-      );
-
-      return true;
-    } catch (error) {
-      console.warn("Unable to save local information:", error);
-      return false;
-    }
+  function formatTime(value) {
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return "";
+    return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
   }
 
-  function readJsonValue(key, fallbackValue) {
-    try {
-      const storedValue = window.localStorage.getItem(key);
-
-      if (!storedValue) {
-        return fallbackValue;
-      }
-
-      return JSON.parse(storedValue);
-    } catch (error) {
-      console.warn("Unable to read local information:", error);
-      return fallbackValue;
-    }
+  function playerName() {
+    return localStorage.getItem(STORAGE.playerName) || "";
   }
 
-  function saveRoomSession(session) {
-    saveJsonValue(
-      STORAGE_KEYS.roomSession,
-      session
-    );
-
-    updateRejoinPanel();
+  function rememberPlayerName(name) {
+    localStorage.setItem(STORAGE.playerName, String(name || "").trim());
   }
 
-  function readRoomSession() {
-    const session = readJsonValue(
-      STORAGE_KEYS.roomSession,
-      null
-    );
-
-    if (
-      !session ||
-      typeof session.roomCode !== "string" ||
-      typeof session.playerId !== "string" ||
-      typeof session.sessionToken !== "string"
-    ) {
-      return null;
-    }
-
-    return session;
+  function uid() {
+    if (crypto && typeof crypto.randomUUID === "function") return crypto.randomUUID();
+    return `deck-${Date.now()}-${Math.random().toString(16).slice(2)}`;
   }
 
-  function clearRoomSession() {
-    removeStoredValue(STORAGE_KEYS.roomSession);
+  function showToast(message, type = "info") {
+    const toast = document.createElement("div");
+    toast.className = `toast ${type}`;
+    toast.textContent = message;
+    toastRegion.appendChild(toast);
+    window.setTimeout(() => toast.remove(), 3600);
+  }
 
+  function openModal(title, html) {
+    modalTitle.textContent = title;
+    modalBody.innerHTML = html;
+    modalBackdrop.classList.remove("is-hidden");
+    modalBackdrop.setAttribute("aria-hidden", "false");
+    document.body.style.overflow = "hidden";
+    const firstInput = modalBody.querySelector("input, textarea, select, button");
+    window.setTimeout(() => firstInput && firstInput.focus(), 30);
+  }
+
+  function closeModal() {
+    modalBackdrop.classList.add("is-hidden");
+    modalBackdrop.setAttribute("aria-hidden", "true");
+    modalBody.innerHTML = "";
+    document.body.style.overflow = "";
+  }
+
+  function authPayload(extra = {}) {
+    return {
+      roomCode: state.session && state.session.roomCode,
+      playerId: state.session && state.session.playerId,
+      sessionToken: state.session && state.session.sessionToken,
+      ...extra
+    };
+  }
+
+  function emitAck(eventName, payload = {}, includeAuth = true) {
+    return new Promise((resolve) => {
+      let finished = false;
+      const timer = window.setTimeout(() => {
+        if (finished) return;
+        finished = true;
+        resolve({ success: false, error: "The server did not respond. Check your connection." });
+      }, 12000);
+
+      socket.emit(eventName, includeAuth ? authPayload(payload) : payload, (response) => {
+        if (finished) return;
+        finished = true;
+        window.clearTimeout(timer);
+        resolve(response || { success: false, error: "No response received." });
+      });
+    });
+  }
+
+  function setSession(response) {
+    state.session = {
+      roomCode: response.room.code,
+      playerId: response.playerId,
+      sessionToken: response.sessionToken
+    };
+    saveJson(STORAGE.session, state.session);
+    state.room = response.room;
+    state.view = "game";
+  }
+
+  function clearSession() {
+    state.session = null;
     state.room = null;
-    state.playerId = null;
-    state.sessionToken = null;
-
-    updateRejoinPanel();
+    localStorage.removeItem(STORAGE.session);
+    state.view = "home";
+    state.activeGameTab = "table";
   }
 
-  function normalizePlayerName(value) {
-    return String(value || "")
-      .replace(/\s+/g, " ")
-      .trim()
-      .slice(0, 24);
+  function currentPlayer() {
+    if (!state.room || !state.session) return null;
+    return state.room.players.find((player) => player.id === state.session.playerId) || null;
   }
 
-  function normalizeRoomCode(value) {
-    return String(value || "")
-      .toUpperCase()
-      .replace(/[^A-Z0-9]/g, "")
-      .slice(0, 6);
+  function isHost() {
+    return Boolean(state.room && state.session && state.room.hostId === state.session.playerId);
   }
 
-  function normalizeDeckName(value) {
-    return String(value || "")
-      .replace(/\s+/g, " ")
-      .trim()
-      .slice(0, 50);
-  }
-
-  function normalizeCardName(value) {
-    return String(value || "")
-      .replace(/\s+/g, " ")
-      .trim()
-      .slice(0, 150);
-  }
-
-  function getPlayerInitial(name) {
-    const cleanedName = normalizePlayerName(name);
-
-    if (!cleanedName) {
-      return "P";
-    }
-
-    const firstCharacter = cleanedName.match(/[A-Za-z0-9]/);
-
-    return firstCharacter
-      ? firstCharacter[0].toUpperCase()
-      : "P";
-  }
-
-  function getErrorMessage(response, fallbackMessage) {
-    if (
-      response &&
-      typeof response.error === "string" &&
-      response.error.trim()
-    ) {
-      return response.error;
-    }
-
-    return fallbackMessage;
-  }
-
-  function createUniqueId() {
-    if (
-      window.crypto &&
-      typeof window.crypto.randomUUID === "function"
-    ) {
-      return window.crypto.randomUUID();
-    }
-
-    return (
-      Date.now().toString(36) +
-      Math.random().toString(36).slice(2, 12)
-    );
-  }
-
-  function showToast(message, type = "default", duration = 3000) {
-    if (!elements.messageToast) {
-      return;
-    }
-
-    window.clearTimeout(state.toastTimer);
-
-    elements.messageToast.textContent = message;
-    elements.messageToast.className = "message-toast";
-
-    if (type === "success") {
-      elements.messageToast.classList.add("success");
-    }
-
-    if (type === "error") {
-      elements.messageToast.classList.add("error");
-    }
-
-    window.requestAnimationFrame(() => {
-      elements.messageToast.classList.add("visible");
-    });
-
-    state.toastTimer = window.setTimeout(() => {
-      elements.messageToast.classList.remove("visible");
-    }, duration);
-  }
-
-  function updateConnectionStatus(status, text) {
-    if (
-      !elements.connectionStatus ||
-      !elements.connectionText
-    ) {
-      return;
-    }
-
-    elements.connectionStatus.classList.remove(
-      "connecting",
-      "connected",
-      "disconnected"
-    );
-
-    elements.connectionStatus.classList.add(status);
-    elements.connectionText.textContent = text;
-  }
-
-  function isServerConnected() {
-    return Boolean(
-      state.socket &&
-      state.socket.connected
-    );
-  }
-
-  function requireServerConnection() {
-    if (isServerConnected()) {
-      return true;
-    }
-
-    showToast(
-      "The Commander server is not connected yet.",
-      "error"
-    );
-
-    return false;
-  }
-
-  function emitWithAcknowledgement(
-    eventName,
-    payload,
-    timeoutMilliseconds = 12000
-  ) {
-    return new Promise((resolve, reject) => {
-      if (!isServerConnected()) {
-        reject(new Error("The server is not connected."));
-        return;
-      }
-
-      let settled = false;
-
-      const timeout = window.setTimeout(() => {
-        if (settled) {
-          return;
-        }
-
-        settled = true;
-
-        reject(
-          new Error(
-            "The server took too long to respond. Please try again."
-          )
-        );
-      }, timeoutMilliseconds);
-
-      state.socket.emit(eventName, payload, (response) => {
-        if (settled) {
-          return;
-        }
-
-        settled = true;
-        window.clearTimeout(timeout);
-
-        resolve(
-          response || {
-            success: false,
-            error: "The server returned an empty response."
-          }
-        );
-      });
-    });
-  }
-
-  async function runButtonAction(
-    button,
-    loadingText,
-    action
-  ) {
-    if (!button || button.disabled) {
-      return;
-    }
-
-    const originalText = button.textContent;
-
-    button.disabled = true;
-    button.textContent = loadingText;
-
-    try {
-      await action();
-    } catch (error) {
-      console.error(error);
-
-      showToast(
-        error.message || "An unexpected error occurred.",
-        "error",
-        4200
-      );
-    } finally {
-      button.disabled = false;
-      button.textContent = originalText;
-    }
-  }
-
-  function hideAllViews() {
-    elements.homeView?.classList.remove("active-view");
-    elements.decksView?.classList.remove("active-view");
-    elements.lobbyView?.classList.remove("active-view");
-  }
-
-  function setActiveNavigation(activeButton) {
-    const navigationButtons = [
-      elements.bottomHomeButton,
-      elements.bottomDecksButton,
-      elements.bottomGamesButton,
-      elements.bottomSettingsButton
-    ];
-
-    navigationButtons.forEach((button) => {
-      button?.classList.remove("active");
-    });
-
-    activeButton?.classList.add("active");
-  }
-
-  function scrollToTop() {
-    window.scrollTo({
-      top: 0,
-      behavior: "smooth"
-    });
-  }
-
-  function showHomeView() {
-    hideAllViews();
-
-    elements.homeView?.classList.add("active-view");
-
-    elements.bottomNavigation?.classList.remove(
-      "lobby-navigation-hidden"
-    );
-
-    if (elements.headerSubtitle) {
-      elements.headerSubtitle.textContent =
-        "MTG Multiplayer Sandbox";
-    }
-
-    document.title = "Torn Commander Sandbox";
-
-    setActiveNavigation(elements.bottomHomeButton);
-    renderHomeActiveDeck();
-    scrollToTop();
-  }
-
-  function showDecksView() {
-    hideAllViews();
-
-    elements.decksView?.classList.add("active-view");
-
-    elements.bottomNavigation?.classList.remove(
-      "lobby-navigation-hidden"
-    );
-
-    if (elements.headerSubtitle) {
-      elements.headerSubtitle.textContent =
-        "Commander Deck Library";
-    }
-
-    document.title = "My Decks | Torn Commander";
-
-    setActiveNavigation(elements.bottomDecksButton);
-    renderDeckLibrary();
-    scrollToTop();
-  }
-
-  function showLobbyView() {
-    hideAllViews();
-
-    elements.lobbyView?.classList.add("active-view");
-
-    elements.bottomNavigation?.classList.add(
-      "lobby-navigation-hidden"
-    );
-
-    if (elements.headerSubtitle) {
-      elements.headerSubtitle.textContent =
-        "Commander Multiplayer Lobby";
-    }
-
-    document.title = state.room
-      ? `Room ${state.room.code} | Torn Commander`
-      : "Commander Lobby | Torn Commander";
-
-    renderLobbyDeckSelection();
-    scrollToTop();
-  }
-
-  function openDeckLibrary(returnView = null) {
-    state.deckSelectionReturnView = returnView;
-    showDecksView();
-  }
-
-  function returnFromDeckLibrary() {
-    if (
-      state.deckSelectionReturnView === "lobby" &&
-      state.room
-    ) {
-      state.deckSelectionReturnView = null;
-      showLobbyView();
-      return;
-    }
-
-    state.deckSelectionReturnView = null;
-    showHomeView();
-  }
-
-  function getModalById(modalId) {
-    return document.getElementById(modalId);
-  }
-
-  function openModal(modal) {
-    if (!modal) {
-      return;
-    }
-
-    modal.classList.remove("hidden");
-    document.body.classList.add("modal-open");
-
-    window.setTimeout(() => {
-      const firstInput = modal.querySelector(
-        "input:not([type='checkbox']), textarea, select, button"
-      );
-
-      firstInput?.focus();
-    }, 40);
-  }
-
-  function closeModal(modal) {
-    if (!modal) {
-      return;
-    }
-
-    modal.classList.add("hidden");
-
-    const visibleModal = document.querySelector(
-      ".modal-backdrop:not(.hidden)"
-    );
-
-    if (!visibleModal) {
-      document.body.classList.remove("modal-open");
-    }
-  }
-
-  function closeAllModals() {
-    document
-      .querySelectorAll(".modal-backdrop")
-      .forEach((modal) => {
-        modal.classList.add("hidden");
-      });
-
-    document.body.classList.remove("modal-open");
-  }
-
-  function createInviteLink(roomCode) {
-    const url = new URL(window.location.href);
-
-    url.search = "";
-    url.hash = "";
-    url.searchParams.set("room", roomCode);
-
-    return url.toString();
-  }
-
-  function updateAddressRoomCode(roomCode) {
-    const url = new URL(window.location.href);
-
-    url.search = "";
-    url.hash = "";
-
-    if (roomCode) {
-      url.searchParams.set("room", roomCode);
-    }
-
-    window.history.replaceState(
-      {},
-      "",
-      `${url.pathname}${url.search}`
-    );
-  }
-
-  async function copyText(text, successMessage) {
-    try {
-      if (
-        navigator.clipboard &&
-        window.isSecureContext
-      ) {
-        await navigator.clipboard.writeText(text);
-      } else {
-        const temporaryInput =
-          document.createElement("textarea");
-
-        temporaryInput.value = text;
-        temporaryInput.setAttribute("readonly", "");
-        temporaryInput.style.position = "fixed";
-        temporaryInput.style.opacity = "0";
-
-        document.body.appendChild(temporaryInput);
-        temporaryInput.select();
-
-        const successfulCopy =
-          document.execCommand("copy");
-
-        temporaryInput.remove();
-
-        if (!successfulCopy) {
-          throw new Error("Copy command failed.");
-        }
-      }
-
-      showToast(successMessage, "success");
-    } catch (error) {
-      console.error("Unable to copy text:", error);
-
-      showToast(
-        "Unable to copy automatically. Please copy it manually.",
-        "error",
-        4200
-      );
-    }
-  }
-
-  async function shareCurrentRoom() {
-    if (!state.room) {
-      return;
-    }
-
-    const inviteLink = createInviteLink(state.room.code);
-
-    if (navigator.share) {
-      try {
-        await navigator.share({
-          title: "Torn Commander Lobby",
-          text:
-            `Join my Commander game. ` +
-            `Room code: ${state.room.code}`,
-          url: inviteLink
-        });
-
-        return;
-      } catch (error) {
-        if (error.name === "AbortError") {
-          return;
-        }
-
-        console.warn("Native sharing failed:", error);
-      }
-    }
-
-    await copyText(
-      inviteLink,
-      "Room invitation link copied."
-    );
-  }
-
-  function normalizeStoredCard(card) {
-    if (!card || typeof card !== "object") {
-      return null;
-    }
-
-    const quantity = Math.max(
-      1,
-      Math.floor(Number(card.quantity) || 1)
-    );
-
-    const name = normalizeCardName(card.name);
-
-    if (!name) {
-      return null;
-    }
-
-    return {
-      quantity,
-      name
-    };
-  }
-
-  function normalizeStoredDeck(deck) {
-    if (!deck || typeof deck !== "object") {
-      return null;
-    }
-
-    const name = normalizeDeckName(deck.name);
-    const commander = normalizeCardName(deck.commander);
-
-    if (!name || !commander) {
-      return null;
-    }
-
-    const cards = Array.isArray(deck.cards)
-      ? deck.cards
-          .map(normalizeStoredCard)
-          .filter(Boolean)
-      : [];
-
-    const mainDeckCount = cards.reduce(
-      (total, card) => total + card.quantity,
-      0
-    );
-
-    return {
-      id:
-        typeof deck.id === "string" && deck.id
-          ? deck.id
-          : createUniqueId(),
-
-      name,
-      commander,
-      cards,
-
-      mainDeckCount,
-      totalCards: mainDeckCount + 1,
-      uniqueCards: cards.length + 1,
-
-      importedAt:
-        typeof deck.importedAt === "string"
-          ? deck.importedAt
-          : new Date().toISOString(),
-
-      updatedAt:
-        typeof deck.updatedAt === "string"
-          ? deck.updatedAt
-          : new Date().toISOString(),
-
-      parseErrors: Array.isArray(deck.parseErrors)
-        ? deck.parseErrors
-            .map((value) => String(value))
-            .slice(0, 50)
-        : []
-    };
-  }
-
-  function loadDecks() {
-    const storedDecks = readJsonValue(
-      STORAGE_KEYS.decks,
-      []
-    );
-
-    state.decks = Array.isArray(storedDecks)
-      ? storedDecks
-          .map(normalizeStoredDeck)
-          .filter(Boolean)
-          .slice(0, MAX_SAVED_DECKS)
-      : [];
-
-    state.activeDeckId = readTextValue(
-      STORAGE_KEYS.activeDeckId
-    );
-
-    if (
-      state.activeDeckId &&
-      !state.decks.some(
-        (deck) => deck.id === state.activeDeckId
-      )
-    ) {
-      state.activeDeckId = "";
-      removeStoredValue(STORAGE_KEYS.activeDeckId);
-    }
-
-    saveDecks();
+  function deckById(id) {
+    return state.decks.find((deck) => deck.id === id) || null;
   }
 
   function saveDecks() {
-    return saveJsonValue(
-      STORAGE_KEYS.decks,
-      state.decks
-    );
+    saveJson(STORAGE.decks, state.decks);
   }
 
-  function getDeckById(deckId) {
-    return (
-      state.decks.find(
-        (deck) => deck.id === deckId
-      ) || null
-    );
+  function setConnection(mode, text) {
+    connectionStatus.className = `connection-status ${mode}`;
+    connectionText.textContent = text;
   }
 
-  function getActiveDeck() {
-    return getDeckById(state.activeDeckId);
-  }
-
-  function saveActiveDeckId(deckId) {
-    state.activeDeckId = deckId || "";
-
-    if (state.activeDeckId) {
-      saveTextValue(
-        STORAGE_KEYS.activeDeckId,
-        state.activeDeckId
-      );
-    } else {
-      removeStoredValue(STORAGE_KEYS.activeDeckId);
-    }
-  }
-
-  function getDeckValidation(deck) {
-    if (!deck) {
-      return {
-        status: "missing",
-        label: "Missing"
-      };
-    }
-
-    if (deck.totalCards === 100) {
-      return {
-        status: "valid",
-        label: "Ready"
-      };
-    }
-
-    if (deck.totalCards < 100) {
-      return {
-        status: "warning",
-        label: `${100 - deck.totalCards} short`
-      };
-    }
-
-    return {
-      status: "warning",
-      label: `${deck.totalCards - 100} extra`
-    };
-  }
-
-  function cleanImportedCardName(value) {
-    let cardName = normalizeCardName(value);
-
-    cardName = cardName
-      .replace(/\s+\([^)]+\)\s+[A-Za-z0-9-]+$/i, "")
-      .replace(/\s+\[[^\]]+\]\s*$/i, "")
-      .replace(/\s+\*[A-Za-z]+\*\s*$/i, "")
-      .trim();
-
-    return normalizeCardName(cardName);
-  }
-
-  function parseDeckList(rawDeckList, commanderName = "") {
-    const lines = String(rawDeckList || "").split(/\r?\n/);
-
-    const cardMap = new Map();
-    const errors = [];
-
-    let recognizedLines = 0;
-    let section = "main";
-
-    const normalizedCommander =
-      normalizeCardName(commanderName).toLowerCase();
-
-    lines.forEach((originalLine, lineIndex) => {
-      let line = String(originalLine || "")
-        .replace(/^\s*[-•]\s*/, "")
-        .trim();
-
-      if (!line) {
-        return;
-      }
-
-      if (
-        line.startsWith("#") ||
-        line.startsWith("//")
-      ) {
-        return;
-      }
-
-      const heading = line
-        .replace(/:$/, "")
-        .trim()
-        .toLowerCase();
-
-      if (
-        [
-          "commander",
-          "commanders",
-          "command zone"
-        ].includes(heading)
-      ) {
-        section = "commander";
-        return;
-      }
-
-      if (
-        [
-          "deck",
-          "main",
-          "main deck",
-          "mainboard",
-          "library"
-        ].includes(heading)
-      ) {
-        section = "main";
-        return;
-      }
-
-      if (
-        [
-          "sideboard",
-          "maybeboard",
-          "considering",
-          "tokens",
-          "companions"
-        ].includes(heading)
-      ) {
-        section = "skip";
-        return;
-      }
-
-      if (section === "skip") {
-        return;
-      }
-
-      const match = line.match(
-        /^(\d+)\s*(?:x|×)?\s+(.+)$/i
-      );
-
-      if (!match) {
-        errors.push(
-          `Line ${lineIndex + 1}: ${line.slice(0, 80)}`
-        );
-
-        return;
-      }
-
-      const quantity = Math.floor(Number(match[1]));
-      const cardName = cleanImportedCardName(match[2]);
-
-      if (
-        !Number.isFinite(quantity) ||
-        quantity < 1 ||
-        quantity > 999 ||
-        cardName.length < 1
-      ) {
-        errors.push(
-          `Line ${lineIndex + 1}: ${line.slice(0, 80)}`
-        );
-
-        return;
-      }
-
-      if (section === "commander") {
-        return;
-      }
-
-      const key = cardName.toLowerCase();
-
-      const existingCard = cardMap.get(key);
-
-      if (existingCard) {
-        existingCard.quantity += quantity;
-      } else {
-        cardMap.set(key, {
-          quantity,
-          name: cardName
-        });
-      }
-
-      recognizedLines += 1;
-    });
-
-    if (
-      normalizedCommander &&
-      cardMap.has(normalizedCommander)
-    ) {
-      const commanderCard =
-        cardMap.get(normalizedCommander);
-
-      commanderCard.quantity -= 1;
-
-      if (commanderCard.quantity <= 0) {
-        cardMap.delete(normalizedCommander);
-      }
-    }
-
-    const cards = Array.from(cardMap.values())
-      .filter((card) => card.quantity > 0)
-      .sort((firstCard, secondCard) =>
-        firstCard.name.localeCompare(secondCard.name)
-      );
-
-    const totalQuantity = cards.reduce(
-      (total, card) => total + card.quantity,
-      0
-    );
-
-    return {
-      cards,
-      totalQuantity,
-      totalWithCommander:
-        totalQuantity +
-        (normalizedCommander ? 1 : 0),
-
-      recognizedLines,
-      errorLines: errors
-    };
-  }
-
-  function updateDeckImportPreview() {
-    const rawDeckList =
-      elements.deckListInput?.value || "";
-
-    const commanderName =
-      elements.commanderNameInput?.value || "";
-
-    const hasInput =
-      rawDeckList.trim().length > 0 ||
-      commanderName.trim().length > 0;
-
-    if (!hasInput) {
-      elements.deckImportPreview?.classList.add("hidden");
-
-      if (elements.deckImportLineCount) {
-        elements.deckImportLineCount.textContent =
-          "Paste the 99 main-deck cards. Your commander is added separately.";
-      }
-
-      return;
-    }
-
-    const parsedDeck = parseDeckList(
-      rawDeckList,
-      commanderName
-    );
-
-    const cardCount = parsedDeck.totalWithCommander;
-
-    let warningCount = parsedDeck.errorLines.length;
-
-    if (
-      commanderName.trim() &&
-      cardCount !== 100
-    ) {
-      warningCount += 1;
-    }
-
-    elements.deckImportPreview?.classList.remove("hidden");
-
-    elements.previewRecognizedCards.textContent =
-      String(parsedDeck.cards.length);
-
-    elements.previewTotalCards.textContent =
-      String(cardCount);
-
-    elements.previewErrorCount.textContent =
-      String(warningCount);
-
-    if (elements.deckImportLineCount) {
-      if (!commanderName.trim()) {
-        elements.deckImportLineCount.textContent =
-          "Enter a commander to calculate the complete deck total.";
-      } else if (cardCount === 100) {
-        elements.deckImportLineCount.textContent =
-          "Deck total: 100 cards including the commander.";
-      } else {
-        elements.deckImportLineCount.textContent =
-          `Deck total: ${cardCount} cards including the commander.`;
-      }
-    }
-  }
-
-  function renderHomeActiveDeck() {
-    const activeDeck = getActiveDeck();
-
-    if (!activeDeck) {
-      elements.homeActiveDeckPanel?.classList.add("hidden");
-      return;
-    }
-
-    elements.homeActiveDeckPanel?.classList.remove("hidden");
-
-    elements.homeActiveDeckName.textContent =
-      activeDeck.name;
-
-    elements.homeActiveCommanderName.textContent =
-      `${activeDeck.commander} • ${activeDeck.totalCards} cards`;
-  }
-
-  function renderSelectedDeckPanel() {
-    const activeDeck = getActiveDeck();
-
-    if (!activeDeck) {
-      elements.selectedDeckPanel?.classList.add("hidden");
-      return;
-    }
-
-    const validation = getDeckValidation(activeDeck);
-
-    elements.selectedDeckPanel?.classList.remove("hidden");
-
-    elements.selectedDeckName.textContent =
-      activeDeck.name;
-
-    elements.selectedDeckCommander.textContent =
-      activeDeck.commander;
-
-    elements.selectedDeckCardCount.textContent =
-      String(activeDeck.totalCards);
-
-    elements.selectedDeckCommanderCount.textContent = "1";
-
-    elements.selectedDeckValidation.textContent =
-      validation.label;
-  }
-
-  function renderSavedDeckList() {
-    if (
-      !elements.savedDeckList ||
-      !elements.savedDeckTemplate
-    ) {
-      return;
-    }
-
-    elements.savedDeckList.innerHTML = "";
-
-    if (state.decks.length === 0) {
-      elements.emptyDeckState?.classList.remove("hidden");
-      elements.savedDeckList.classList.add("hidden");
-      return;
-    }
-
-    elements.emptyDeckState?.classList.add("hidden");
-    elements.savedDeckList.classList.remove("hidden");
-
-    state.decks.forEach((deck) => {
-      const fragment =
-        elements.savedDeckTemplate.content.cloneNode(true);
-
-      const card = fragment.querySelector(".saved-deck-card");
-      const openButton = fragment.querySelector(
-        ".saved-deck-open-button"
-      );
-      const deckName = fragment.querySelector(
-        ".saved-deck-name"
-      );
-      const commanderName = fragment.querySelector(
-        ".saved-deck-commander"
-      );
-      const cardCount = fragment.querySelector(
-        ".saved-deck-count"
-      );
-      const validity = fragment.querySelector(
-        ".saved-deck-validity"
-      );
-      const activeBadge = fragment.querySelector(
-        ".saved-deck-selected-badge"
-      );
-
-      const validation = getDeckValidation(deck);
-      const isActive = deck.id === state.activeDeckId;
-
-      deckName.textContent = deck.name;
-      commanderName.textContent = deck.commander;
-      cardCount.textContent = `${deck.totalCards} cards`;
-      validity.textContent = validation.label;
-
-      validity.classList.remove("valid", "warning");
-      validity.classList.add(validation.status);
-
-      if (isActive) {
-        card.classList.add("active");
-        activeBadge.classList.remove("hidden");
-      }
-
-      openButton.addEventListener("click", () => {
-        openDeckDetails(deck.id);
-      });
-
-      elements.savedDeckList.appendChild(fragment);
+  function setActiveNav(name) {
+    bottomNav.querySelectorAll("[data-nav]").forEach((button) => {
+      button.classList.toggle("active", button.dataset.nav === name);
     });
   }
 
-  function renderDeckSummary() {
-    const activeDeck = getActiveDeck();
-
-    const totalSavedCards = state.decks.reduce(
-      (total, deck) => total + deck.totalCards,
-      0
-    );
-
-    elements.savedDeckCount.textContent =
-      String(state.decks.length);
-
-    elements.activeDeckStatus.textContent =
-      activeDeck
-        ? activeDeck.name
-        : "None";
-
-    elements.savedCardCount.textContent =
-      String(totalSavedCards);
-  }
-
-  function renderDeckLibrary() {
-    renderDeckSummary();
-    renderSelectedDeckPanel();
-    renderSavedDeckList();
-    renderHomeActiveDeck();
-    renderLobbyDeckSelection();
-  }
-
-  function formatImportedDate(dateValue) {
-    const date = new Date(dateValue);
-
-    if (Number.isNaN(date.getTime())) {
-      return "Unknown";
-    }
-
-    try {
-      return new Intl.DateTimeFormat(undefined, {
-        year: "numeric",
-        month: "short",
-        day: "numeric"
-      }).format(date);
-    } catch (error) {
-      return date.toLocaleDateString();
-    }
-  }
-
-  function createDeckExportText(deck) {
-    if (!deck) {
-      return "";
-    }
-
-    const lines = [
-      "Commander",
-      `1 ${deck.commander}`,
-      "",
-      "Deck"
-    ];
-
-    deck.cards.forEach((card) => {
-      lines.push(
-        `${card.quantity} ${card.name}`
-      );
-    });
-
-    return lines.join("\n");
-  }
-
-  function renderDeckDetailsCardList(deck) {
-    if (!elements.deckDetailsCardList) {
-      return;
-    }
-
-    elements.deckDetailsCardList.innerHTML = "";
-
-    const commanderRow = document.createElement("div");
-    commanderRow.className = "deck-details-card-row";
-
-    const commanderQuantity = document.createElement("span");
-    commanderQuantity.className =
-      "deck-details-card-quantity";
-    commanderQuantity.textContent = "1";
-
-    const commanderName = document.createElement("span");
-    commanderName.className = "deck-details-card-name";
-    commanderName.textContent = `👑 ${deck.commander}`;
-
-    commanderRow.append(
-      commanderQuantity,
-      commanderName
-    );
-
-    elements.deckDetailsCardList.appendChild(
-      commanderRow
-    );
-
-    if (deck.cards.length === 0) {
-      const emptyState = document.createElement("p");
-
-      emptyState.className = "deck-details-empty";
-      emptyState.textContent =
-        "No main-deck cards were recognized.";
-
-      elements.deckDetailsCardList.appendChild(emptyState);
-      return;
-    }
-
-    deck.cards.forEach((card) => {
-      const row = document.createElement("div");
-      row.className = "deck-details-card-row";
-
-      const quantity = document.createElement("span");
-      quantity.className = "deck-details-card-quantity";
-      quantity.textContent = String(card.quantity);
-
-      const cardName = document.createElement("span");
-      cardName.className = "deck-details-card-name";
-      cardName.textContent = card.name;
-
-      row.append(quantity, cardName);
-
-      elements.deckDetailsCardList.appendChild(row);
-    });
-  }
-
-  function openDeckDetails(deckId) {
-    const deck = getDeckById(deckId);
-
-    if (!deck) {
-      showToast(
-        "That saved deck could not be found.",
-        "error"
-      );
-
-      return;
-    }
-
-    state.openDeckId = deck.id;
-
-    elements.deckDetailsTitle.textContent = deck.name;
-    elements.deckDetailsCommander.textContent =
-      deck.commander;
-
-    elements.deckDetailsCardCount.textContent =
-      String(deck.totalCards);
-
-    elements.deckDetailsUniqueCount.textContent =
-      String(deck.uniqueCards);
-
-    elements.deckDetailsDate.textContent =
-      formatImportedDate(deck.importedAt);
-
-    const isActive = deck.id === state.activeDeckId;
-
-    elements.selectDeckButton.disabled = isActive;
-    elements.selectDeckButton.textContent = isActive
-      ? "Selected Deck"
-      : "Select This Deck";
-
-    renderDeckDetailsCardList(deck);
-    openModal(elements.deckDetailsModal);
-  }
-
-  function openDeckImporter() {
-    if (state.decks.length >= MAX_SAVED_DECKS) {
-      showToast(
-        `You can save up to ${MAX_SAVED_DECKS} decks. Delete one before importing another.`,
-        "error",
-        4800
-      );
-
-      return;
-    }
-
-    elements.importDeckForm?.reset();
-
-    if (elements.selectImportedDeckCheckbox) {
-      elements.selectImportedDeckCheckbox.checked = true;
-    }
-
-    elements.deckImportPreview?.classList.add("hidden");
-
-    elements.deckImportLineCount.textContent =
-      "Paste the 99 main-deck cards. Your commander is added separately.";
-
-    openModal(elements.importDeckModal);
-  }
-
-  async function importCommanderDeck(event) {
-    event.preventDefault();
-
-    const deckName = normalizeDeckName(
-      elements.deckNameInput.value
-    );
-
-    const commander = normalizeCardName(
-      elements.commanderNameInput.value
-    );
-
-    if (deckName.length < 2) {
-      showToast(
-        "Enter a deck name with at least two characters.",
-        "error"
-      );
-
-      elements.deckNameInput.focus();
-      return;
-    }
-
-    if (commander.length < 2) {
-      showToast(
-        "Enter the name of your commander.",
-        "error"
-      );
-
-      elements.commanderNameInput.focus();
-      return;
-    }
-
-    const parsedDeck = parseDeckList(
-      elements.deckListInput.value,
-      commander
-    );
-
-    if (parsedDeck.cards.length === 0) {
-      showToast(
-        "No main-deck cards were recognized.",
-        "error",
-        4200
-      );
-
-      elements.deckListInput.focus();
-      return;
-    }
-
-    const timestamp = new Date().toISOString();
-
-    const deck = normalizeStoredDeck({
-      id: createUniqueId(),
-      name: deckName,
-      commander,
-      cards: parsedDeck.cards,
-      importedAt: timestamp,
-      updatedAt: timestamp,
-      parseErrors: parsedDeck.errorLines
-    });
-
-    if (!deck) {
-      showToast(
-        "The deck could not be imported.",
-        "error"
-      );
-
-      return;
-    }
-
-    state.decks.unshift(deck);
-
-    const shouldSelect =
-      elements.selectImportedDeckCheckbox.checked ||
-      !getActiveDeck();
-
-    if (shouldSelect) {
-      saveActiveDeckId(deck.id);
-    }
-
-    if (!saveDecks()) {
-      state.decks = state.decks.filter(
-        (savedDeck) => savedDeck.id !== deck.id
-      );
-
-      showToast(
-        "The browser could not save this deck. Storage may be full.",
-        "error",
-        5000
-      );
-
-      return;
-    }
-
-    closeModal(elements.importDeckModal);
-    renderDeckLibrary();
-
-    if (
-      shouldSelect &&
-      state.room
-    ) {
-      await syncPlayerDeckWithRoom({
-        silent: true
-      });
-    }
-
-    const validation = getDeckValidation(deck);
-
-    if (validation.status === "valid") {
-      showToast(
-        `${deck.name} imported with 100 cards.`,
-        "success",
-        4200
-      );
-    } else {
-      showToast(
-        `${deck.name} imported with ${deck.totalCards} cards. You can still use it as a sandbox deck.`,
-        "success",
-        5200
-      );
-    }
-  }
-
-  async function selectDeck(deckId) {
-    const deck = getDeckById(deckId);
-
-    if (!deck) {
-      showToast(
-        "That saved deck could not be found.",
-        "error"
-      );
-
-      return;
-    }
-
-    saveActiveDeckId(deck.id);
-    closeModal(elements.deckDetailsModal);
-    renderDeckLibrary();
-
+  function render() {
     if (state.room) {
-      await syncPlayerDeckWithRoom({
-        silent: false
-      });
-    }
-
-    showToast(
-      `${deck.name} is now your active deck.`,
-      "success"
-    );
-
-    if (
-      state.deckSelectionReturnView === "lobby" &&
-      state.room
-    ) {
-      state.deckSelectionReturnView = null;
-      showLobbyView();
-    }
-  }
-
-  async function deleteDeck(deckId) {
-    const deck = getDeckById(deckId);
-
-    if (!deck) {
-      return;
-    }
-
-    const confirmed = window.confirm(
-      `Delete "${deck.name}" from your saved decks?`
-    );
-
-    if (!confirmed) {
-      return;
-    }
-
-    const wasActive = deck.id === state.activeDeckId;
-
-    state.decks = state.decks.filter(
-      (savedDeck) => savedDeck.id !== deck.id
-    );
-
-    if (wasActive) {
-      const nextDeck = state.decks[0] || null;
-
-      saveActiveDeckId(
-        nextDeck ? nextDeck.id : ""
-      );
-    }
-
-    saveDecks();
-
-    state.openDeckId = "";
-    closeModal(elements.deckDetailsModal);
-    renderDeckLibrary();
-
-    if (
-      wasActive &&
-      state.room
-    ) {
-      await syncPlayerDeckWithRoom({
-        silent: true
-      });
-    }
-
-    showToast(
-      `${deck.name} was deleted.`,
-      "success"
-    );
-  }
-
-  function getPlayerDeck(player) {
-    if (!player || typeof player !== "object") {
-      return null;
-    }
-
-    if (
-      player.deck &&
-      typeof player.deck === "object" &&
-      player.deck.name
-    ) {
-      return player.deck;
-    }
-
-    if (player.deckName) {
-      return {
-        id: player.deckId || "",
-        name: player.deckName,
-        commander: player.commanderName || "",
-        totalCards: Number(player.deckCardCount) || 0
-      };
-    }
-
-    return null;
-  }
-
-  function playerHasDeck(player) {
-    const deck = getPlayerDeck(player);
-
-    return Boolean(
-      deck &&
-      typeof deck.name === "string" &&
-      deck.name.trim()
-    );
-  }
-
-  function renderLobbyDeckSelection() {
-    if (!elements.lobbyDeckSelection) {
-      return;
-    }
-
-    const activeDeck = getActiveDeck();
-
-    elements.lobbyDeckSelection.innerHTML = "";
-
-    const deckDisplay = document.createElement("div");
-
-    if (activeDeck) {
-      deckDisplay.className = "lobby-selected-deck";
-
-      const icon = document.createElement("span");
-      icon.setAttribute("aria-hidden", "true");
-      icon.textContent = "👑";
-
-      const information = document.createElement("div");
-
-      const deckName = document.createElement("strong");
-      deckName.textContent = activeDeck.name;
-
-      const commander = document.createElement("p");
-      commander.textContent =
-        `${activeDeck.commander} • ${activeDeck.totalCards} cards`;
-
-      information.append(deckName, commander);
-      deckDisplay.append(icon, information);
+      setActiveNav("game");
+      app.innerHTML = state.room.status === "waiting" ? renderLobby() : renderGame();
+    } else if (state.view === "decks") {
+      setActiveNav("decks");
+      app.innerHTML = renderDecks();
+    } else if (state.view === "help") {
+      setActiveNav("help");
+      app.innerHTML = renderHelp();
     } else {
-      deckDisplay.className = "lobby-deck-placeholder";
-
-      const icon = document.createElement("span");
-      icon.setAttribute("aria-hidden", "true");
-      icon.textContent = "📚";
-
-      const information = document.createElement("div");
-
-      const title = document.createElement("strong");
-      title.textContent = "No deck selected";
-
-      const description = document.createElement("p");
-      description.textContent =
-        "Import or choose a deck before marking ready.";
-
-      information.append(title, description);
-      deckDisplay.append(icon, information);
+      setActiveNav("home");
+      app.innerHTML = renderHome();
     }
 
-    const chooseButton = document.createElement("button");
+    if (state.room && state.room.status === "started" && state.activeGameTab === "chat") {
+      window.requestAnimationFrame(() => {
+        const messages = document.querySelector(".chat-messages");
+        if (messages) messages.scrollTop = messages.scrollHeight;
+      });
+    }
+  }
 
-    chooseButton.className =
-      "secondary-button full-width-button";
+  function renderHome() {
+    const savedRoom = state.session && state.session.roomCode;
+    const deckPreview = state.decks.slice(0, 3).map(renderDeckCard).join("");
+    return `
+      <section class="hero-panel">
+        <div class="hero-content">
+          <p class="eyebrow">MTG Commander • 2–6 Players</p>
+          <h1>Your complete shared Commander table.</h1>
+          <p class="hero-copy">Import decks, create a private room, track life and commander damage, move cards between zones, create tokens, chat and reconnect from your phone.</p>
+        </div>
+      </section>
 
-    chooseButton.type = "button";
+      ${savedRoom ? `
+        <section class="rejoin-banner">
+          <div class="section-heading">
+            <div>
+              <strong>Saved room ${escapeHtml(savedRoom)}</strong>
+              <p class="form-help">Your browser has a reconnect session for this room.</p>
+            </div>
+            <div class="button-row">
+              <button class="primary-button" type="button" data-action="rejoin">Rejoin</button>
+              <button class="ghost-button" type="button" data-action="forget-session">Forget</button>
+            </div>
+          </div>
+        </section>
+      ` : ""}
 
-    chooseButton.textContent = activeDeck
-      ? "Change Commander Deck"
-      : "Choose Commander Deck";
+      <section class="home-actions">
+        <form id="createRoomForm" class="panel">
+          <div class="panel-heading">
+            <div><p class="eyebrow">Host</p><h2>Create game</h2></div>
+            <span class="badge info">Private code</span>
+          </div>
+          <div class="form-group">
+            <label for="createPlayerName">Player name</label>
+            <input id="createPlayerName" name="playerName" maxlength="24" required value="${escapeHtml(playerName())}" placeholder="Fries91">
+          </div>
+          <div class="form-grid two">
+            <div class="form-group">
+              <label for="createMaxPlayers">Players</label>
+              <select id="createMaxPlayers" name="maxPlayers">
+                ${[2,3,4,5,6].map((number) => `<option value="${number}" ${number === 6 ? "selected" : ""}>${number}</option>`).join("")}
+              </select>
+            </div>
+            <div class="form-group">
+              <label for="createStartingLife">Starting life</label>
+              <select id="createStartingLife" name="startingLife">
+                ${[20,30,40,50,60].map((number) => `<option value="${number}" ${number === 40 ? "selected" : ""}>${number}</option>`).join("")}
+              </select>
+            </div>
+          </div>
+          <button class="primary-button" type="submit">Create private room</button>
+        </form>
 
-    chooseButton.addEventListener("click", () => {
-      openDeckLibrary("lobby");
+        <form id="joinRoomForm" class="panel">
+          <div class="panel-heading">
+            <div><p class="eyebrow">Guest</p><h2>Join game</h2></div>
+            <span class="badge">6-character code</span>
+          </div>
+          <div class="form-group">
+            <label for="joinPlayerName">Player name</label>
+            <input id="joinPlayerName" name="playerName" maxlength="24" required value="${escapeHtml(playerName())}" placeholder="Your Torn name">
+          </div>
+          <div class="form-group">
+            <label for="joinRoomCode">Room code</label>
+            <input id="joinRoomCode" name="roomCode" maxlength="6" required autocomplete="off" autocapitalize="characters" placeholder="ABC234">
+          </div>
+          <button class="secondary-button" type="submit">Join room</button>
+        </form>
+      </section>
+
+      <section class="panel">
+        <div class="section-heading">
+          <div><p class="eyebrow">Saved locally</p><h2>My decks</h2></div>
+          <div class="button-row">
+            <button class="primary-button" type="button" data-action="import-deck">Import deck</button>
+            <button class="ghost-button" type="button" data-nav="decks">View all</button>
+          </div>
+        </div>
+        ${state.decks.length ? `<div class="deck-grid">${deckPreview}</div>` : `
+          <div class="empty-state">
+            <div><h3>No decks imported yet</h3><p>Paste a deck list from Moxfield, Archidekt, MTGGoldfish or a plain text list.</p><button class="primary-button" type="button" data-action="import-deck">Import your first deck</button></div>
+          </div>
+        `}
+      </section>
+    `;
+  }
+
+  function renderDecks() {
+    return `
+      <section class="panel">
+        <div class="section-heading">
+          <div><p class="eyebrow">Browser deck library</p><h1>My Commander decks</h1><p class="muted">Decks stay on this device until you delete browser storage.</p></div>
+          <button class="primary-button" type="button" data-action="import-deck">Import deck</button>
+        </div>
+        ${state.decks.length ? `<div class="deck-grid">${state.decks.map(renderDeckCard).join("")}</div>` : `
+          <div class="empty-state"><div><h3>Your deck library is empty</h3><p>Import a common text deck list to begin.</p><button class="primary-button" type="button" data-action="import-deck">Import deck</button></div></div>
+        `}
+      </section>
+    `;
+  }
+
+  function renderDeckCard(deck) {
+    const valid = deck.totalCards === 100;
+    return `
+      <article class="deck-card">
+        <div class="deck-card-header">
+          <div>
+            <h3>${escapeHtml(deck.name)}</h3>
+            <p class="deck-commanders">${escapeHtml(deck.commanders.join(" / "))}</p>
+          </div>
+          <span class="badge ${valid ? "success" : "warning"}">${deck.totalCards} cards</span>
+        </div>
+        <div class="deck-meta">
+          <span class="badge">${deck.uniqueCards} unique</span>
+          <span class="badge ${valid ? "success" : "warning"}">${valid ? "Commander ready" : "Sandbox allowed"}</span>
+        </div>
+        <div class="button-row">
+          <button class="small-button" type="button" data-action="edit-deck" data-deck-id="${escapeHtml(deck.id)}">Edit</button>
+          <button class="small-button" type="button" data-action="export-deck" data-deck-id="${escapeHtml(deck.id)}">Copy list</button>
+          <button class="small-button danger-button" type="button" data-action="delete-deck" data-deck-id="${escapeHtml(deck.id)}">Delete</button>
+        </div>
+      </article>
+    `;
+  }
+
+  function renderLobby() {
+    const me = currentPlayer();
+    const selectedDeckId = me && me.deck ? me.deck.id : "";
+    const allReady = state.room.players.length >= 2 && state.room.players.every((player) => player.ready && player.connected && player.deck);
+
+    return `
+      <section class="lobby-card">
+        <div class="lobby-heading">
+          <div>
+            <p class="eyebrow">Private Commander lobby</p>
+            <h1>Room <span class="room-code">${escapeHtml(state.room.code)}</span></h1>
+            <p class="muted">${state.room.players.length}/${state.room.maxPlayers} players • ${state.room.startingLife} starting life</p>
+          </div>
+          <div class="button-row">
+            <button class="secondary-button" type="button" data-action="copy-room-code">Copy code</button>
+            <button class="ghost-button" type="button" data-action="leave-room">Leave</button>
+          </div>
+        </div>
+      </section>
+
+      <section class="lobby-layout">
+        <div class="lobby-card">
+          <div class="panel-heading"><div><p class="eyebrow">Players</p><h2>Ready check</h2></div><span class="badge ${allReady ? "success" : "warning"}">${allReady ? "Ready to start" : "Waiting"}</span></div>
+          <div class="player-list">
+            ${state.room.players.map((player) => renderLobbyPlayer(player)).join("")}
+          </div>
+        </div>
+
+        <div class="lobby-card">
+          <div class="panel-heading"><div><p class="eyebrow">Your setup</p><h2>Select deck</h2></div></div>
+          ${state.decks.length ? `
+            <div class="form-group">
+              <label for="lobbyDeckSelect">Commander deck</label>
+              <select id="lobbyDeckSelect">
+                <option value="">Choose a deck…</option>
+                ${state.decks.map((deck) => `<option value="${escapeHtml(deck.id)}" ${deck.id === selectedDeckId ? "selected" : ""}>${escapeHtml(deck.name)} — ${escapeHtml(deck.commanders.join(" / "))} (${deck.totalCards})</option>`).join("")}
+              </select>
+            </div>
+          ` : `<div class="notice"><strong>No local decks found.</strong><p>Import a deck, then select it for this room.</p></div>`}
+          <div class="button-row" style="margin-top:12px">
+            <button class="secondary-button" type="button" data-action="import-deck">Import deck</button>
+            <button class="primary-button" type="button" data-action="toggle-ready" ${!me || !me.deck ? "disabled" : ""}>${me && me.ready ? "Mark not ready" : "Mark ready"}</button>
+          </div>
+
+          ${isHost() ? `
+            <div class="divider"></div>
+            <form id="roomSettingsForm">
+              <div class="panel-heading"><div><p class="eyebrow">Host controls</p><h3>Room settings</h3></div></div>
+              <div class="form-grid two">
+                <div class="form-group">
+                  <label for="roomMaxPlayers">Maximum players</label>
+                  <select id="roomMaxPlayers" name="maxPlayers">${[2,3,4,5,6].map((number) => `<option value="${number}" ${number === state.room.maxPlayers ? "selected" : ""}>${number}</option>`).join("")}</select>
+                </div>
+                <div class="form-group">
+                  <label for="roomStartingLife">Starting life</label>
+                  <select id="roomStartingLife" name="startingLife">${[20,30,40,50,60].map((number) => `<option value="${number}" ${number === state.room.startingLife ? "selected" : ""}>${number}</option>`).join("")}</select>
+                </div>
+              </div>
+              <div class="button-row">
+                <button class="secondary-button" type="submit">Save settings</button>
+                <button class="primary-button" type="button" data-action="start-game" ${allReady ? "" : "disabled"}>Start game</button>
+              </div>
+            </form>
+          ` : `
+            <div class="divider"></div>
+            <div class="notice"><strong>${escapeHtml(state.room.players.find((player) => player.id === state.room.hostId)?.name || "The host")}</strong> controls the room settings and starts the game.</div>
+          `}
+        </div>
+      </section>
+    `;
+  }
+
+  function renderLobbyPlayer(player) {
+    const host = player.id === state.room.hostId;
+    const self = player.id === state.session.playerId;
+    const statusClass = !player.connected ? "offline" : player.ready ? "ready" : "waiting";
+    const statusText = !player.connected ? "Offline" : player.ready ? "Ready" : "Waiting";
+    return `
+      <article class="lobby-player">
+        <div class="lobby-player-main">
+          <div class="lobby-player-name">
+            <strong>${escapeHtml(player.name)}</strong>
+            ${host ? `<span class="badge info">Host</span>` : ""}
+            ${self ? `<span class="badge">You</span>` : ""}
+          </div>
+          <div class="lobby-player-deck">${player.deck ? `${escapeHtml(player.deck.name)} • ${escapeHtml(player.deck.commanders.join(" / "))}` : "No deck selected"}</div>
+        </div>
+        <div class="inline-actions">
+          <span class="status-badge ${statusClass}">${statusText}</span>
+          ${isHost() && !self ? `<button class="small-button danger-button" type="button" data-action="kick-player" data-player-id="${player.id}">Remove</button>` : ""}
+        </div>
+      </article>
+    `;
+  }
+
+  function renderGame() {
+    const active = state.room.players.find((player) => player.id === state.room.turn?.activePlayerId);
+    const phase = state.room.phases[state.room.turn?.phaseIndex || 0] || "Untap";
+    return `
+      <div class="game-shell">
+        <section class="turn-banner">
+          <div>
+            <p class="eyebrow">Room ${escapeHtml(state.room.code)} • Turn ${state.room.turn?.number || 1}</p>
+            <h2>${escapeHtml(active?.name || "Unknown")} is active</h2>
+            <span class="phase-badge">${escapeHtml(phase)}</span>
+          </div>
+          <div class="turn-actions">
+            <button class="secondary-button" type="button" data-action="next-phase">Next phase</button>
+            <button class="primary-button" type="button" data-action="end-turn">End turn</button>
+          </div>
+        </section>
+
+        <div class="tab-bar" role="tablist">
+          ${[
+            ["table", "Table"], ["zones", "My Zones"], ["tools", "Tools"], ["chat", `Chat${state.room.chat.length ? ` (${state.room.chat.length})` : ""}`]
+          ].map(([id, label]) => `<button class="tab-button ${state.activeGameTab === id ? "active" : ""}" type="button" data-action="game-tab" data-tab="${id}">${label}</button>`).join("")}
+        </div>
+
+        <section class="player-grid">
+          ${state.room.players.map(renderPlayerCard).join("")}
+        </section>
+
+        ${renderGameTab()}
+      </div>
+    `;
+  }
+
+  function renderPlayerCard(player) {
+    const game = player.game;
+    const isActive = player.id === state.room.turn?.activePlayerId;
+    const self = player.id === state.session.playerId;
+    const sourcePlayers = state.room.players.filter((source) => source.id !== player.id);
+    return `
+      <article class="player-card ${isActive ? "is-active" : ""} ${self ? "is-self" : ""} ${game.conceded ? "is-conceded" : ""}">
+        <header class="player-card-header">
+          <div>
+            <h3>${escapeHtml(player.name)} ${self ? `<span class="badge">You</span>` : ""}</h3>
+            <small>${escapeHtml(player.deck?.commanders.join(" / ") || "No commander")}</small>
+          </div>
+          <div class="inline-actions">
+            ${isActive ? `<span class="badge warning">Active</span>` : ""}
+            ${game.conceded ? `<span class="badge danger">Conceded</span>` : ""}
+            ${isHost() && !isActive && !game.conceded ? `<button class="small-button" type="button" data-action="game" data-game-type="set-active-player" data-target-player-id="${player.id}">Make active</button>` : ""}
+          </div>
+        </header>
+        <div class="player-stats">
+          <div class="stat-box life-stat"><small>Life</small><span class="stat-value">${game.life}</span><span class="muted">${game.life <= 0 ? "Defeated?" : ""}</span></div>
+          <div class="stat-box"><small>Poison</small><span class="stat-value">${game.poison}</span><span class="muted">/ 10</span></div>
+          <div class="stat-box"><small>Tax</small><span class="stat-value">${game.commanderTax}</span><span class="muted">mana</span></div>
+        </div>
+        <div class="player-card-controls">
+          <div class="life-controls">
+            ${[-5,-1,1,5].map((amount) => `<button class="counter-button" type="button" data-action="game" data-game-type="life" data-target-player-id="${player.id}" data-amount="${amount}">${amount > 0 ? "+" : ""}${amount}</button>`).join("")}
+          </div>
+          <div class="counter-controls">
+            <span class="field-label">Poison</span>
+            <button class="counter-button" type="button" data-action="game" data-game-type="poison" data-target-player-id="${player.id}" data-amount="-1">−</button>
+            <button class="counter-button" type="button" data-action="game" data-game-type="poison" data-target-player-id="${player.id}" data-amount="1">+</button>
+            <span class="field-label">Tax</span>
+            <button class="counter-button" type="button" data-action="game" data-game-type="commander-tax" data-target-player-id="${player.id}" data-amount="-2">−2</button>
+            <button class="counter-button" type="button" data-action="game" data-game-type="commander-tax" data-target-player-id="${player.id}" data-amount="2">+2</button>
+          </div>
+          ${sourcePlayers.length ? `<div class="commander-damage-grid">
+            ${sourcePlayers.map((source) => {
+              const damage = game.commanderDamage[source.id] || 0;
+              return `<div class="commander-damage-row"><span>From ${escapeHtml(source.name)}: <strong>${damage}</strong>/21</span><span><button class="counter-button" type="button" data-action="game" data-game-type="commander-damage" data-target-player-id="${player.id}" data-source-player-id="${source.id}" data-amount="-1">−</button> <button class="counter-button" type="button" data-action="game" data-game-type="commander-damage" data-target-player-id="${player.id}" data-source-player-id="${source.id}" data-amount="1">+</button></span></div>`;
+            }).join("")}
+          </div>` : ""}
+        </div>
+      </article>
+    `;
+  }
+
+  function renderGameTab() {
+    if (state.activeGameTab === "zones") return renderZonesTab();
+    if (state.activeGameTab === "tools") return renderToolsTab();
+    if (state.activeGameTab === "chat") return renderChatTab();
+    return renderTableTab();
+  }
+
+  function renderTableTab() {
+    const me = currentPlayer();
+    return `
+      <section class="table-board">
+        <div class="zone-heading">
+          <div><p class="eyebrow">Shared battlefield</p><h2>Table</h2></div>
+          <div class="button-row">
+            <button class="secondary-button" type="button" data-action="game" data-game-type="untap-all">Untap mine</button>
+            <button class="secondary-button" type="button" data-action="game" data-game-type="draw" data-amount="1">Draw</button>
+          </div>
+        </div>
+        <div class="battlefields">
+          ${state.room.players.map((player) => `
+            <section class="battlefield">
+              <div class="battlefield-title"><strong>${escapeHtml(player.name)}'s battlefield</strong><span class="zone-count">${player.game.battlefield.length} permanents</span></div>
+              ${player.game.battlefield.length ? `<div class="card-strip">${player.game.battlefield.map((card) => renderCard(card, "battlefield", player.id, player.id === state.session.playerId)).join("")}</div>` : `<div class="empty-state"><span>No permanents</span></div>`}
+            </section>
+          `).join("")}
+        </div>
+      </section>
+
+      <section class="zone-panel">
+        <div class="zone-heading">
+          <div><p class="eyebrow">Hidden from opponents</p><h2>Your hand</h2></div>
+          <span class="zone-count">${me.game.hand?.length || 0} cards</span>
+        </div>
+        ${me.game.hand?.length ? `<div class="hand-strip">${me.game.hand.map((card) => renderCard(card, "hand", me.id, true)).join("")}</div>` : `<div class="empty-state"><span>Your hand is empty.</span></div>`}
+      </section>
+    `;
+  }
+
+  function renderZonesTab() {
+    const me = currentPlayer();
+    const game = me.game;
+    return `
+      <section class="zone-panel">
+        <div class="zone-heading">
+          <div><p class="eyebrow">Your deck state</p><h2>Zones</h2></div>
+          <div class="button-row">
+            <button class="secondary-button" type="button" data-action="game" data-game-type="draw" data-amount="1">Draw 1</button>
+            <button class="secondary-button" type="button" data-action="game" data-game-type="mill" data-amount="1">Mill 1</button>
+            <button class="ghost-button" type="button" data-action="game" data-game-type="shuffle">Shuffle</button>
+          </div>
+        </div>
+        <div class="zone-summary-grid">
+          <div class="zone-summary"><strong>${game.libraryCount}</strong><small>Library</small></div>
+          <div class="zone-summary"><strong>${game.hand?.length || 0}</strong><small>Hand</small></div>
+          <div class="zone-summary"><strong>${game.graveyard.length}</strong><small>Graveyard</small></div>
+          <div class="zone-summary"><strong>${game.exile.length}</strong><small>Exile</small></div>
+        </div>
+      </section>
+
+      ${renderZoneSection("Command zone", "commandZone", game.commandZone, me.id)}
+      ${renderZoneSection("Graveyard", "graveyard", game.graveyard, me.id)}
+      ${renderZoneSection("Exile", "exile", game.exile, me.id)}
+      ${renderZoneSection("Hand", "hand", game.hand || [], me.id)}
+    `;
+  }
+
+  function renderZoneSection(title, zone, cards, ownerId) {
+    return `
+      <section class="zone-panel">
+        <div class="zone-heading"><h3>${escapeHtml(title)}</h3><span class="zone-count">${cards.length}</span></div>
+        ${cards.length ? `<div class="zone-cards wrap">${cards.map((card) => renderCard(card, zone, ownerId, true)).join("")}</div>` : `<div class="empty-state"><span>No cards in ${escapeHtml(title.toLowerCase())}.</span></div>`}
+      </section>
+    `;
+  }
+
+  function renderCard(card, zone, ownerId, canControl) {
+    const flags = [
+      card.commander ? `<span class="card-flag">Commander</span>` : "",
+      card.token ? `<span class="card-flag">Token</span>` : "",
+      card.tapped ? `<span class="card-flag">Tapped</span>` : "",
+      card.power || card.toughness ? `<span class="card-flag">${escapeHtml(card.power || "?")}/${escapeHtml(card.toughness || "?")}</span>` : ""
+    ].filter(Boolean).join("");
+
+    const actions = canControl ? renderCardActions(card, zone) : "";
+    return `
+      <article class="mtg-card ${card.tapped ? "is-tapped" : ""} ${card.commander ? "is-commander" : ""} ${card.token ? "is-token" : ""}" title="${escapeHtml(card.name)}">
+        ${card.counters ? `<span class="card-counter">${card.counters}</span>` : ""}
+        <header class="mtg-card-header"><p class="mtg-card-name">${escapeHtml(card.name)}</p></header>
+        <div class="mtg-card-art" aria-hidden="true">${card.commander ? "♛" : card.token ? "◈" : "✦"}</div>
+        <footer class="mtg-card-footer">
+          <div class="card-flags">${flags || `<span class="card-flag">Permanent</span>`}</div>
+          ${actions}
+        </footer>
+      </article>
+    `;
+  }
+
+  function moveButton(label, card, from, to, className = "small-button") {
+    return `<button class="${className}" type="button" data-action="move-card" data-card-id="${card.id}" data-from-zone="${from}" data-to-zone="${to}">${label}</button>`;
+  }
+
+  function renderCardActions(card, zone) {
+    if (zone === "battlefield") {
+      return `<div class="card-actions">
+        <button class="small-button" type="button" data-action="game" data-game-type="tap-card" data-card-id="${card.id}">${card.tapped ? "Untap" : "Tap"}</button>
+        <button class="small-button" type="button" data-action="game" data-game-type="card-counter" data-card-id="${card.id}" data-amount="-1">C−</button>
+        <button class="small-button" type="button" data-action="game" data-game-type="card-counter" data-card-id="${card.id}" data-amount="1">C+</button>
+        ${moveButton("Grave", card, zone, "graveyard")}
+        ${moveButton("Exile", card, zone, "exile")}
+        ${card.commander ? moveButton("Command", card, zone, "commandZone") : ""}
+      </div>`;
+    }
+    if (zone === "hand") {
+      return `<div class="card-actions">${moveButton("Play", card, zone, "battlefield", "small-button primary-button")}${moveButton("Discard", card, zone, "graveyard")}${moveButton("Exile", card, zone, "exile")}${card.commander ? moveButton("Command", card, zone, "commandZone") : ""}</div>`;
+    }
+    if (zone === "graveyard") {
+      return `<div class="card-actions">${moveButton("Field", card, zone, "battlefield")}${moveButton("Hand", card, zone, "hand")}${moveButton("Exile", card, zone, "exile")}${card.commander ? moveButton("Command", card, zone, "commandZone") : ""}</div>`;
+    }
+    if (zone === "exile") {
+      return `<div class="card-actions">${moveButton("Field", card, zone, "battlefield")}${moveButton("Hand", card, zone, "hand")}${moveButton("Grave", card, zone, "graveyard")}${card.commander ? moveButton("Command", card, zone, "commandZone") : ""}</div>`;
+    }
+    if (zone === "commandZone") {
+      return `<div class="card-actions">${moveButton("Cast", card, zone, "battlefield", "small-button primary-button")}${moveButton("Hand", card, zone, "hand")}${moveButton("Grave", card, zone, "graveyard")}</div>`;
+    }
+    return "";
+  }
+
+  function renderToolsTab() {
+    const me = currentPlayer();
+    return `
+      <section class="zone-panel">
+        <div class="zone-heading"><div><p class="eyebrow">Sandbox utilities</p><h2>Tools</h2></div></div>
+        <div class="tool-grid">
+          <article class="tool-card">
+            <h3>Draw and deck</h3>
+            <p class="muted">Your library currently has ${me.game.libraryCount} cards.</p>
+            <div class="button-row">
+              <button class="secondary-button" type="button" data-action="game" data-game-type="draw" data-amount="1">Draw 1</button>
+              <button class="secondary-button" type="button" data-action="game" data-game-type="draw" data-amount="7">Draw 7</button>
+              <button class="ghost-button" type="button" data-action="game" data-game-type="mill" data-amount="1">Mill 1</button>
+              <button class="ghost-button" type="button" data-action="game" data-game-type="shuffle">Shuffle</button>
+              <button class="danger-button" type="button" data-action="mulligan">Mulligan to 7</button>
+            </div>
+          </article>
+
+          <article class="tool-card">
+            <h3>Dice and coin</h3>
+            <div class="tool-result">${escapeHtml(state.toolResult)}</div>
+            <div class="button-row">
+              ${[6,10,20,100].map((sides) => `<button class="secondary-button" type="button" data-action="roll" data-sides="${sides}">d${sides}</button>`).join("")}
+              <button class="secondary-button" type="button" data-action="coin">Coin</button>
+            </div>
+          </article>
+
+          <form id="tokenForm" class="tool-card">
+            <h3>Create token</h3>
+            <div class="form-group"><label for="tokenName">Token name</label><input id="tokenName" name="name" maxlength="80" value="${escapeHtml(state.tokenDraft.name)}" required></div>
+            <div class="form-grid two">
+              <div class="form-group"><label for="tokenPower">Power</label><input id="tokenPower" name="power" maxlength="12" value="${escapeHtml(state.tokenDraft.power)}"></div>
+              <div class="form-group"><label for="tokenToughness">Toughness</label><input id="tokenToughness" name="toughness" maxlength="12" value="${escapeHtml(state.tokenDraft.toughness)}"></div>
+            </div>
+            <button class="primary-button" type="submit">Create on battlefield</button>
+          </form>
+
+          <article class="tool-card">
+            <h3>Game controls</h3>
+            <p class="muted">Conceding leaves your board visible. The host can return everyone to a fresh lobby.</p>
+            <div class="button-row">
+              ${!me.game.conceded ? `<button class="danger-button" type="button" data-action="concede">Concede</button>` : `<span class="badge danger">You conceded</span>`}
+              ${isHost() ? `<button class="secondary-button" type="button" data-action="reset-game">New game lobby</button>` : ""}
+            </div>
+          </article>
+        </div>
+      </section>
+    `;
+  }
+
+  function renderChatTab() {
+    const chat = state.room.chat;
+    const log = state.room.log;
+    return `
+      <section class="chat-layout">
+        <div class="chat-panel">
+          <div class="panel-heading"><div><p class="eyebrow">Room messages</p><h2>Chat</h2></div></div>
+          <div class="chat-messages">
+            ${chat.length ? chat.map((message) => `<article class="chat-message ${message.playerId === state.session.playerId ? "is-self" : ""}"><div class="chat-meta"><strong>${escapeHtml(message.playerName)}</strong><span>${formatTime(message.time)}</span></div><p>${escapeHtml(message.message)}</p></article>`).join("") : `<div class="empty-state"><span>No messages yet.</span></div>`}
+          </div>
+          <form id="chatForm" class="chat-form"><input id="chatInput" name="message" maxlength="500" autocomplete="off" value="${escapeHtml(state.chatDraft)}" placeholder="Send a table message…"><button class="primary-button" type="submit">Send</button></form>
+        </div>
+        <div class="log-panel">
+          <div class="panel-heading"><div><p class="eyebrow">Automatic history</p><h2>Game log</h2></div></div>
+          <div class="log-entries">
+            ${log.length ? [...log].reverse().map((entry) => `<article class="log-entry"><div class="log-meta"><span>${escapeHtml(entry.type)}</span><span>${formatTime(entry.time)}</span></div><p>${escapeHtml(entry.text)}</p></article>`).join("") : `<div class="empty-state"><span>No game activity yet.</span></div>`}
+          </div>
+        </div>
+      </section>
+    `;
+  }
+
+  function renderHelp() {
+    return `
+      <section class="panel">
+        <div class="section-heading"><div><p class="eyebrow">Finished app guide</p><h1>How to play</h1></div></div>
+        <div class="help-grid">
+          <article class="help-card"><h3>1. Import decks</h3><ol><li>Open Decks.</li><li>Paste a text deck list.</li><li>Enter one or two commanders.</li><li>Save it on your device.</li></ol></article>
+          <article class="help-card"><h3>2. Open a room</h3><ol><li>One player creates a private room.</li><li>Share the six-character code.</li><li>Each player selects a deck and marks ready.</li><li>The host starts the game.</li></ol></article>
+          <article class="help-card"><h3>3. Use the table</h3><ul><li>Your hand is only sent to your browser.</li><li>Play cards to your battlefield and move them to other zones.</li><li>Tap permanents and add generic counters.</li><li>Life, poison, tax and commander damage update live.</li></ul></article>
+          <article class="help-card"><h3>4. Reconnect</h3><p>The room session is saved in this browser. Open the same app and press Rejoin. Rooms stay active while the server remains running.</p></article>
+          <article class="help-card"><h3>Sandbox rules</h3><p>This app does not enforce every Magic rule or card ability. Players control card effects, priority, targets and legality just like a physical tabletop.</p></article>
+          <article class="help-card"><h3>Install on phone</h3><p>Use the install button when shown, or use your browser menu and choose “Add to Home screen.” It also works inside compatible in-app browsers.</p></article>
+        </div>
+      </section>
+    `;
+  }
+
+  function openDeckEditor(deck = null) {
+    const deckList = deck ? deck.cards.map((card) => `${card.quantity} ${card.name}`).join("\n") : "";
+    openModal(deck ? "Edit deck" : "Import Commander deck", `
+      <form id="deckForm">
+        <input type="hidden" name="deckId" value="${escapeHtml(deck?.id || "")}">
+        <div class="form-group">
+          <label for="deckName">Deck name</label>
+          <input id="deckName" name="deckName" maxlength="60" required value="${escapeHtml(deck?.name || "")}" placeholder="Toxic Control">
+        </div>
+        <div class="form-group">
+          <label for="deckCommanders">Commander name(s)</label>
+          <input id="deckCommanders" name="commanders" maxlength="310" required value="${escapeHtml(deck?.commanders.join(" / ") || "")}" placeholder="Atraxa, Praetors' Voice">
+          <p class="form-help">For partners, separate the two names with a slash.</p>
+        </div>
+        <div class="form-group">
+          <label for="deckList">Deck list</label>
+          <textarea id="deckList" name="deckList" required spellcheck="false" placeholder="1 Sol Ring&#10;1 Command Tower&#10;1 Arcane Signet">${escapeHtml(deckList)}</textarea>
+          <p class="form-help">Supports “1 Card Name”, “1x Card Name” and common set-code text. If the commander is missing from a 99-card list, it is added automatically.</p>
+        </div>
+        <div class="button-row">
+          <button class="primary-button" type="submit">Save deck</button>
+          <button class="ghost-button" type="button" data-close-modal>Cancel</button>
+        </div>
+      </form>
+    `);
+  }
+
+  function parseDeckList(text, commanders) {
+    const map = new Map();
+    const skippedHeadings = /^(commander|commanders|deck|mainboard|sideboard|maybeboard|companion|creatures?|lands?|artifacts?|enchantments?|instants?|sorceries?|planeswalkers?|other)$/i;
+
+    String(text || "").split(/\r?\n/).forEach((rawLine) => {
+      let line = rawLine.trim();
+      if (!line || line.startsWith("//") || line.startsWith("#") || skippedHeadings.test(line.replace(/:$/, ""))) return;
+      line = line.replace(/^SB:\s*/i, "");
+      const match = line.match(/^(\d+)\s*[xX]?\s+(.+)$/);
+      let quantity = 1;
+      let name = line;
+      if (match) {
+        quantity = Math.max(1, Math.min(100, Number(match[1]) || 1));
+        name = match[2];
+      }
+      name = name
+        .replace(/\s+\([A-Z0-9]{2,8}\)(?:\s+[A-Za-z0-9-]+)?\s*$/i, "")
+        .replace(/\s+\[[A-Z0-9]{2,8}[^\]]*\]\s*$/i, "")
+        .replace(/\s+\*F\*\s*$/i, "")
+        .trim();
+      if (!name) return;
+      const key = name.toLowerCase();
+      const existing = map.get(key);
+      if (existing) existing.quantity += quantity;
+      else map.set(key, { name, quantity });
     });
 
-    elements.lobbyDeckSelection.append(
-      deckDisplay,
-      chooseButton
-    );
+    let cards = Array.from(map.values());
+    let total = cards.reduce((sum, card) => sum + card.quantity, 0);
+    commanders.forEach((commander) => {
+      const exists = cards.some((card) => card.name.toLowerCase() === commander.toLowerCase());
+      if (!exists && total < 100) {
+        cards.push({ name: commander, quantity: 1 });
+        total += 1;
+      }
+    });
+    cards = cards.sort((a, b) => a.name.localeCompare(b.name));
+    return cards;
   }
 
-  function createPublicDeckMetadata(deck) {
-    if (!deck) {
-      return null;
-    }
-
-    const validation = getDeckValidation(deck);
-
-    return {
-      id: deck.id,
-      name: deck.name,
-      commander: deck.commander,
-      totalCards: deck.totalCards,
-      uniqueCards: deck.uniqueCards,
-      validation: validation.status
+  async function handleCreateRoom(form) {
+    const data = new FormData(form);
+    const payload = {
+      playerName: data.get("playerName"),
+      maxPlayers: Number(data.get("maxPlayers")),
+      startingLife: Number(data.get("startingLife"))
     };
+    rememberPlayerName(payload.playerName);
+    const response = await emitAck("create-room", payload, false);
+    if (!response.success) return showToast(response.error, "error");
+    setSession(response);
+    render();
+    showToast(`Room ${response.room.code} created.`, "success");
   }
 
-  async function syncPlayerDeckWithRoom({
-    silent = false
-  } = {}) {
-    if (
-      !state.room ||
-      state.room.status === "started" ||
-      state.deckSyncInProgress
-    ) {
+  async function handleJoinRoom(form) {
+    const data = new FormData(form);
+    const payload = {
+      playerName: data.get("playerName"),
+      roomCode: String(data.get("roomCode") || "").toUpperCase().replace(/[^A-Z0-9]/g, "")
+    };
+    rememberPlayerName(payload.playerName);
+    const response = await emitAck("join-room", payload, false);
+    if (!response.success) return showToast(response.error, "error");
+    setSession(response);
+    render();
+    showToast(`Joined room ${response.room.code}.`, "success");
+  }
+
+  async function rejoinRoom(showErrors = true) {
+    if (!state.session || state.reconnecting || !socket.connected) return;
+    state.reconnecting = true;
+    const response = await emitAck("rejoin-room", {}, true);
+    state.reconnecting = false;
+    if (!response.success) {
+      if (showErrors) showToast(response.error, "error");
+      if (/no longer exists|could not be verified/i.test(response.error || "")) clearSession();
+      render();
+      return;
+    }
+    setSession(response);
+    render();
+    if (showErrors) showToast(`Rejoined room ${response.room.code}.`, "success");
+  }
+
+  async function setLobbyDeck(deckId) {
+    const deck = deckById(deckId);
+    const response = await emitAck("set-player-deck", { deck: deck || null });
+    if (!response.success) return showToast(response.error, "error");
+    state.room = response.room;
+    render();
+    showToast(deck ? `${deck.name} selected.` : "Deck cleared.", "success");
+  }
+
+  async function sendGameAction(action, quiet = false) {
+    const response = await emitAck("game-action", { action });
+    if (!response.success) {
+      showToast(response.error, "error");
       return false;
     }
+    if (!quiet) showToast("Game updated.", "success");
+    return true;
+  }
 
-    if (!isServerConnected()) {
-      if (!silent) {
-        showToast(
-          "Reconnect to the server before changing your lobby deck.",
-          "error"
-        );
-      }
+  async function handleClick(button) {
+    const action = button.dataset.action;
+    if (!action) return;
 
-      return false;
+    if (action === "import-deck") return openDeckEditor();
+    if (action === "edit-deck") return openDeckEditor(deckById(button.dataset.deckId));
+    if (action === "delete-deck") {
+      const deck = deckById(button.dataset.deckId);
+      if (!deck || !window.confirm(`Delete ${deck.name}?`)) return;
+      state.decks = state.decks.filter((entry) => entry.id !== deck.id);
+      saveDecks();
+      render();
+      return showToast("Deck deleted.", "success");
     }
+    if (action === "export-deck") {
+      const deck = deckById(button.dataset.deckId);
+      if (!deck) return;
+      const text = [`Deck: ${deck.name}`, `Commander: ${deck.commanders.join(" / ")}`, "", ...deck.cards.map((card) => `${card.quantity} ${card.name}`)].join("\n");
+      await copyText(text);
+      return showToast("Deck list copied.", "success");
+    }
+    if (action === "forget-session") {
+      clearSession();
+      render();
+      return showToast("Saved room session removed.", "success");
+    }
+    if (action === "rejoin") return rejoinRoom(true);
+    if (action === "copy-room-code") {
+      await copyText(state.room.code);
+      return showToast("Room code copied.", "success");
+    }
+    if (action === "toggle-ready") {
+      const response = await emitAck("toggle-ready");
+      if (!response.success) return showToast(response.error, "error");
+      state.room = response.room;
+      render();
+      return;
+    }
+    if (action === "start-game") {
+      const response = await emitAck("start-game");
+      if (!response.success) return showToast(response.error, "error");
+      state.room = response.room;
+      state.activeGameTab = "table";
+      render();
+      return showToast("Game started.", "success");
+    }
+    if (action === "kick-player") {
+      const target = state.room.players.find((player) => player.id === button.dataset.playerId);
+      if (!target || !window.confirm(`Remove ${target.name} from the room?`)) return;
+      const response = await emitAck("remove-player", { targetPlayerId: target.id });
+      if (!response.success) return showToast(response.error, "error");
+      return showToast(`${target.name} removed.`, "success");
+    }
+    if (action === "leave-room") {
+      if (!window.confirm("Leave this room?")) return;
+      const response = await emitAck("leave-room");
+      if (!response.success) return showToast(response.error, "error");
+      clearSession();
+      render();
+      return showToast("You left the room.", "success");
+    }
+    if (action === "game-tab") {
+      state.activeGameTab = button.dataset.tab;
+      return render();
+    }
+    if (action === "move-card") {
+      return sendGameAction({ type: "move-card", cardId: button.dataset.cardId, fromZone: button.dataset.fromZone, toZone: button.dataset.toZone }, true);
+    }
+    if (action === "game") {
+      const gameAction = {
+        type: button.dataset.gameType,
+        targetPlayerId: button.dataset.targetPlayerId,
+        sourcePlayerId: button.dataset.sourcePlayerId,
+        cardId: button.dataset.cardId,
+        amount: button.dataset.amount === undefined ? undefined : Number(button.dataset.amount)
+      };
+      return sendGameAction(gameAction, true);
+    }
+    if (action === "next-phase") return sendGameAction({ type: "next-phase" }, true);
+    if (action === "end-turn") return sendGameAction({ type: "end-turn" }, true);
+    if (action === "roll") {
+      const response = await emitAck("roll-tool", { tool: "die", sides: Number(button.dataset.sides) });
+      if (!response.success) return showToast(response.error, "error");
+      state.toolResult = `d${button.dataset.sides}: ${response.result}`;
+      render();
+      return;
+    }
+    if (action === "coin") {
+      const response = await emitAck("roll-tool", { tool: "coin" });
+      if (!response.success) return showToast(response.error, "error");
+      state.toolResult = response.result;
+      render();
+      return;
+    }
+    if (action === "mulligan") {
+      if (!window.confirm("Return your hand, shuffle and draw seven?")) return;
+      return sendGameAction({ type: "mulligan" }, true);
+    }
+    if (action === "concede") {
+      if (!window.confirm("Concede this game? Your board will remain visible.")) return;
+      return sendGameAction({ type: "concede" }, true);
+    }
+    if (action === "reset-game") {
+      if (!window.confirm("Return every player to a new lobby? Current game state will be cleared.")) return;
+      const response = await emitAck("reset-game");
+      if (!response.success) return showToast(response.error, "error");
+      state.room = response.room;
+      state.activeGameTab = "table";
+      render();
+      return showToast("New lobby opened.", "success");
+    }
+  }
 
-    state.deckSyncInProgress = true;
-
+  async function copyText(text) {
     try {
-      const activeDeck = getActiveDeck();
-
-      const response = await emitWithAcknowledgement(
-        "set-player-deck",
-        {
-          roomCode: state.room.code,
-          playerId: state.playerId,
-          sessionToken: state.sessionToken,
-          deck: createPublicDeckMetadata(activeDeck)
-        },
-        5000
-      );
-
-      if (!response.success) {
-        if (!silent) {
-          showToast(
-            getErrorMessage(
-              response,
-              "Unable to update your lobby deck."
-            ),
-            "error",
-            4200
-          );
-        }
-
-        return false;
-      }
-
-      if (response.room) {
-        renderRoom(response.room);
-      }
-
-      return true;
+      await navigator.clipboard.writeText(text);
     } catch (error) {
-      console.warn("Deck synchronization failed:", error);
-
-      if (!silent) {
-        showToast(
-          error.message ||
-            "Unable to update your lobby deck.",
-          "error",
-          4200
-        );
-      }
-
-      return false;
-    } finally {
-      state.deckSyncInProgress = false;
+      const textarea = document.createElement("textarea");
+      textarea.value = text;
+      document.body.appendChild(textarea);
+      textarea.select();
+      document.execCommand("copy");
+      textarea.remove();
     }
   }
 
-  function updateRejoinPanel() {
-    const savedSession = readRoomSession();
-
-    if (!savedSession) {
-      elements.rejoinPanel?.classList.add("hidden");
-      return;
-    }
-
-    elements.rejoinPanel?.classList.remove("hidden");
-
-    if (elements.rejoinRoomDetails) {
-      const savedName =
-        savedSession.playerName || "Player";
-
-      elements.rejoinRoomDetails.textContent =
-        `${savedName} • Room ${savedSession.roomCode}`;
-    }
-  }
-
-  function getCurrentPlayer() {
-    if (
-      !state.room ||
-      !Array.isArray(state.room.players)
-    ) {
-      return null;
-    }
-
-    return (
-      state.room.players.find(
-        (player) => player.id === state.playerId
-      ) || null
-    );
-  }
-
-  function isCurrentPlayerHost() {
-    return Boolean(
-      state.room &&
-      state.room.hostId === state.playerId
-    );
-  }
-
-  function renderPlayerList(players) {
-    if (
-      !elements.playerList ||
-      !elements.playerRowTemplate
-    ) {
-      return;
-    }
-
-    elements.playerList.innerHTML = "";
-
-    if (!Array.isArray(players) || players.length === 0) {
-      const emptyState = document.createElement("div");
-
-      emptyState.className = "empty-player-state";
-      emptyState.innerHTML =
-        "<span aria-hidden=\"true\">⌛</span>" +
-        "<p>Waiting for players to join...</p>";
-
-      elements.playerList.appendChild(emptyState);
-      return;
-    }
-
-    players.forEach((player) => {
-      const fragment =
-        elements.playerRowTemplate.content.cloneNode(true);
-
-      const row = fragment.querySelector(".player-row");
-      const avatarLetter = fragment.querySelector(
-        ".player-avatar-letter"
-      );
-      const playerName = fragment.querySelector(".player-name");
-      const selfLabel = fragment.querySelector(
-        ".player-self-label"
-      );
-      const hostLabel = fragment.querySelector(
-        ".player-host-label"
-      );
-      const playerDeckName = fragment.querySelector(
-        ".player-deck-name"
-      );
-      const connectionText = fragment.querySelector(
-        ".player-connection-text"
-      );
-      const readyState = fragment.querySelector(
-        ".player-ready-state"
-      );
-      const readyIcon = fragment.querySelector(
-        ".player-ready-icon"
-      );
-      const readyText = fragment.querySelector(
-        ".player-ready-text"
-      );
-      const removeButton = fragment.querySelector(
-        ".remove-player-button"
-      );
-
-      const isSelf = player.id === state.playerId;
-      const isHost = player.id === state.room.hostId;
-      const isReady = Boolean(player.ready);
-      const isConnected = player.connected !== false;
-
-      const playerDeck = getPlayerDeck(player);
-
-      avatarLetter.textContent = getPlayerInitial(player.name);
-      playerName.textContent = player.name;
-
-      if (playerDeck) {
-        playerDeckName.textContent =
-          playerDeck.commander
-            ? `${playerDeck.name} • ${playerDeck.commander}`
-            : playerDeck.name;
-
-        playerDeckName.classList.remove("no-deck");
-      } else {
-        playerDeckName.textContent = "No deck selected";
-        playerDeckName.classList.add("no-deck");
-      }
-
-      if (isSelf) {
-        row.classList.add("is-self");
-        selfLabel.classList.remove("hidden");
-      }
-
-      if (isHost) {
-        hostLabel.classList.remove("hidden");
-      }
-
-      if (isReady) {
-        row.classList.add("is-ready");
-
-        readyState.classList.remove("waiting");
-        readyState.classList.add("ready");
-
-        readyIcon.textContent = "✓";
-        readyText.textContent = "Ready";
-      } else {
-        readyState.classList.remove("ready");
-        readyState.classList.add("waiting");
-
-        readyIcon.textContent = "○";
-        readyText.textContent = "Waiting";
-      }
-
-      connectionText.textContent = isConnected
-        ? "Connected"
-        : "Reconnecting…";
-
-      if (
-        isCurrentPlayerHost() &&
-        !isSelf &&
-        state.room.status !== "started"
-      ) {
-        removeButton.classList.remove("hidden");
-
-        removeButton.setAttribute(
-          "aria-label",
-          `Remove ${player.name}`
-        );
-
-        removeButton.addEventListener("click", () => {
-          removePlayerFromRoom(player);
-        });
-      }
-
-      elements.playerList.appendChild(fragment);
-    });
-  }
-
-  function renderLobbyStatus(
-    players,
-    readyCount,
-    roomStatus
-  ) {
-    const playerCount = players.length;
-
-    if (roomStatus === "started") {
-      elements.lobbyStatusText.textContent =
-        "The Commander game has started.";
-
-      elements.lobbyTitle.textContent = "Game Started";
-      return;
-    }
-
-    elements.lobbyTitle.textContent =
-      playerCount === 1
-        ? "Waiting for players"
-        : `${playerCount} players in lobby`;
-
-    if (playerCount < 2) {
-      elements.lobbyStatusText.textContent =
-        "Waiting for at least two players.";
-      return;
-    }
-
-    const playersWithoutDecks = players.filter(
-      (player) => !playerHasDeck(player)
-    );
-
-    if (playersWithoutDecks.length > 0) {
-      elements.lobbyStatusText.textContent =
-        `${playersWithoutDecks.length} ${
-          playersWithoutDecks.length === 1
-            ? "player needs"
-            : "players need"
-        } to select a deck.`;
-
-      return;
-    }
-
-    if (readyCount === playerCount) {
-      elements.lobbyStatusText.textContent =
-        "Everyone has a deck and is ready to begin.";
-      return;
-    }
-
-    const waitingCount = playerCount - readyCount;
-
-    elements.lobbyStatusText.textContent =
-      `${waitingCount} ${
-        waitingCount === 1
-          ? "player is"
-          : "players are"
-      } not ready.`;
-  }
-
-  function renderReadyButton(currentPlayer, roomStatus) {
-    if (!elements.readyButton) {
-      return;
-    }
-
-    const activeDeck = getActiveDeck();
-
-    const isReady = Boolean(
-      currentPlayer &&
-      currentPlayer.ready
-    );
-
-    elements.readyButton.classList.toggle("ready", isReady);
-
-    elements.readyButton.setAttribute(
-      "aria-pressed",
-      String(isReady)
-    );
-
-    if (roomStatus === "started") {
-      elements.readyButton.disabled = true;
-      elements.readyButtonIcon.textContent = "✓";
-      elements.readyButtonText.textContent = "Game Started";
-      return;
-    }
-
-    if (!activeDeck) {
-      elements.readyButton.disabled = true;
-      elements.readyButtonIcon.textContent = "!";
-      elements.readyButtonText.textContent =
-        "Select a Deck First";
-
-      return;
-    }
-
-    elements.readyButton.disabled = !currentPlayer;
-
-    if (isReady) {
-      elements.readyButtonIcon.textContent = "✓";
-      elements.readyButtonText.textContent = "Ready";
-    } else {
-      elements.readyButtonIcon.textContent = "○";
-      elements.readyButtonText.textContent = "Mark Ready";
-    }
-  }
-
-  function renderHostControls(
-    players,
-    readyCount,
-    roomStatus
-  ) {
-    const isHost = isCurrentPlayerHost();
-
-    elements.hostControlsPanel?.classList.toggle(
-      "hidden",
-      !isHost
-    );
-
-    if (!isHost) {
-      return;
-    }
-
-    const playerCount = players.length;
-
-    elements.hostMaxPlayersSelect.value =
-      String(state.room.maxPlayers);
-
-    elements.hostStartingLifeSelect.value =
-      String(state.room.startingLife);
-
-    const gameStarted = roomStatus === "started";
-    const hasEnoughPlayers = playerCount >= 2;
-
-    const everyPlayerHasDeck = players.every(
-      playerHasDeck
-    );
-
-    const everyPlayerConnected = players.every(
-      (player) => player.connected !== false
-    );
-
-    const everyoneReady =
-      hasEnoughPlayers &&
-      readyCount === playerCount;
-
-    elements.hostMaxPlayersSelect.disabled = gameStarted;
-    elements.hostStartingLifeSelect.disabled = gameStarted;
-    elements.saveRoomSettingsButton.disabled = gameStarted;
-
-    elements.startGameButton.disabled =
-      gameStarted ||
-      !hasEnoughPlayers ||
-      !everyPlayerHasDeck ||
-      !everyPlayerConnected ||
-      !everyoneReady;
-
-    elements.startGameRequirement.classList.remove(
-      "success"
-    );
-
-    if (gameStarted) {
-      elements.startGameRequirement.textContent =
-        "The Commander game has started.";
-
-      elements.startGameRequirement.classList.add("success");
-      return;
-    }
-
-    if (!hasEnoughPlayers) {
-      elements.startGameRequirement.textContent =
-        "At least two players must join.";
-      return;
-    }
-
-    if (!everyPlayerHasDeck) {
-      elements.startGameRequirement.textContent =
-        "Every player must select a Commander deck.";
-      return;
-    }
-
-    if (!everyPlayerConnected) {
-      elements.startGameRequirement.textContent =
-        "Every player must reconnect before starting.";
-      return;
-    }
-
-    if (!everyoneReady) {
-      elements.startGameRequirement.textContent =
-        "Every player must mark themselves ready.";
-      return;
-    }
-
-    elements.startGameRequirement.textContent =
-      "Everyone has a deck and is ready. You can start.";
-
-    elements.startGameRequirement.classList.add("success");
-  }
-
-  function renderRoom(room) {
-    if (
-      !room ||
-      typeof room.code !== "string" ||
-      !Array.isArray(room.players)
-    ) {
-      return;
-    }
-
-    state.room = room;
-
-    const currentPlayer = getCurrentPlayer();
-
-    if (!currentPlayer) {
-      clearRoomSession();
-      showHomeView();
-
-      showToast(
-        "Your player session is no longer in this room.",
-        "error",
-        4200
-      );
-
-      return;
-    }
-
-    const playerCount = room.players.length;
-
-    const readyCount = room.players.filter(
-      (player) => player.ready
-    ).length;
-
-    elements.roomCodeDisplay.textContent = room.code;
-
-    elements.playerCountDisplay.textContent =
-      `${playerCount} / ${room.maxPlayers}`;
-
-    elements.startingLifeDisplay.textContent =
-      String(room.startingLife);
-
-    elements.readyCountBadge.textContent =
-      `${readyCount} ready`;
-
-    renderLobbyStatus(
-      room.players,
-      readyCount,
-      room.status
-    );
-
-    renderPlayerList(room.players);
-    renderReadyButton(currentPlayer, room.status);
-
-    renderHostControls(
-      room.players,
-      readyCount,
-      room.status
-    );
-
-    renderLobbyDeckSelection();
-
-    saveRoomSession({
-      roomCode: room.code,
-      playerId: state.playerId,
-      sessionToken: state.sessionToken,
-      playerName: currentPlayer.name
-    });
-
-    saveTextValue(
-      STORAGE_KEYS.playerName,
-      currentPlayer.name
-    );
-
-    updateAddressRoomCode(room.code);
-    showLobbyView();
-  }
-
-  async function createRoom(event) {
+  app.addEventListener("submit", async (event) => {
     event.preventDefault();
-
-    if (!requireServerConnection()) {
+    const form = event.target;
+    if (form.id === "createRoomForm") return handleCreateRoom(form);
+    if (form.id === "joinRoomForm") return handleJoinRoom(form);
+    if (form.id === "roomSettingsForm") {
+      const data = new FormData(form);
+      const response = await emitAck("update-room-settings", { maxPlayers: Number(data.get("maxPlayers")), startingLife: Number(data.get("startingLife")) });
+      if (!response.success) return showToast(response.error, "error");
+      state.room = response.room;
+      render();
+      return showToast("Room settings saved.", "success");
+    }
+    if (form.id === "tokenForm") {
+      const data = new FormData(form);
+      state.tokenDraft = { name: data.get("name"), power: data.get("power"), toughness: data.get("toughness") };
+      const success = await sendGameAction({ type: "create-token", ...state.tokenDraft }, true);
+      if (success) showToast("Token created.", "success");
       return;
     }
-
-    const playerName = normalizePlayerName(
-      elements.createPlayerNameInput.value
-    );
-
-    if (playerName.length < 2) {
-      showToast(
-        "Enter a player name with at least two characters.",
-        "error"
-      );
-
-      elements.createPlayerNameInput.focus();
+    if (form.id === "chatForm") {
+      const data = new FormData(form);
+      const message = String(data.get("message") || "").trim();
+      if (!message) return;
+      const response = await emitAck("send-chat", { message });
+      if (!response.success) return showToast(response.error, "error");
+      state.chatDraft = "";
       return;
     }
-
-    await runButtonAction(
-      elements.submitCreateRoomButton,
-      "Creating Room…",
-      async () => {
-        const response = await emitWithAcknowledgement(
-          "create-room",
-          {
-            playerName,
-
-            maxPlayers: Number(
-              elements.createMaxPlayersSelect.value
-            ),
-
-            startingLife: Number(
-              elements.createStartingLifeSelect.value
-            ),
-
-            privateRoom:
-              elements.privateRoomCheckbox.checked
-          }
-        );
-
-        if (!response.success) {
-          throw new Error(
-            getErrorMessage(
-              response,
-              "Unable to create the Commander room."
-            )
-          );
-        }
-
-        state.playerId = response.playerId;
-        state.sessionToken = response.sessionToken;
-
-        saveTextValue(
-          STORAGE_KEYS.playerName,
-          playerName
-        );
-
-        closeModal(elements.createRoomModal);
-        renderRoom(response.room);
-
-        if (getActiveDeck()) {
-          await syncPlayerDeckWithRoom({
-            silent: true
-          });
-        }
-
-        showToast(
-          `Room ${response.room.code} created.`,
-          "success"
-        );
-      }
-    );
-  }
-
-  async function joinRoom(event) {
-    event.preventDefault();
-
-    if (!requireServerConnection()) {
-      return;
-    }
-
-    const playerName = normalizePlayerName(
-      elements.joinPlayerNameInput.value
-    );
-
-    const roomCode = normalizeRoomCode(
-      elements.joinRoomCodeInput.value
-    );
-
-    if (playerName.length < 2) {
-      showToast(
-        "Enter a player name with at least two characters.",
-        "error"
-      );
-
-      elements.joinPlayerNameInput.focus();
-      return;
-    }
-
-    if (roomCode.length !== 6) {
-      showToast(
-        "Enter the complete six-character room code.",
-        "error"
-      );
-
-      elements.joinRoomCodeInput.focus();
-      return;
-    }
-
-    await runButtonAction(
-      elements.submitJoinRoomButton,
-      "Joining Room…",
-      async () => {
-        const response = await emitWithAcknowledgement(
-          "join-room",
-          {
-            playerName,
-            roomCode
-          }
-        );
-
-        if (!response.success) {
-          throw new Error(
-            getErrorMessage(
-              response,
-              "Unable to join the Commander room."
-            )
-          );
-        }
-
-        state.playerId = response.playerId;
-        state.sessionToken = response.sessionToken;
-
-        saveTextValue(
-          STORAGE_KEYS.playerName,
-          playerName
-        );
-
-        closeModal(elements.joinRoomModal);
-        renderRoom(response.room);
-
-        if (getActiveDeck()) {
-          await syncPlayerDeckWithRoom({
-            silent: true
-          });
-        }
-
-        showToast(
-          `Joined room ${response.room.code}.`,
-          "success"
-        );
-      }
-    );
-  }
-
-  async function attemptRoomRejoin({
-    silent = false
-  } = {}) {
-    if (
-      state.autoRejoinInProgress ||
-      !isServerConnected()
-    ) {
-      return false;
-    }
-
-    const savedSession = readRoomSession();
-
-    if (!savedSession) {
-      return false;
-    }
-
-    state.autoRejoinInProgress = true;
-
-    try {
-      const response = await emitWithAcknowledgement(
-        "rejoin-room",
-        {
-          roomCode: savedSession.roomCode,
-          playerId: savedSession.playerId,
-          sessionToken: savedSession.sessionToken,
-          playerName: savedSession.playerName || ""
-        }
-      );
-
-      if (!response.success) {
-        clearRoomSession();
-
-        if (!silent) {
-          showToast(
-            getErrorMessage(
-              response,
-              "The saved room is no longer available."
-            ),
-            "error",
-            4200
-          );
-        }
-
-        return false;
-      }
-
-      state.playerId = response.playerId;
-      state.sessionToken = response.sessionToken;
-
-      renderRoom(response.room);
-
-      if (getActiveDeck()) {
-        await syncPlayerDeckWithRoom({
-          silent: true
-        });
-      }
-
-      if (!silent) {
-        showToast(
-          `Rejoined room ${response.room.code}.`,
-          "success"
-        );
-      }
-
-      return true;
-    } catch (error) {
-      console.error("Automatic room rejoin failed:", error);
-
-      if (!silent) {
-        showToast(
-          error.message ||
-            "Unable to rejoin the saved room.",
-          "error",
-          4200
-        );
-      }
-
-      return false;
-    } finally {
-      state.autoRejoinInProgress = false;
-    }
-  }
-
-  async function toggleReadyStatus() {
-    if (
-      !state.room ||
-      !requireServerConnection()
-    ) {
-      return;
-    }
-
-    const activeDeck = getActiveDeck();
-
-    if (!activeDeck) {
-      showToast(
-        "Select a Commander deck before marking ready.",
-        "error"
-      );
-
-      openDeckLibrary("lobby");
-      return;
-    }
-
-    const currentPlayer = getCurrentPlayer();
-    const roomDeck = getPlayerDeck(currentPlayer);
-
-    if (
-      !roomDeck ||
-      roomDeck.id !== activeDeck.id
-    ) {
-      const synchronized =
-        await syncPlayerDeckWithRoom({
-          silent: false
-        });
-
-      if (!synchronized) {
-        return;
-      }
-    }
-
-    elements.readyButton.disabled = true;
-
-    try {
-      const response = await emitWithAcknowledgement(
-        "toggle-ready",
-        {
-          roomCode: state.room.code,
-          playerId: state.playerId,
-          sessionToken: state.sessionToken
-        }
-      );
-
-      if (!response.success) {
-        throw new Error(
-          getErrorMessage(
-            response,
-            "Unable to update your ready status."
-          )
-        );
-      }
-
-      renderRoom(response.room);
-    } catch (error) {
-      console.error(error);
-
-      showToast(
-        error.message ||
-          "Unable to update your ready status.",
-        "error",
-        4200
-      );
-    } finally {
-      elements.readyButton.disabled = false;
-    }
-  }
-
-  async function saveRoomSettings() {
-    if (
-      !state.room ||
-      !isCurrentPlayerHost() ||
-      !requireServerConnection()
-    ) {
-      return;
-    }
-
-    await runButtonAction(
-      elements.saveRoomSettingsButton,
-      "Saving Settings…",
-      async () => {
-        const response = await emitWithAcknowledgement(
-          "update-room-settings",
-          {
-            roomCode: state.room.code,
-            playerId: state.playerId,
-            sessionToken: state.sessionToken,
-
-            maxPlayers: Number(
-              elements.hostMaxPlayersSelect.value
-            ),
-
-            startingLife: Number(
-              elements.hostStartingLifeSelect.value
-            )
-          }
-        );
-
-        if (!response.success) {
-          throw new Error(
-            getErrorMessage(
-              response,
-              "Unable to save the room settings."
-            )
-          );
-        }
-
-        renderRoom(response.room);
-
-        showToast(
-          "Room settings updated.",
-          "success"
-        );
-      }
-    );
-  }
-
-  async function startCommanderGame() {
-    if (
-      !state.room ||
-      !isCurrentPlayerHost() ||
-      !requireServerConnection()
-    ) {
-      return;
-    }
-
-    await runButtonAction(
-      elements.startGameButton,
-      "Starting Game…",
-      async () => {
-        const response = await emitWithAcknowledgement(
-          "start-game",
-          {
-            roomCode: state.room.code,
-            playerId: state.playerId,
-            sessionToken: state.sessionToken
-          }
-        );
-
-        if (!response.success) {
-          throw new Error(
-            getErrorMessage(
-              response,
-              "Unable to start the Commander game."
-            )
-          );
-        }
-
-        renderRoom(response.room);
-
-        showToast(
-          "Commander game started. The tabletop is the next stage.",
-          "success",
-          4800
-        );
-      }
-    );
-  }
-
-  async function removePlayerFromRoom(player) {
-    if (
-      !player ||
-      !state.room ||
-      !isCurrentPlayerHost()
-    ) {
-      return;
-    }
-
-    const confirmed = window.confirm(
-      `Remove ${player.name} from this lobby?`
-    );
-
-    if (!confirmed) {
-      return;
-    }
-
-    try {
-      const response = await emitWithAcknowledgement(
-        "remove-player",
-        {
-          roomCode: state.room.code,
-          playerId: state.playerId,
-          sessionToken: state.sessionToken,
-          targetPlayerId: player.id
-        }
-      );
-
-      if (!response.success) {
-        throw new Error(
-          getErrorMessage(
-            response,
-            "Unable to remove that player."
-          )
-        );
-      }
-
-      if (response.room) {
-        renderRoom(response.room);
-      }
-
-      showToast(
-        `${player.name} was removed from the lobby.`,
-        "success"
-      );
-    } catch (error) {
-      console.error(error);
-
-      showToast(
-        error.message ||
-          "Unable to remove that player.",
-        "error",
-        4200
-      );
-    }
-  }
-
-  function finishLeavingRoom(message) {
-    clearRoomSession();
-    closeAllModals();
-    updateAddressRoomCode("");
-
-    state.deckSelectionReturnView = null;
-
-    showHomeView();
-
-    if (message) {
-      showToast(message, "success");
-    }
-  }
-
-  async function leaveCurrentRoom() {
-    if (!state.room) {
-      finishLeavingRoom();
-      return;
-    }
-
-    const roomCode = state.room.code;
-
-    elements.confirmLeaveRoomButton.disabled = true;
-    elements.confirmLeaveRoomButton.textContent = "Leaving…";
-
-    try {
-      if (isServerConnected()) {
-        const response = await emitWithAcknowledgement(
-          "leave-room",
-          {
-            roomCode,
-            playerId: state.playerId,
-            sessionToken: state.sessionToken
-          }
-        );
-
-        if (!response.success) {
-          throw new Error(
-            getErrorMessage(
-              response,
-              "Unable to leave the room."
-            )
-          );
-        }
-      }
-
-      finishLeavingRoom(`Left room ${roomCode}.`);
-    } catch (error) {
-      console.error(error);
-
-      showToast(
-        error.message ||
-          "Unable to leave the room.",
-        "error",
-        4200
-      );
-    } finally {
-      elements.confirmLeaveRoomButton.disabled = false;
-      elements.confirmLeaveRoomButton.textContent =
-        "Leave Room";
-    }
-  }
-
-  function openCreateRoomForm() {
-    if (!requireServerConnection()) {
-      return;
-    }
-
-    const savedPlayerName = readTextValue(
-      STORAGE_KEYS.playerName
-    );
-
-    if (savedPlayerName) {
-      elements.createPlayerNameInput.value =
-        savedPlayerName;
-    }
-
-    openModal(elements.createRoomModal);
-  }
-
-  function openJoinRoomForm() {
-    const savedPlayerName = readTextValue(
-      STORAGE_KEYS.playerName
-    );
-
-    if (savedPlayerName) {
-      elements.joinPlayerNameInput.value =
-        savedPlayerName;
-    }
-
-    openModal(elements.joinRoomModal);
-  }
-
-  function loadRoomCodeFromAddress() {
-    const parameters = new URLSearchParams(
-      window.location.search
-    );
-
-    const roomCode = normalizeRoomCode(
-      parameters.get("room")
-    );
-
-    if (roomCode.length !== 6) {
-      return;
-    }
-
-    elements.joinRoomCodeInput.value = roomCode;
-
-    const savedSession = readRoomSession();
-
-    if (
-      !savedSession ||
-      savedSession.roomCode !== roomCode
-    ) {
-      openJoinRoomForm();
-      elements.joinRoomCodeInput.value = roomCode;
-    }
-  }
-
-  function connectToServer() {
-    if (typeof window.io !== "function") {
-      updateConnectionStatus("disconnected", "Offline");
-
-      showToast(
-        "The multiplayer connection library could not load.",
-        "error",
-        4800
-      );
-
-      return;
-    }
-
-    updateConnectionStatus("connecting", "Connecting");
-
-    try {
-      state.socket = window.io({
-        transports: ["websocket", "polling"],
-        reconnection: true,
-        reconnectionAttempts: Infinity,
-        reconnectionDelay: 1000,
-        reconnectionDelayMax: 5000,
-        timeout: 12000
-      });
-    } catch (error) {
-      console.error("Socket connection failed:", error);
-
-      updateConnectionStatus("disconnected", "Offline");
-
-      showToast(
-        "Unable to connect to the Commander server.",
-        "error",
-        4800
-      );
-
-      return;
-    }
-
-    state.socket.on("connect", async () => {
-      console.info(
-        "Connected to Commander server:",
-        state.socket.id
-      );
-
-      updateConnectionStatus("connected", "Connected");
-
-      const savedSession = readRoomSession();
-
-      if (savedSession) {
-        await attemptRoomRejoin({
-          silent: true
-        });
-      }
-    });
-
-    state.socket.on("disconnect", (reason) => {
-      console.warn(
-        "Disconnected from Commander server:",
-        reason
-      );
-
-      updateConnectionStatus(
-        "disconnected",
-        "Reconnecting"
-      );
-
-      if (state.room) {
-        showToast(
-          "Connection lost. Your room will reconnect automatically.",
-          "error",
-          3600
-        );
-      }
-    });
-
-    state.socket.io.on("reconnect_attempt", () => {
-      updateConnectionStatus(
-        "connecting",
-        "Reconnecting"
-      );
-    });
-
-    state.socket.io.on("reconnect", () => {
-      updateConnectionStatus("connected", "Connected");
-
-      showToast(
-        "Reconnected to the Commander server.",
-        "success"
-      );
-    });
-
-    state.socket.on("connect_error", (error) => {
-      console.error("Connection error:", error);
-
-      updateConnectionStatus("disconnected", "Offline");
-    });
-
-    state.socket.on("room-updated", (room) => {
-      if (
-        !room ||
-        !state.playerId ||
-        (
-          state.room &&
-          state.room.code !== room.code
-        )
-      ) {
-        return;
-      }
-
-      renderRoom(room);
-    });
-
-    state.socket.on("game-started", (payload) => {
-      if (
-        !payload ||
-        !payload.room ||
-        (
-          state.room &&
-          payload.room.code !== state.room.code
-        )
-      ) {
-        return;
-      }
-
-      renderRoom(payload.room);
-
-      showToast(
-        "The host started the Commander game.",
-        "success",
-        4500
-      );
-    });
-
-    state.socket.on("removed-from-room", (payload) => {
-      const message =
-        payload && payload.message
-          ? payload.message
-          : "You were removed from the Commander room.";
-
-      clearRoomSession();
-      closeAllModals();
-      updateAddressRoomCode("");
-      showHomeView();
-
-      showToast(message, "error", 5000);
-    });
-
-    state.socket.on("room-closed", (payload) => {
-      const message =
-        payload && payload.message
-          ? payload.message
-          : "The Commander room was closed.";
-
-      clearRoomSession();
-      closeAllModals();
-      updateAddressRoomCode("");
-      showHomeView();
-
-      showToast(message, "error", 5000);
-    });
-
-    state.socket.on("server-message", (payload) => {
-      if (
-        !payload ||
-        typeof payload.message !== "string"
-      ) {
-        return;
-      }
-
-      showToast(
-        payload.message,
-        payload.type || "default"
-      );
-    });
-  }
-
-  elements.createGameButton?.addEventListener(
-    "click",
-    openCreateRoomForm
-  );
-
-  elements.joinGameButton?.addEventListener(
-    "click",
-    openJoinRoomForm
-  );
-
-  elements.createRoomForm?.addEventListener(
-    "submit",
-    createRoom
-  );
-
-  elements.joinRoomForm?.addEventListener(
-    "submit",
-    joinRoom
-  );
-
-  elements.joinRoomCodeInput?.addEventListener(
-    "input",
-    () => {
-      const normalizedCode = normalizeRoomCode(
-        elements.joinRoomCodeInput.value
-      );
-
-      if (
-        elements.joinRoomCodeInput.value !==
-        normalizedCode
-      ) {
-        elements.joinRoomCodeInput.value =
-          normalizedCode;
-      }
-    }
-  );
-
-  elements.myDecksButton?.addEventListener(
-    "click",
-    () => {
-      openDeckLibrary(null);
-    }
-  );
-
-  elements.homeChangeDeckButton?.addEventListener(
-    "click",
-    () => {
-      openDeckLibrary(null);
-    }
-  );
-
-  elements.decksBackButton?.addEventListener(
-    "click",
-    returnFromDeckLibrary
-  );
-
-  [
-    elements.toolbarImportDeckButton,
-    elements.importDeckButton,
-    elements.emptyImportDeckButton
-  ].forEach((button) => {
-    button?.addEventListener(
-      "click",
-      openDeckImporter
-    );
   });
 
-  elements.importDeckForm?.addEventListener(
-    "submit",
-    importCommanderDeck
-  );
+  modalBody.addEventListener("submit", (event) => {
+    event.preventDefault();
+    const form = event.target;
+    if (form.id !== "deckForm") return;
+    const data = new FormData(form);
+    const commanders = String(data.get("commanders") || "")
+      .split(/\s*\/\s*|\s*\|\s*|\r?\n/)
+      .map((name) => name.trim())
+      .filter(Boolean)
+      .slice(0, 2);
+    const name = String(data.get("deckName") || "").trim();
+    if (!name || !commanders.length) return showToast("Enter a deck name and commander.", "error");
+    const cards = parseDeckList(data.get("deckList"), commanders);
+    const totalCards = cards.reduce((sum, card) => sum + card.quantity, 0);
+    if (totalCards < 10) return showToast("The deck list did not contain enough cards.", "error");
+    if (totalCards > 250) return showToast("The deck list is too large for this sandbox.", "error");
 
-  elements.deckListInput?.addEventListener(
-    "input",
-    updateDeckImportPreview
-  );
+    const deckId = String(data.get("deckId") || "") || uid();
+    const deck = {
+      id: deckId,
+      name,
+      commanders,
+      cards,
+      totalCards,
+      uniqueCards: cards.length,
+      validation: totalCards === 100 ? "valid" : "warning",
+      updatedAt: new Date().toISOString()
+    };
+    const existingIndex = state.decks.findIndex((entry) => entry.id === deckId);
+    if (existingIndex >= 0) state.decks[existingIndex] = deck;
+    else state.decks.unshift(deck);
+    saveDecks();
+    closeModal();
+    render();
+    showToast(`${deck.name} saved with ${totalCards} cards.`, totalCards === 100 ? "success" : "info");
+  });
 
-  elements.commanderNameInput?.addEventListener(
-    "input",
-    updateDeckImportPreview
-  );
-
-  elements.copyDeckListButton?.addEventListener(
-    "click",
-    () => {
-      const deck = getDeckById(state.openDeckId);
-
-      if (!deck) {
+  app.addEventListener("click", (event) => {
+    const nav = event.target.closest("[data-nav]");
+    if (nav) {
+      const destination = nav.dataset.nav;
+      if (state.room && destination !== "game") {
+        showToast("Leave the current room before opening another section.", "info");
         return;
       }
-
-      copyText(
-        createDeckExportText(deck),
-        "Deck list copied."
-      );
+      state.view = destination === "game" ? (state.room ? "game" : "home") : destination;
+      render();
+      return;
     }
-  );
+    const button = event.target.closest("[data-action]");
+    if (button) handleClick(button);
+  });
 
-  elements.selectDeckButton?.addEventListener(
-    "click",
-    async () => {
-      await selectDeck(state.openDeckId);
-    }
-  );
+  app.addEventListener("change", (event) => {
+    if (event.target.id === "lobbyDeckSelect") setLobbyDeck(event.target.value);
+  });
 
-  elements.deleteDeckButton?.addEventListener(
-    "click",
-    async () => {
-      await deleteDeck(state.openDeckId);
-    }
-  );
+  app.addEventListener("input", (event) => {
+    if (event.target.id === "chatInput") state.chatDraft = event.target.value;
+    if (event.target.id === "tokenName") state.tokenDraft.name = event.target.value;
+    if (event.target.id === "tokenPower") state.tokenDraft.power = event.target.value;
+    if (event.target.id === "tokenToughness") state.tokenDraft.toughness = event.target.value;
+    if (event.target.id === "joinRoomCode") event.target.value = event.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 6);
+  });
 
-  elements.chooseLobbyDeckButton?.addEventListener(
-    "click",
-    () => {
-      openDeckLibrary("lobby");
-    }
-  );
+  bottomNav.addEventListener("click", (event) => {
+    const button = event.target.closest("[data-nav]");
+    if (!button) return;
+    if (state.room && button.dataset.nav !== "game") return showToast("Leave the current room before opening another section.", "info");
+    state.view = button.dataset.nav === "game" ? (state.room ? "game" : "home") : button.dataset.nav;
+    render();
+  });
 
-  elements.readyButton?.addEventListener(
-    "click",
-    toggleReadyStatus
-  );
-
-  elements.saveRoomSettingsButton?.addEventListener(
-    "click",
-    saveRoomSettings
-  );
-
-  elements.startGameButton?.addEventListener(
-    "click",
-    startCommanderGame
-  );
-
-  elements.copyRoomCodeButton?.addEventListener(
-    "click",
-    () => {
-      if (!state.room) {
-        return;
-      }
-
-      copyText(
-        state.room.code,
-        "Room code copied."
-      );
-    }
-  );
-
-  elements.copyInviteLinkButton?.addEventListener(
-    "click",
-    () => {
-      if (!state.room) {
-        return;
-      }
-
-      copyText(
-        createInviteLink(state.room.code),
-        "Room invitation link copied."
-      );
-    }
-  );
-
-  elements.shareRoomButton?.addEventListener(
-    "click",
-    shareCurrentRoom
-  );
-
-  elements.leaveLobbyButton?.addEventListener(
-    "click",
-    () => {
-      openModal(elements.leaveRoomModal);
-    }
-  );
-
-  elements.cancelLeaveRoomButton?.addEventListener(
-    "click",
-    () => {
-      closeModal(elements.leaveRoomModal);
-    }
-  );
-
-  elements.confirmLeaveRoomButton?.addEventListener(
-    "click",
-    leaveCurrentRoom
-  );
-
-  elements.rejoinRoomButton?.addEventListener(
-    "click",
-    async () => {
-      if (!requireServerConnection()) {
-        return;
-      }
-
-      const rejoined = await attemptRoomRejoin({
-        silent: false
-      });
-
-      if (!rejoined) {
-        updateRejoinPanel();
-      }
-    }
-  );
-
-  elements.bottomHomeButton?.addEventListener(
-    "click",
-    () => {
-      state.deckSelectionReturnView = null;
-      showHomeView();
-    }
-  );
-
-  elements.bottomDecksButton?.addEventListener(
-    "click",
-    () => {
-      openDeckLibrary(null);
-    }
-  );
-
-  elements.bottomGamesButton?.addEventListener(
-    "click",
-    () => {
-      setActiveNavigation(elements.bottomGamesButton);
-
-      showToast(
-        "Active and recent games will appear here later."
-      );
-    }
-  );
-
-  elements.bottomSettingsButton?.addEventListener(
-    "click",
-    () => {
-      setActiveNavigation(elements.bottomSettingsButton);
-
-      showToast(
-        "Player and Torn settings will be added later."
-      );
-    }
-  );
-
-  document
-    .querySelectorAll("[data-close-modal]")
-    .forEach((button) => {
-      button.addEventListener("click", () => {
-        const modalId = button.getAttribute(
-          "data-close-modal"
-        );
-
-        closeModal(getModalById(modalId));
-      });
-    });
-
-  document
-    .querySelectorAll(".modal-backdrop")
-    .forEach((modal) => {
-      modal.addEventListener("click", (event) => {
-        if (event.target === modal) {
-          closeModal(modal);
-        }
-      });
-    });
+  modalBackdrop.addEventListener("click", (event) => {
+    if (event.target === modalBackdrop || event.target.closest("[data-close-modal]")) closeModal();
+  });
 
   document.addEventListener("keydown", (event) => {
-    if (event.key !== "Escape") {
-      return;
-    }
-
-    const visibleModal = document.querySelector(
-      ".modal-backdrop:not(.hidden)"
-    );
-
-    if (visibleModal) {
-      closeModal(visibleModal);
-    }
+    if (event.key === "Escape" && !modalBackdrop.classList.contains("is-hidden")) closeModal();
   });
 
-  window.addEventListener("error", (event) => {
-    console.error(
-      "Application error:",
-      event.error || event.message
-    );
+  brandButton.addEventListener("click", () => {
+    if (state.room) return showToast(`You are currently in room ${state.room.code}.`, "info");
+    state.view = "home";
+    render();
   });
 
-  window.addEventListener(
-    "unhandledrejection",
-    (event) => {
-      console.error(
-        "Unhandled promise rejection:",
-        event.reason
-      );
-    }
-  );
+  socket.on("connect", () => {
+    setConnection("is-online", "Online");
+    if (state.session && !state.room) rejoinRoom(false);
+  });
 
-  loadDecks();
+  socket.on("disconnect", () => setConnection("is-offline", "Offline"));
+  socket.on("connect_error", () => setConnection("is-offline", "Offline"));
 
-  const savedPlayerName = readTextValue(
-    STORAGE_KEYS.playerName
-  );
+  socket.on("room-updated", (room) => {
+    state.room = room;
+    state.view = "game";
+    render();
+  });
 
-  if (savedPlayerName) {
-    elements.createPlayerNameInput.value =
-      savedPlayerName;
+  socket.on("game-started", ({ room }) => {
+    state.room = room;
+    state.activeGameTab = "table";
+    render();
+    showToast("The Commander game has started.", "success");
+  });
 
-    elements.joinPlayerNameInput.value =
-      savedPlayerName;
+  socket.on("removed-from-room", ({ message }) => {
+    clearSession();
+    render();
+    showToast(message || "You were removed from the room.", "error");
+  });
+
+  window.addEventListener("beforeinstallprompt", (event) => {
+    event.preventDefault();
+    state.deferredInstallPrompt = event;
+    installButton.classList.remove("is-hidden");
+  });
+
+  installButton.addEventListener("click", async () => {
+    if (!state.deferredInstallPrompt) return;
+    state.deferredInstallPrompt.prompt();
+    await state.deferredInstallPrompt.userChoice;
+    state.deferredInstallPrompt = null;
+    installButton.classList.add("is-hidden");
+  });
+
+  window.addEventListener("appinstalled", () => {
+    installButton.classList.add("is-hidden");
+    showToast("Commander Sandbox installed.", "success");
+  });
+
+  if ("serviceWorker" in navigator) {
+    window.addEventListener("load", () => navigator.serviceWorker.register("/sw.js").catch((error) => console.warn("Service worker registration failed", error)));
   }
 
-  updateRejoinPanel();
-  renderDeckLibrary();
-  showHomeView();
-  loadRoomCodeFromAddress();
-  connectToServer();
-});
+  render();
+})();
