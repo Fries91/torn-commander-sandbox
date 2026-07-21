@@ -168,6 +168,14 @@
     connectionText.textContent = text;
   }
 
+  function persistenceBadge() {
+    const persistence = state.room && state.room.persistence;
+    if (persistence && persistence.ready && persistence.mode === "postgresql") {
+      return `<span class="badge success" title="This room is automatically saved to PostgreSQL after every change.">☁ Database autosave</span>`;
+    }
+    return `<span class="badge warning" title="This room is currently using temporary server memory.">⚠ Temporary memory</span>`;
+  }
+
   function setActiveNav(name) {
     bottomNav.querySelectorAll("[data-nav]").forEach((button) => {
       button.classList.toggle("active", button.dataset.nav === name);
@@ -335,6 +343,7 @@
             <p class="eyebrow">Private Commander lobby</p>
             <h1>Room <span class="room-code">${escapeHtml(state.room.code)}</span></h1>
             <p class="muted">${state.room.players.length}/${state.room.maxPlayers} players • ${state.room.startingLife} starting life</p>
+            <div class="button-row" style="margin-top:10px">${persistenceBadge()}</div>
           </div>
           <div class="button-row">
             <button class="secondary-button" type="button" data-action="copy-room-code">Copy code</button>
@@ -428,6 +437,7 @@
             <p class="eyebrow">Room ${escapeHtml(state.room.code)} • Turn ${state.room.turn?.number || 1}</p>
             <h2>${escapeHtml(active?.name || "Unknown")} is active</h2>
             <span class="phase-badge">${escapeHtml(phase)}</span>
+            ${persistenceBadge()}
           </div>
           <div class="turn-actions">
             <button class="secondary-button" type="button" data-action="next-phase">Next phase</button>
@@ -703,7 +713,7 @@
           <article class="help-card"><h3>1. Import decks</h3><ol><li>Open Decks.</li><li>Paste a text deck list.</li><li>Enter one or two commanders.</li><li>Save it on your device.</li></ol></article>
           <article class="help-card"><h3>2. Open a room</h3><ol><li>One player creates a private room.</li><li>Share the six-character code.</li><li>Each player selects a deck and marks ready.</li><li>The host starts the game.</li></ol></article>
           <article class="help-card"><h3>3. Use the table</h3><ul><li>Your hand is only sent to your browser.</li><li>Play cards to your battlefield and move them to other zones.</li><li>Tap permanents and add generic counters.</li><li>Life, poison, tax and commander damage update live.</li></ul></article>
-          <article class="help-card"><h3>4. Reconnect</h3><p>The room session is saved in this browser. Open the same app and press Rejoin. Rooms stay active while the server remains running.</p></article>
+          <article class="help-card"><h3>4. Autosave and reconnect</h3><p>Your private session stays in this browser, while the complete room is automatically saved to PostgreSQL. After a Render restart or redeploy, reopen the app and it will rejoin the same saved game.</p></article>
           <article class="help-card"><h3>Sandbox rules</h3><p>This app does not enforce every Magic rule or card ability. Players control card effects, priority, targets and legality just like a physical tabletop.</p></article>
           <article class="help-card"><h3>Install on phone</h3><p>Use the install button when shown, or use your browser menu and choose “Add to Home screen.” It also works inside compatible in-app browsers.</p></article>
         </div>
@@ -1088,7 +1098,7 @@
 
   socket.on("connect", () => {
     setConnection("is-online", "Online");
-    if (state.session && !state.room) rejoinRoom(false);
+    if (state.session) rejoinRoom(false);
   });
 
   socket.on("disconnect", () => setConnection("is-offline", "Offline"));
