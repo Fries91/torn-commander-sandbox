@@ -4,8 +4,9 @@
   Torn Commander Sandbox — complete server
   ------------------------------------------------------------
   A mobile-friendly, real-time Commander tabletop for 2–6 users.
-  Rooms are kept in server memory. Browser deck libraries are kept
-  in localStorage and only the selected deck is sent to the room.
+  Rooms are mirrored to PostgreSQL after every change so active games
+  can survive Render restarts and redeploys. Browser deck libraries are
+  kept in localStorage and only the selected deck is sent to the room.
 */
 
 const path = require("path");
@@ -13,6 +14,7 @@ const http = require("http");
 const crypto = require("crypto");
 const express = require("express");
 const { Server } = require("socket.io");
+const { Pool } = require("pg");
 
 const app = express();
 const server = http.createServer(app);
@@ -29,7 +31,9 @@ const PUBLIC_DIRECTORY = path.join(__dirname, "public");
 const ROOM_CODE_LENGTH = 6;
 const ROOM_CODE_CHARACTERS = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 const RECONNECT_GRACE_MS = 30 * 60 * 1000;
-const ABANDONED_ROOM_MAX_AGE_MS = 6 * 60 * 60 * 1000;
+const ROOM_RETENTION_MS = 48 * 60 * 60 * 1000;
+const ABANDONED_ROOM_MAX_AGE_MS = ROOM_RETENTION_MS;
+const SAVE_DEBOUNCE_MS = 100;
 const CLEANUP_INTERVAL_MS = 10 * 60 * 1000;
 const MAX_CHAT_MESSAGES = 100;
 const MAX_LOG_ENTRIES = 150;
@@ -41,6 +45,30 @@ const ALLOWED_STARTING_LIFE = new Set([20, 30, 40, 50, 60]);
 
 const rooms = new Map();
 const disconnectTimers = new Map();
+const persistenceTimers = new Map();
+const persistenceChains = new Map();
+
+const DATABASE_URL = String(process.env.DATABASE_URL || "").trim();
+const DATABASE_ENABLED = DATABASE_URL.length > 0;
+const databaseState = {
+  enabled: DATABASE_ENABLED,
+  ready: false,
+  loadedRooms: 0,
+  lastSavedAt: null,
+  lastError: null
+};
+
+const databasePool = DATABASE_ENABLED
+  ? new Pool({
+      connectionString: DATABASE_URL,
+      max: 5,
+      idleTimeoutMillis: 30000,
+      connectionTimeoutMillis: 10000,
+      ssl: process.env.DATABASE_SSL === "true"
+        ? { rejectUnauthorized: false }
+        : undefined
+    })
+  : null;
 
 app.disable("x-powered-by");
 app.set("trust proxy", 1);
@@ -59,6 +87,171 @@ app.use(
 
 function nowIso() {
   return new Date().toISOString();
+}
+
+function persistenceSummary() {
+  return {
+    enabled: databaseState.enabled,
+    ready: databaseState.ready,
+    mode: databaseState.ready ? "postgresql" : "memory",
+    loadedRooms: databaseState.loadedRooms,
+    lastSavedAt: databaseState.lastSavedAt,
+    lastError: databaseState.lastError ? "Database operation failed." : null
+  };
+}
+
+function createPersistentRoomState(room) {
+  return {
+    ...room,
+    players: room.players.map((player) => ({
+      ...player,
+      connected: false,
+      socketId: null
+    }))
+  };
+}
+
+async function initializeDatabase() {
+  if (!databasePool) {
+    console.warn("DATABASE_URL is not set. Rooms will only use temporary memory.");
+    return;
+  }
+
+  await databasePool.query(`
+    CREATE TABLE IF NOT EXISTS commander_rooms (
+      code VARCHAR(6) PRIMARY KEY,
+      room_state JSONB NOT NULL,
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      expires_at TIMESTAMPTZ NOT NULL
+    )
+  `);
+  await databasePool.query(`
+    CREATE INDEX IF NOT EXISTS commander_rooms_expires_at_idx
+    ON commander_rooms (expires_at)
+  `);
+  await databasePool.query(`DELETE FROM commander_rooms WHERE expires_at <= NOW()`);
+
+  const result = await databasePool.query(`
+    SELECT room_state
+    FROM commander_rooms
+    WHERE expires_at > NOW()
+    ORDER BY updated_at ASC
+  `);
+
+  for (const row of result.rows) {
+    const room = row.room_state;
+    if (!room || typeof room !== "object" || !room.code || !Array.isArray(room.players)) {
+      continue;
+    }
+
+    room.code = normalizeRoomCode(room.code);
+    if (room.code.length !== ROOM_CODE_LENGTH || rooms.has(room.code)) continue;
+
+    room.players = room.players.map((player) => ({
+      ...player,
+      connected: false,
+      socketId: null
+    }));
+    room.chat = Array.isArray(room.chat) ? room.chat.slice(-MAX_CHAT_MESSAGES) : [];
+    room.log = Array.isArray(room.log) ? room.log.slice(-MAX_LOG_ENTRIES) : [];
+    room.updatedAt = room.updatedAt || nowIso();
+
+    rooms.set(room.code, room);
+  }
+
+  databaseState.ready = true;
+  databaseState.loadedRooms = rooms.size;
+  databaseState.lastError = null;
+  console.log(`PostgreSQL autosave ready. Restored ${rooms.size} room(s).`);
+}
+
+async function persistRoomNow(room) {
+  if (!databasePool || !room || !rooms.has(room.code)) return;
+
+  const state = createPersistentRoomState(room);
+  const expiresAt = new Date(Date.now() + ROOM_RETENTION_MS).toISOString();
+
+  await databasePool.query(
+    `
+      INSERT INTO commander_rooms (code, room_state, updated_at, expires_at)
+      VALUES ($1, $2::jsonb, NOW(), $3::timestamptz)
+      ON CONFLICT (code)
+      DO UPDATE SET
+        room_state = EXCLUDED.room_state,
+        updated_at = NOW(),
+        expires_at = EXCLUDED.expires_at
+    `,
+    [room.code, JSON.stringify(state), expiresAt]
+  );
+
+  databaseState.ready = true;
+  databaseState.lastSavedAt = nowIso();
+  databaseState.lastError = null;
+}
+
+function enqueuePersistenceOperation(roomCode, operation) {
+  const previous = persistenceChains.get(roomCode) || Promise.resolve();
+  const next = previous
+    .catch(() => undefined)
+    .then(operation)
+    .catch((error) => {
+      databaseState.ready = false;
+      databaseState.lastError = normalizeText(error && error.message, 240) || "Database save failed.";
+      console.error(`Database operation failed for room ${roomCode}:`, error);
+    });
+
+  persistenceChains.set(roomCode, next);
+  next.finally(() => {
+    if (persistenceChains.get(roomCode) === next) persistenceChains.delete(roomCode);
+  });
+  return next;
+}
+
+function queueRoomSave(room, immediate = false) {
+  if (!databasePool || !room) return;
+  const roomCode = room.code;
+  const existingTimer = persistenceTimers.get(roomCode);
+  if (existingTimer) clearTimeout(existingTimer);
+
+  const run = () => {
+    persistenceTimers.delete(roomCode);
+    enqueuePersistenceOperation(roomCode, () => persistRoomNow(room));
+  };
+
+  if (immediate) {
+    run();
+    return;
+  }
+
+  const timer = setTimeout(run, SAVE_DEBOUNCE_MS);
+  timer.unref();
+  persistenceTimers.set(roomCode, timer);
+}
+
+function deletePersistedRoom(roomCode) {
+  if (!databasePool) return;
+  const timer = persistenceTimers.get(roomCode);
+  if (timer) clearTimeout(timer);
+  persistenceTimers.delete(roomCode);
+
+  enqueuePersistenceOperation(roomCode, async () => {
+    await databasePool.query(`DELETE FROM commander_rooms WHERE code = $1`, [roomCode]);
+    databaseState.ready = true;
+    databaseState.lastError = null;
+  });
+}
+
+async function flushPersistence() {
+  if (!databasePool) return;
+
+  for (const timer of persistenceTimers.values()) clearTimeout(timer);
+  persistenceTimers.clear();
+
+  for (const room of rooms.values()) {
+    enqueuePersistenceOperation(room.code, () => persistRoomNow(room));
+  }
+
+  await Promise.allSettled(Array.from(persistenceChains.values()));
 }
 
 function roomChannel(code) {
@@ -317,6 +510,7 @@ function createPublicRoom(room, viewerId = null) {
     createdAt: room.createdAt,
     updatedAt: room.updatedAt,
     startedAt: room.startedAt,
+    persistence: persistenceSummary(),
     phases: PHASES,
     turn: room.turn ? { ...room.turn } : null,
     chat: room.chat.slice(-MAX_CHAT_MESSAGES),
@@ -335,6 +529,7 @@ function createPublicRoom(room, viewerId = null) {
 
 function emitRoomUpdate(room) {
   room.updatedAt = nowIso();
+  queueRoomSave(room);
   for (const player of room.players) {
     if (!player.socketId) continue;
     const socket = io.sockets.sockets.get(player.socketId);
@@ -406,6 +601,7 @@ function removePlayer(room, playerId) {
   clearDisconnectTimer(room.code, removed.id);
   if (room.players.length === 0) {
     rooms.delete(room.code);
+    deletePersistedRoom(room.code);
     return removed;
   }
   transferHostIfNeeded(room);
@@ -431,9 +627,9 @@ function fail(callback, error) {
   acknowledge(callback, { success: false, error });
 }
 
-function safeHandler(socket, callback, functionBody) {
+async function safeHandler(socket, callback, functionBody) {
   try {
-    functionBody();
+    await functionBody();
   } catch (error) {
     console.error(`Socket action failed for ${socket.id}:`, error);
     fail(callback, "An unexpected server error occurred.");
@@ -645,15 +841,16 @@ app.get("/api/health", (request, response) => {
     success: true,
     status: "online",
     app: "Torn Commander Sandbox",
-    version: "5.0.0",
+    version: "6.0.0",
     connectedSockets: io.engine.clientsCount,
     activeRooms: rooms.size,
+    persistence: persistenceSummary(),
     timestamp: nowIso()
   });
 });
 
 app.get("/api", (request, response) => {
-  response.status(200).json({ success: true, name: "Torn Commander Sandbox API", version: "5.0.0" });
+  response.status(200).json({ success: true, name: "Torn Commander Sandbox API", version: "6.0.0", persistence: persistenceSummary() });
 });
 
 io.on("connection", (socket) => {
@@ -685,6 +882,7 @@ io.on("connection", (socket) => {
       success: true, playerId: player.id, sessionToken: player.sessionToken,
       room: createPublicRoom(room, player.id)
     });
+    queueRoomSave(room, true);
   }));
 
   socket.on("join-room", (payload, callback) => safeHandler(socket, callback, () => {
@@ -803,6 +1001,7 @@ io.on("connection", (socket) => {
     room.startedAt = nowIso();
     room.turn = { number: 1, activePlayerId: firstPlayer.id, phaseIndex: 0 };
     addLog(room, `Game started. ${firstPlayer.name} won the first-player roll.`, "turn");
+    queueRoomSave(room, true);
     acknowledge(callback, { success: true, room: createPublicRoom(room, player.id) });
     for (const entry of room.players) {
       const targetSocket = entry.socketId && io.sockets.sockets.get(entry.socketId);
@@ -923,6 +1122,7 @@ const cleanupInterval = setInterval(() => {
     if (!hasConnectedPlayer && age >= ABANDONED_ROOM_MAX_AGE_MS) {
       room.players.forEach((player) => clearDisconnectTimer(roomCode, player.id));
       rooms.delete(roomCode);
+      deletePersistedRoom(roomCode);
       console.log(`Removed abandoned room ${roomCode}`);
     }
   }
@@ -945,22 +1145,55 @@ app.use((error, request, response, next) => {
   return response.status(500).json({ success: false, error: "An unexpected server error occurred." });
 });
 
-server.listen(PORT, "0.0.0.0", () => {
-  console.log("-----------------------------------------");
-  console.log("Torn Commander Sandbox 5.0 is running");
-  console.log(`Port: ${PORT}`);
-  console.log("-----------------------------------------");
-});
+async function startServer() {
+  try {
+    await initializeDatabase();
+  } catch (error) {
+    databaseState.ready = false;
+    databaseState.lastError = normalizeText(error && error.message, 240) || "Database initialization failed.";
+    console.error("Unable to initialize PostgreSQL persistence:", error);
 
-function shutdown(signal) {
-  console.log(`${signal} received. Closing server.`);
+    if (DATABASE_ENABLED) {
+      if (databasePool) await databasePool.end().catch(() => undefined);
+      process.exit(1);
+    }
+  }
+
+  server.listen(PORT, "0.0.0.0", () => {
+    console.log("-----------------------------------------");
+    console.log("Torn Commander Sandbox 6.0 is running");
+    console.log(`Port: ${PORT}`);
+    console.log(`Persistence: ${databaseState.ready ? "PostgreSQL autosave" : "temporary memory"}`);
+    console.log("-----------------------------------------");
+  });
+}
+
+let shuttingDown = false;
+async function shutdown(signal) {
+  if (shuttingDown) return;
+  shuttingDown = true;
+  console.log(`${signal} received. Saving rooms and closing server.`);
   clearInterval(cleanupInterval);
   for (const timer of disconnectTimers.values()) clearTimeout(timer);
-  io.close(() => server.close(() => process.exit(0)));
+
+  try {
+    await flushPersistence();
+  } catch (error) {
+    console.error("Final database save failed:", error);
+  }
+
+  io.close(() => {
+    server.close(async () => {
+      if (databasePool) await databasePool.end().catch(() => undefined);
+      process.exit(0);
+    });
+  });
   setTimeout(() => process.exit(1), 10000).unref();
 }
 
-process.on("SIGTERM", () => shutdown("SIGTERM"));
-process.on("SIGINT", () => shutdown("SIGINT"));
+startServer();
+
+process.on("SIGTERM", () => void shutdown("SIGTERM"));
+process.on("SIGINT", () => void shutdown("SIGINT"));
 process.on("uncaughtException", (error) => console.error("Uncaught exception:", error));
 process.on("unhandledRejection", (reason) => console.error("Unhandled rejection:", reason));
