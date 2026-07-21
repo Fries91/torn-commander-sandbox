@@ -1,3 +1,10 @@
+databases:
+  - name: torn-commander-sandbox-db
+    plan: free
+    databaseName: torn_commander
+    user: torn_commander
+    ipAllowList: []
+
 services:
   - type: web
     name: torn-commander-sandbox
@@ -7,3 +14,10 @@ services:
     startCommand: npm start
     healthCheckPath: /api/health
     autoDeploy: true
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL
+        fromDatabase:
+          name: torn-commander-sandbox-db
+          property: connectionString
