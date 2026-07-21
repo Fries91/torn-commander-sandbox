@@ -1,29 +1,19 @@
 {
   "name": "torn-commander-sandbox",
-  "version": "1.0.0",
-  "description": "A mobile-friendly 2–6 player MTG Commander sandbox for the Torn community.",
+  "version": "5.0.0",
+  "private": true,
+  "description": "A complete mobile-friendly 2-6 player MTG Commander sandbox for the Torn community.",
   "main": "server.js",
-  "type": "commonjs",
   "scripts": {
     "start": "node server.js",
-    "dev": "node server.js"
+    "dev": "node --watch server.js",
+    "check": "node --check server.js && node --check public/app.js && node --check public/sw.js"
   },
   "engines": {
-    "node": ">=20.0.0"
+    "node": ">=20"
   },
-  "keywords": [
-    "torn",
-    "magic-the-gathering",
-    "mtg",
-    "commander",
-    "multiplayer",
-    "sandbox"
-  ],
-  "author": "Fries91",
-  "license": "UNLICENSED",
-  "private": true,
   "dependencies": {
-    "express": "4.21.2",
-    "socket.io": "4.8.1"
+    "express": "^4.21.2",
+    "socket.io": "^4.8.1"
   }
 }
