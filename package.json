@@ -1,8 +1,8 @@
 {
   "name": "torn-commander-sandbox",
-  "version": "20.0.0",
+  "version": "30.0.0",
   "private": true,
-  "description": "Persistent Arena-style 2-6 player MTG Commander table with card intelligence, stack, priority, assisted combat, spectators, replays and accessibility settings.",
+  "description": "Persistent Arena-style Commander table with final assisted rules engine, state-based actions, setup validation, Judge Mode and universal player-action coverage.",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
