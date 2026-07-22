@@ -1,6 +1,6 @@
 "use strict";
 
-const CACHE_NAME = "torn-commander-v7-card-actions";
+const CACHE_NAME = "torn-commander-v8-card-actions";
 const APP_SHELL = ["/", "/index.html", "/styles.css", "/app.js", "/manifest.webmanifest", "/icon.svg"];
 
 self.addEventListener("install", (event) => {
