@@ -217,3 +217,37 @@ summary { cursor: pointer; color: var(--muted); }
   .roll-player .status-badge { grid-column:2 / -1; justify-self:start; }
   .order-arrow { display:none; }
 }
+
+
+/* v9 Card Intelligence */
+.smart-deck-card { position:relative; overflow:hidden; min-height:180px; display:grid; grid-template-columns:112px minmax(0,1fr); padding:0; }
+.deck-card-art { min-height:180px; background-size:cover; background-position:center; border-right:1px solid var(--border); }
+.deck-card-content { padding:14px; display:grid; align-content:center; gap:8px; }
+.card-intelligence-progress { height:7px; overflow:hidden; border-radius:999px; background:var(--surface-3); }
+.card-intelligence-progress span { display:block; height:100%; border-radius:inherit; background:linear-gradient(90deg,var(--accent),#38bdf8); }
+.mtg-card.has-real-art { background:#05080c; }
+.mtg-card header { display:flex; justify-content:space-between; gap:6px; align-items:flex-start; }
+.mana-cost { flex-shrink:0; font-size:.7rem; color:#dff8ff; font-weight:900; }
+.real-card-art { min-height:116px; background-size:cover; background-position:center; color:transparent; }
+.card-type-line { padding:6px 8px; font-size:.64rem; line-height:1.2; color:#dce7f2; background:rgba(0,0,0,.5); border-block:1px solid rgba(255,255,255,.12); }
+.intelligent-card-sheet { display:grid; grid-template-columns:minmax(170px,260px) minmax(0,1fr); gap:18px; align-items:start; }
+.card-detail-image { width:100%; border-radius:16px; box-shadow:0 18px 45px rgba(0,0,0,.45); }
+.card-detail-copy { display:grid; gap:12px; }
+.card-detail-title { display:grid; gap:6px; }
+.card-detail-title strong { font-size:1.1rem; }
+.card-detail-title span { color:var(--muted); }
+.oracle-text { padding:13px; border:1px solid var(--border); border-radius:14px; background:#08121d; line-height:1.45; }
+.keyword-row { display:flex; flex-wrap:wrap; gap:6px; }
+.current-card-state { display:grid; gap:8px; padding:12px; border-radius:14px; background:#08121d; }
+.current-card-state > strong { font-size:1.5rem; }
+.scryfall-credit { color:var(--muted); }
+.card-face-tabs { display:grid; gap:10px; margin:14px 0; }
+.card-face-tabs article { padding:13px; border:1px solid var(--border); border-radius:14px; background:#08121d; }
+.card-face-tabs article small { display:block; margin:4px 0 8px; color:var(--muted); }
+.card-face-tabs article p { margin:0; line-height:1.45; }
+@media (max-width:620px) {
+  .smart-deck-card { grid-template-columns:86px minmax(0,1fr); }
+  .deck-card-art { min-height:190px; }
+  .intelligent-card-sheet { grid-template-columns:1fr; }
+  .card-detail-image { max-width:300px; margin-inline:auto; }
+}
