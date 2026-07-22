@@ -31,11 +31,17 @@ const PHASES = ["Untap", "Upkeep", "Draw", "Main 1", "Combat", "Main 2", "End"];
 const ZONES = new Set(["hand", "battlefield", "graveyard", "exile", "commandZone", "library"]);
 const ALLOWED_MAX_PLAYERS = new Set([2, 3, 4, 5, 6]);
 const ALLOWED_STARTING_LIFE = new Set([20, 30, 40, 50, 60]);
+const SCRYFALL_COLLECTION_URL = "https://api.scryfall.com/cards/collection";
+const SCRYFALL_BATCH_SIZE = 75;
+const CARD_CACHE_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000;
+const CARD_LOOKUP_MAX_NAMES = 150;
+const CARD_LOOKUP_USER_AGENT = process.env.SCRYFALL_USER_AGENT || "TornCommanderSandbox/9.0 (+https://torn-commander-sandbox.onrender.com)";
 
 const rooms = new Map();
 const disconnectTimers = new Map();
 const persistenceTimers = new Map();
 const persistenceChains = new Map();
+const cardLookupCache = new Map();
 
 const DATABASE_URL = String(process.env.DATABASE_URL || "").trim();
 const databaseState = {
@@ -188,11 +194,246 @@ function normalizeCounterMap(value) {
   return result;
 }
 
+
+function normalizeStringArray(value, maximumItems = 20, maximumLength = 60) {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((entry) => normalizeText(entry, maximumLength))
+    .filter(Boolean)
+    .slice(0, maximumItems);
+}
+
+function normalizeCardFace(value) {
+  if (!value || typeof value !== "object") return null;
+  return {
+    name: normalizeText(value.name, 150),
+    manaCost: normalizeText(value.manaCost ?? value.mana_cost, 120),
+    typeLine: normalizeText(value.typeLine ?? value.type_line, 200),
+    oracleText: normalizeText(value.oracleText ?? value.oracle_text, 2500),
+    power: normalizeText(value.power, 20),
+    toughness: normalizeText(value.toughness, 20),
+    loyalty: normalizeText(value.loyalty, 20),
+    imageUrl: normalizeText(value.imageUrl ?? value.image_uris?.normal ?? value.image_uris?.large, 600),
+    artCropUrl: normalizeText(value.artCropUrl ?? value.image_uris?.art_crop, 600)
+  };
+}
+
+function normalizeCardData(value) {
+  if (!value || typeof value !== "object") return null;
+  const faces = (Array.isArray(value.faces) ? value.faces : value.card_faces)
+    ?.map(normalizeCardFace)
+    .filter(Boolean)
+    .slice(0, 4) || [];
+  const imageUrl = normalizeText(value.imageUrl ?? value.image_uris?.normal ?? value.image_uris?.large ?? faces[0]?.imageUrl, 600);
+  const artCropUrl = normalizeText(value.artCropUrl ?? value.image_uris?.art_crop ?? faces[0]?.artCropUrl, 600);
+  const card = {
+    scryfallId: normalizeText(value.scryfallId ?? value.id, 100),
+    oracleId: normalizeText(value.oracleId ?? value.oracle_id, 100),
+    name: normalizeText(value.name, 150),
+    manaCost: normalizeText(value.manaCost ?? value.mana_cost, 120),
+    manaValue: clamp(Number(value.manaValue ?? value.cmc) || 0, 0, 1000),
+    typeLine: normalizeText(value.typeLine ?? value.type_line, 200),
+    oracleText: normalizeText(value.oracleText ?? value.oracle_text, 2500),
+    keywords: normalizeStringArray(value.keywords, 40, 80),
+    colors: normalizeStringArray(value.colors, 10, 4),
+    colorIdentity: normalizeStringArray(value.colorIdentity ?? value.color_identity, 10, 4),
+    power: normalizeText(value.power, 20),
+    toughness: normalizeText(value.toughness, 20),
+    loyalty: normalizeText(value.loyalty, 20),
+    layout: normalizeText(value.layout, 40),
+    imageUrl,
+    artCropUrl,
+    setCode: normalizeText(value.setCode ?? value.set, 12),
+    collectorNumber: normalizeText(value.collectorNumber ?? value.collector_number, 30),
+    rarity: normalizeText(value.rarity, 20),
+    faces
+  };
+  return card.name || card.scryfallId || card.oracleId ? card : null;
+}
+
+function cardDataFromScryfall(card) {
+  if (!card || typeof card !== "object") return null;
+  return normalizeCardData(card);
+}
+
+function cardCacheKey(name) {
+  return normalizeText(name, 150).toLocaleLowerCase("en-US");
+}
+
+function cacheCardData(requestedName, cardData, updatedAt = Date.now()) {
+  const key = cardCacheKey(requestedName || cardData?.name);
+  const normalized = normalizeCardData(cardData);
+  if (!key || !normalized) return;
+  cardLookupCache.set(key, { card: normalized, updatedAt: Number(updatedAt) || Date.now() });
+  const canonicalKey = cardCacheKey(normalized.name);
+  if (canonicalKey) cardLookupCache.set(canonicalKey, { card: normalized, updatedAt: Number(updatedAt) || Date.now() });
+  for (const face of normalized.faces || []) {
+    const faceKey = cardCacheKey(face.name);
+    if (faceKey) cardLookupCache.set(faceKey, { card: normalized, updatedAt: Number(updatedAt) || Date.now() });
+  }
+}
+
+function getFreshMemoryCard(name) {
+  const entry = cardLookupCache.get(cardCacheKey(name));
+  if (!entry || Date.now() - entry.updatedAt > CARD_CACHE_MAX_AGE_MS) return null;
+  return entry.card;
+}
+
+async function loadCardsFromDatabase(names) {
+  if (!databasePool || !names.length) return new Map();
+  const keys = [...new Set(names.map(cardCacheKey).filter(Boolean))];
+  if (!keys.length) return new Map();
+  const result = await databasePool.query(
+    `SELECT name_key, card_data, EXTRACT(EPOCH FROM updated_at) * 1000 AS updated_ms
+     FROM commander_card_cache
+     WHERE name_key = ANY($1::text[]) AND updated_at >= NOW() - INTERVAL '30 days'`,
+    [keys]
+  );
+  const found = new Map();
+  for (const row of result.rows) {
+    const card = normalizeCardData(row.card_data);
+    if (!card) continue;
+    const updatedAt = Number(row.updated_ms) || Date.now();
+    cacheCardData(row.name_key, card, updatedAt);
+    found.set(row.name_key, card);
+  }
+  return found;
+}
+
+async function saveCardsToDatabase(entries) {
+  if (!databasePool || !entries.length) return;
+  const client = await databasePool.connect();
+  try {
+    await client.query("BEGIN");
+    for (const entry of entries) {
+      const key = cardCacheKey(entry.requestedName || entry.card?.name);
+      const card = normalizeCardData(entry.card);
+      if (!key || !card) continue;
+      await client.query(
+        `INSERT INTO commander_card_cache (name_key, card_data, updated_at)
+         VALUES ($1, $2::jsonb, NOW())
+         ON CONFLICT (name_key) DO UPDATE SET card_data = EXCLUDED.card_data, updated_at = NOW()`,
+        [key, JSON.stringify(card)]
+      );
+      const canonicalKey = cardCacheKey(card.name);
+      if (canonicalKey && canonicalKey !== key) {
+        await client.query(
+          `INSERT INTO commander_card_cache (name_key, card_data, updated_at)
+           VALUES ($1, $2::jsonb, NOW())
+           ON CONFLICT (name_key) DO UPDATE SET card_data = EXCLUDED.card_data, updated_at = NOW()`,
+          [canonicalKey, JSON.stringify(card)]
+        );
+      }
+    }
+    await client.query("COMMIT");
+  } catch (error) {
+    await client.query("ROLLBACK").catch(() => undefined);
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
+function delay(milliseconds) {
+  return new Promise((resolve) => setTimeout(resolve, milliseconds));
+}
+
+async function fetchScryfallCollection(names) {
+  const response = await fetch(SCRYFALL_COLLECTION_URL, {
+    method: "POST",
+    headers: {
+      "User-Agent": CARD_LOOKUP_USER_AGENT,
+      "Accept": "application/json;q=0.9,*/*;q=0.8",
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({ identifiers: names.map((name) => ({ name })) }),
+    signal: AbortSignal.timeout(20000)
+  });
+  const payload = await response.json().catch(() => null);
+  if (!response.ok) {
+    const detail = normalizeText(payload?.details, 240) || `Scryfall returned HTTP ${response.status}.`;
+    throw new Error(detail);
+  }
+  return {
+    data: Array.isArray(payload?.data) ? payload.data : [],
+    notFound: Array.isArray(payload?.not_found) ? payload.not_found : []
+  };
+}
+
+async function resolveCardNames(rawNames) {
+  const names = [...new Map((Array.isArray(rawNames) ? rawNames : [])
+    .map((name) => normalizeText(name, 150))
+    .filter(Boolean)
+    .slice(0, CARD_LOOKUP_MAX_NAMES)
+    .map((name) => [cardCacheKey(name), name])).values()];
+  const resolved = new Map();
+  const unresolved = [];
+
+  for (const name of names) {
+    const cached = getFreshMemoryCard(name);
+    if (cached) resolved.set(cardCacheKey(name), cached);
+    else unresolved.push(name);
+  }
+
+  if (unresolved.length && databasePool) {
+    try {
+      const dbCards = await loadCardsFromDatabase(unresolved);
+      for (const name of unresolved) {
+        const card = dbCards.get(cardCacheKey(name));
+        if (card) resolved.set(cardCacheKey(name), card);
+      }
+    } catch (error) {
+      console.warn("Card cache database read failed:", error.message);
+    }
+  }
+
+  const missing = names.filter((name) => !resolved.has(cardCacheKey(name)));
+  const notFound = [];
+  const newlyFetched = [];
+
+  for (let index = 0; index < missing.length; index += SCRYFALL_BATCH_SIZE) {
+    const batch = missing.slice(index, index + SCRYFALL_BATCH_SIZE);
+    const result = await fetchScryfallCollection(batch);
+    const returnedByName = new Map();
+    for (const rawCard of result.data) {
+      const card = cardDataFromScryfall(rawCard);
+      if (!card) continue;
+      returnedByName.set(cardCacheKey(card.name), card);
+      for (const face of card.faces || []) returnedByName.set(cardCacheKey(face.name), card);
+    }
+    const notFoundKeys = new Set(result.notFound.map((entry) => cardCacheKey(entry?.name)));
+    for (const requestedName of batch) {
+      const key = cardCacheKey(requestedName);
+      const card = returnedByName.get(key);
+      if (card) {
+        resolved.set(key, card);
+        cacheCardData(requestedName, card);
+        newlyFetched.push({ requestedName, card });
+      } else if (notFoundKeys.has(key) || !card) {
+        notFound.push(requestedName);
+      }
+    }
+    if (index + SCRYFALL_BATCH_SIZE < missing.length) await delay(125);
+  }
+
+  if (newlyFetched.length && databasePool) {
+    saveCardsToDatabase(newlyFetched).catch((error) => console.warn("Card cache database write failed:", error.message));
+  }
+
+  return {
+    resolved: names
+      .filter((name) => resolved.has(cardCacheKey(name)))
+      .map((requestedName) => ({ requestedName, card: resolved.get(cardCacheKey(requestedName)) })),
+    notFound: [...new Set(notFound)]
+  };
+}
+
 function migrateCard(card, fallbackOwnerId) {
   const migrated = card && typeof card === "object" ? card : {};
+  const cardData = normalizeCardData(migrated.cardData || migrated);
   return {
     id: normalizeText(migrated.id, 100) || createId(),
-    name: normalizeText(migrated.name, 150) || "Unknown Card",
+    name: normalizeText(migrated.name || cardData?.name, 150) || "Unknown Card",
     ownerId: normalizeText(migrated.ownerId, 100) || fallbackOwnerId,
     controllerId: normalizeText(migrated.controllerId, 100) || fallbackOwnerId,
     tapped: Boolean(migrated.tapped),
@@ -200,11 +441,13 @@ function migrateCard(card, fallbackOwnerId) {
     damageMarked: clamp(Math.floor(Number(migrated.damageMarked) || 0), 0, 999),
     token: Boolean(migrated.token),
     commander: Boolean(migrated.commander),
-    power: normalizeText(migrated.power, 12),
-    toughness: normalizeText(migrated.toughness, 12),
+    power: normalizeText(migrated.power || cardData?.power, 20),
+    toughness: normalizeText(migrated.toughness || cardData?.toughness, 20),
+    loyalty: normalizeText(migrated.loyalty || cardData?.loyalty, 20),
     attacking: Boolean(migrated.attacking),
     blockingCardId: normalizeText(migrated.blockingCardId, 100) || null,
-    notes: normalizeText(migrated.notes, 300)
+    notes: normalizeText(migrated.notes, 300),
+    cardData
   };
 }
 
@@ -315,6 +558,15 @@ async function initializeDatabase() {
     )
   `);
   await databasePool.query(`CREATE INDEX IF NOT EXISTS commander_rooms_expires_at_idx ON commander_rooms (expires_at)`);
+  await databasePool.query(`
+    CREATE TABLE IF NOT EXISTS commander_card_cache (
+      name_key TEXT PRIMARY KEY,
+      card_data JSONB NOT NULL,
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
+  await databasePool.query(`CREATE INDEX IF NOT EXISTS commander_card_cache_updated_at_idx ON commander_card_cache (updated_at)`);
+  await databasePool.query(`DELETE FROM commander_card_cache WHERE updated_at < NOW() - INTERVAL '90 days'`);
   await databasePool.query(`DELETE FROM commander_rooms WHERE expires_at <= NOW()`);
   const result = await databasePool.query(`SELECT room_state FROM commander_rooms WHERE expires_at > NOW() ORDER BY updated_at ASC`);
   for (const row of result.rows) {
@@ -393,27 +645,42 @@ function normalizeDeck(value) {
     .map((entry) => normalizeText(entry, 150))
     .filter(Boolean)
     .slice(0, 2);
+  const commanderData = (Array.isArray(value.commanderData) ? value.commanderData : [])
+    .map(normalizeCardData)
+    .filter(Boolean)
+    .slice(0, 2);
   if (!name || commanders.length === 0 || !Array.isArray(value.cards)) return null;
   const cardMap = new Map();
   for (const rawCard of value.cards.slice(0, 500)) {
-    const cardName = normalizeText(rawCard?.name, 150);
+    const intelligence = normalizeCardData(rawCard?.cardData || rawCard);
+    const cardName = normalizeText(intelligence?.name || rawCard?.name, 150);
     const quantity = clamp(Math.floor(Number(rawCard?.quantity) || 0), 0, 100);
     if (!cardName || quantity <= 0) continue;
     const key = cardName.toLowerCase();
     const existing = cardMap.get(key);
-    if (existing) existing.quantity = clamp(existing.quantity + quantity, 1, 100);
-    else cardMap.set(key, { name: cardName, quantity });
+    if (existing) {
+      existing.quantity = clamp(existing.quantity + quantity, 1, 100);
+      if (!existing.cardData && intelligence) existing.cardData = intelligence;
+    } else {
+      cardMap.set(key, { name: cardName, quantity, cardData: intelligence });
+    }
   }
   const cards = [...cardMap.values()];
   const totalCards = cards.reduce((total, card) => total + card.quantity, 0);
   if (cards.length === 0 || totalCards < 10 || totalCards > 250) return null;
-  return { id, name, commanders, cards, totalCards, uniqueCards: cards.length, validation: totalCards === 100 ? "valid" : "warning" };
+  const intelligenceCount = cards.filter((card) => card.cardData?.scryfallId).length;
+  return {
+    id, name, commanders, commanderData, cards, totalCards, uniqueCards: cards.length,
+    intelligenceCount,
+    validation: totalCards === 100 ? "valid" : "warning"
+  };
 }
 
 function createCard(name, ownerId, options = {}) {
+  const cardData = normalizeCardData(options.cardData);
   return migrateCard({
     id: createId(),
-    name,
+    name: cardData?.name || name,
     ownerId,
     controllerId: ownerId,
     tapped: options.tapped,
@@ -421,27 +688,37 @@ function createCard(name, ownerId, options = {}) {
     damageMarked: options.damageMarked,
     token: options.token,
     commander: options.commander,
-    power: options.power,
-    toughness: options.toughness,
+    power: options.power || cardData?.power,
+    toughness: options.toughness || cardData?.toughness,
+    loyalty: options.loyalty || cardData?.loyalty,
     attacking: options.attacking,
     blockingCardId: options.blockingCardId,
-    notes: options.notes
+    notes: options.notes,
+    cardData
   }, ownerId);
 }
 
 function buildGameState(player, startingLife, allPlayerIds) {
   const expandedDeck = [];
   for (const entry of player.deck.cards) {
-    for (let quantity = 0; quantity < entry.quantity; quantity += 1) expandedDeck.push(createCard(entry.name, player.id));
+    for (let quantity = 0; quantity < entry.quantity; quantity += 1) {
+      expandedDeck.push(createCard(entry.name, player.id, { cardData: entry.cardData }));
+    }
   }
   const commandZone = [];
-  for (const commanderName of player.deck.commanders) {
+  for (let commanderIndex = 0; commanderIndex < player.deck.commanders.length; commanderIndex += 1) {
+    const commanderName = player.deck.commanders[commanderIndex];
     const index = expandedDeck.findIndex((card) => card.name.toLowerCase() === commanderName.toLowerCase());
     if (index >= 0) {
       const [card] = expandedDeck.splice(index, 1);
       card.commander = true;
       commandZone.push(card);
-    } else commandZone.push(createCard(commanderName, player.id, { commander: true }));
+    } else {
+      const data = player.deck.commanderData?.find((card) => cardDataFromScryfall(card)?.name?.toLowerCase() === commanderName.toLowerCase())
+        || player.deck.commanderData?.[commanderIndex]
+        || null;
+      commandZone.push(createCard(commanderName, player.id, { commander: true, cardData: data }));
+    }
   }
   const library = shuffle(expandedDeck);
   const hand = library.splice(0, Math.min(7, library.length));
@@ -519,6 +796,7 @@ function publicDeck(deck) {
     commanders: deck.commanders,
     totalCards: deck.totalCards,
     uniqueCards: deck.uniqueCards,
+    intelligenceCount: deck.intelligenceCount || 0,
     validation: deck.validation
   } : null;
 }
@@ -536,6 +814,8 @@ function publicCard(card) {
     commander: card.commander,
     power: card.power,
     toughness: card.toughness,
+    loyalty: card.loyalty,
+    cardData: card.cardData,
     attacking: card.attacking,
     blockingCardId: card.blockingCardId,
     notes: card.notes,
@@ -1021,12 +1301,28 @@ function processGameAction(room, actor, action) {
   return { success: true };
 }
 
+
+app.post("/api/cards/resolve", async (request, response) => {
+  const names = Array.isArray(request.body?.names) ? request.body.names : [];
+  if (!names.length) return response.status(400).json({ success: false, error: "Submit at least one card name." });
+  if (names.length > CARD_LOOKUP_MAX_NAMES) {
+    return response.status(400).json({ success: false, error: `A maximum of ${CARD_LOOKUP_MAX_NAMES} names can be resolved at once.` });
+  }
+  try {
+    const result = await resolveCardNames(names);
+    return response.status(200).json({ success: true, source: "Scryfall", ...result });
+  } catch (error) {
+    console.error("Card lookup failed:", error);
+    return response.status(502).json({ success: false, error: normalizeText(error?.message, 240) || "Card lookup failed." });
+  }
+});
+
 app.get("/api/health", (request, response) => {
   response.status(200).json({
     success: true,
     status: "online",
     app: "Torn Commander Sandbox",
-    version: "8.0.0",
+    version: "9.0.0",
     connectedSockets: io.engine.clientsCount,
     activeRooms: rooms.size,
     persistence: persistenceSummary(),
@@ -1035,7 +1331,7 @@ app.get("/api/health", (request, response) => {
 });
 
 app.get("/api", (request, response) => {
-  response.status(200).json({ success: true, name: "Torn Commander Sandbox API", version: "8.0.0", persistence: persistenceSummary() });
+  response.status(200).json({ success: true, name: "Torn Commander Sandbox API", version: "9.0.0", persistence: persistenceSummary() });
 });
 
 io.on("connection", (socket) => {
@@ -1256,8 +1552,10 @@ const cleanupInterval = setInterval(async () => {
     }
   }
   if (databasePool) {
-    try { await databasePool.query(`DELETE FROM commander_rooms WHERE expires_at <= NOW()`); }
-    catch (error) { console.error("Database cleanup failed:", error); }
+    try {
+      await databasePool.query(`DELETE FROM commander_rooms WHERE expires_at <= NOW()`);
+      await databasePool.query(`DELETE FROM commander_card_cache WHERE updated_at < NOW() - INTERVAL '90 days'`);
+    } catch (error) { console.error("Database cleanup failed:", error); }
   }
 }, CLEANUP_INTERVAL_MS);
 cleanupInterval.unref();
@@ -1283,7 +1581,7 @@ async function start() {
     console.error("PostgreSQL initialization failed. Continuing with memory:", error);
   }
   server.listen(PORT, "0.0.0.0", () => {
-    console.log(`Torn Commander Sandbox v8 running on port ${PORT}`);
+    console.log(`Torn Commander Sandbox v9 running on port ${PORT}`);
   });
 }
 
@@ -1315,7 +1613,9 @@ module.exports = {
   createStartingRollOff,
   createClockwiseTurnOrder,
   performStartingRoll,
-  advanceTurn
+  advanceTurn,
+  normalizeCardData,
+  resolveCardNames
 };
 
 if (require.main === module) start();
