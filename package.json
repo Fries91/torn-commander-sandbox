@@ -1,6 +1,6 @@
 {
   "name": "torn-commander-sandbox",
-  "version": "7.0.0",
+  "version": "8.0.0",
   "private": true,
   "description": "Persistent mobile-friendly MTG Commander sandbox with Arena-style card actions.",
   "main": "server.js",
