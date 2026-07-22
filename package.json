@@ -1,8 +1,8 @@
 {
   "name": "torn-commander-sandbox",
-  "version": "9.0.0",
+  "version": "15.0.0",
   "private": true,
-  "description": "Persistent mobile-friendly MTG Commander sandbox with card intelligence, real images and Arena-style actions.",
+  "description": "Persistent mobile-friendly MTG Commander sandbox with card intelligence, stack, priority, assisted combat, triggers, mana, attachments, special layouts and undo history.",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
