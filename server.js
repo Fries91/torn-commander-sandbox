@@ -31,6 +31,10 @@ const MAX_STACK_ITEMS = 60;
 const MAX_TRIGGER_ITEMS = 80;
 const MAX_ACTION_HISTORY = 250;
 const MAX_UNDO_SNAPSHOTS = 20;
+const MAX_EMOTES = 24;
+const MAX_REPLAY_FRAMES = 80;
+const MAX_SPECTATORS = 50;
+const ALLOWED_TURN_TIMERS = new Set([0, 60, 90, 120, 180, 300]);
 const PHASES = ["Untap", "Upkeep", "Draw", "Main 1", "Beginning Combat", "Declare Attackers", "Declare Blockers", "First-Strike Damage", "Combat Damage", "End Combat", "Main 2", "End", "Cleanup"];
 const ZONES = new Set(["hand", "battlefield", "graveyard", "exile", "commandZone", "library"]);
 const ALLOWED_MAX_PLAYERS = new Set([2, 3, 4, 5, 6]);
@@ -39,7 +43,7 @@ const SCRYFALL_COLLECTION_URL = "https://api.scryfall.com/cards/collection";
 const SCRYFALL_BATCH_SIZE = 75;
 const CARD_CACHE_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000;
 const CARD_LOOKUP_MAX_NAMES = 150;
-const CARD_LOOKUP_USER_AGENT = process.env.SCRYFALL_USER_AGENT || "TornCommanderSandbox/15.0 (+https://torn-commander-sandbox.onrender.com)";
+const CARD_LOOKUP_USER_AGENT = process.env.SCRYFALL_USER_AGENT || "TornCommanderSandbox/20.0 (+https://torn-commander-sandbox.onrender.com)";
 
 const rooms = new Map();
 const disconnectTimers = new Map();
@@ -439,6 +443,41 @@ function normalizeManaPool(value) {
   return result;
 }
 
+function normalizeRoomSettings(value) {
+  const timer = Number(value?.turnTimerSeconds);
+  return {
+    turnTimerSeconds: ALLOWED_TURN_TIMERS.has(timer) ? timer : 0,
+    allowSpectators: value?.allowSpectators !== false,
+    showCombatPreview: value?.showCombatPreview !== false
+  };
+}
+
+function normalizeEmotes(value) {
+  if (!Array.isArray(value)) return [];
+  return value.slice(-MAX_EMOTES).map((entry) => ({
+    id: normalizeText(entry?.id, 100) || createId(),
+    playerId: normalizeText(entry?.playerId, 100),
+    playerName: normalizeText(entry?.playerName, 24) || "Player",
+    emoji: normalizeText(entry?.emoji, 12) || "👍",
+    time: entry?.time || nowIso()
+  }));
+}
+
+function normalizeReplayFrames(value) {
+  if (!Array.isArray(value)) return [];
+  return value.slice(-MAX_REPLAY_FRAMES).map((frame) => ({
+    id: normalizeText(frame?.id, 100) || createId(),
+    time: frame?.time || nowIso(),
+    label: normalizeText(frame?.label, 180) || "Game action",
+    actorName: normalizeText(frame?.actorName, 24),
+    turn: frame?.turn && typeof frame.turn === "object" ? frame.turn : null,
+    phase: normalizeText(frame?.phase, 60),
+    priorityPlayerId: normalizeText(frame?.priorityPlayerId, 100) || null,
+    stack: Array.isArray(frame?.stack) ? frame.stack.slice(-12) : [],
+    players: Array.isArray(frame?.players) ? frame.players.slice(0, 6) : []
+  }));
+}
+
 function normalizeTemporaryEffects(value) {
   if (!Array.isArray(value)) return [];
   return value.slice(-30).map((effect) => ({
@@ -594,13 +633,18 @@ function migrateRoom(room) {
       number: Math.max(1, Math.floor(Number(room.turn?.number) || 1)),
       phaseIndex: clamp(Math.floor(Number(room.turn?.phaseIndex) || 0), 0, PHASES.length - 1),
       activePlayerId,
-      order
+      order,
+      deadlineAt: room.turn?.deadlineAt || null
     };
   } else if (room.status === "rolloff") {
     room.turn = { number: 0, phaseIndex: 0, activePlayerId: null, order: [] };
   } else {
     room.turn = null;
   }
+  room.settings = normalizeRoomSettings(room.settings);
+  room.emotes = normalizeEmotes(room.emotes);
+  room.replayFrames = normalizeReplayFrames(room.replayFrames);
+  room.spectators = [];
   room.stack = Array.isArray(room.stack) ? room.stack.map(normalizeStackItem).filter(Boolean).slice(-MAX_STACK_ITEMS) : [];
   room.triggerQueue = Array.isArray(room.triggerQueue) ? room.triggerQueue.map(normalizeTriggerItem).filter(Boolean).slice(-MAX_TRIGGER_ITEMS) : [];
   room.priority = room.priority && typeof room.priority === "object" ? {
@@ -627,6 +671,7 @@ function persistenceSummary() {
 function persistentRoomState(room) {
   return {
     ...room,
+    spectators: [],
     undoStack: [],
     players: room.players.map((player) => ({ ...player, connected: false, socketId: null }))
   };
@@ -1024,6 +1069,11 @@ function createPublicRoom(room, viewerId = null) {
     createdAt: room.createdAt,
     updatedAt: room.updatedAt,
     startedAt: room.startedAt,
+    settings: { ...normalizeRoomSettings(room.settings) },
+    spectatorCount: Array.isArray(room.spectators) ? room.spectators.length : 0,
+    spectators: (room.spectators || []).map((spectator) => ({ id: spectator.id, name: spectator.name, connected: spectator.connected })),
+    emotes: normalizeEmotes(room.emotes),
+    replayFrames: normalizeReplayFrames(room.replayFrames),
     persistence: persistenceSummary(),
     phases: PHASES,
     turn: room.turn ? { ...room.turn, order: [...(room.turn.order || [])] } : null,
@@ -1054,6 +1104,11 @@ function emitRoomUpdate(room) {
     if (!player.socketId) continue;
     const socket = io.sockets.sockets.get(player.socketId);
     if (socket) socket.emit("room-updated", createPublicRoom(room, player.id));
+  }
+  for (const spectator of room.spectators || []) {
+    if (!spectator.socketId) continue;
+    const socket = io.sockets.sockets.get(spectator.socketId);
+    if (socket) socket.emit("room-updated", createPublicRoom(room, null));
   }
 }
 
@@ -1447,6 +1502,38 @@ function resolveCombatDamage(room, pass = "normal") {
   addLog(room, `${pass === "first" ? "First-strike" : "Normal"} combat damage was resolved with assisted keyword handling.`, "combat");
 }
 
+function resetTurnDeadline(room) {
+  if (!room?.turn) return;
+  const seconds = normalizeRoomSettings(room.settings).turnTimerSeconds;
+  room.turn.deadlineAt = seconds > 0 ? new Date(Date.now() + seconds * 1000).toISOString() : null;
+}
+
+function createReplayFrame(room, actorName, label) {
+  const phase = room.phases?.[room.turn?.phaseIndex] || PHASES[room.turn?.phaseIndex || 0] || "";
+  return {
+    id: createId(),
+    time: nowIso(),
+    label: normalizeText(label, 180) || "Game action",
+    actorName: normalizeText(actorName, 24),
+    turn: room.turn ? { number: room.turn.number, phaseIndex: room.turn.phaseIndex, activePlayerId: room.turn.activePlayerId, order: [...(room.turn.order || [])], deadlineAt: room.turn.deadlineAt || null } : null,
+    phase,
+    priorityPlayerId: room.priority?.playerId || null,
+    stack: room.stack.slice(-12).map((item) => ({ id: item.id, name: item.name, kind: item.kind, controllerId: item.controllerId, targets: [...(item.targets || [])] })),
+    players: room.players.map((player) => ({
+      id: player.id, name: player.name, life: player.game?.life ?? null, poison: player.game?.poison ?? null, commanderTax: player.game?.commanderTax ?? null,
+      handCount: player.game?.hand?.length ?? 0, libraryCount: player.game?.library?.length ?? 0, graveyardCount: player.game?.graveyard?.length ?? 0, exileCount: player.game?.exile?.length ?? 0,
+      battlefield: (player.game?.battlefield || []).map((card) => ({ id: card.id, name: card.name, tapped: card.tapped, counters: { ...card.counters }, damageMarked: card.damageMarked, attacking: card.attacking, defendingPlayerId: card.defendingPlayerId, blockingCardId: card.blockingCardId, attachedToId: card.attachedToId, commander: card.commander, token: card.token }))
+    }))
+  };
+}
+
+function recordReplayFrame(room, actorName, label) {
+  if (room.status !== "started") return;
+  room.replayFrames = Array.isArray(room.replayFrames) ? room.replayFrames : [];
+  room.replayFrames.push(createReplayFrame(room, actorName, label));
+  if (room.replayFrames.length > MAX_REPLAY_FRAMES) room.replayFrames.splice(0, room.replayFrames.length - MAX_REPLAY_FRAMES);
+}
+
 function advanceTurn(room) {
   const players = activePlayers(room);
   if (players.length === 0) return;
@@ -1461,6 +1548,7 @@ function advanceTurn(room) {
   room.turn.number += 1;
   next.game.battlefield.forEach((card) => { card.tapped = false; card.summoningSick = false; });
   resetPriority(room, next.id);
+  resetTurnDeadline(room);
   addLog(room, `Turn ${room.turn.number}: ${next.name} is active. Clockwise play continues.`, "turn");
 }
 
@@ -1515,8 +1603,9 @@ function performStartingRoll(room, player, forcedRoll = null) {
   rollOff.currentEligiblePlayerIds = [];
   rollOff.currentRolls = {};
   room.status = "started";
-  room.turn = { number: 1, phaseIndex: 0, activePlayerId: winnerId, order };
+  room.turn = { number: 1, phaseIndex: 0, activePlayerId: winnerId, order, deadlineAt: null };
   resetPriority(room, winnerId);
+  resetTurnDeadline(room);
   addLog(room, `${winner?.name || "The winner"} won the d20 roll with ${highest} and takes the first turn. Play proceeds clockwise.`, "turn");
   return { success: true, roll, completed: true, winnerPlayerId: winnerId };
 }
@@ -1626,7 +1715,7 @@ function processGameAction(room, actor, action) {
       break;
     }
     case "end-turn": if (room.turn.activePlayerId !== actor.id && room.hostId !== actor.id) return { success: false, error: "Only the active player or host can end the turn." }; advanceTurn(room); break;
-    case "set-active-player": if (room.hostId !== actor.id) return { success: false, error: "Only the host can change the active player." }; if (!targetPlayer.game || targetPlayer.game.conceded) return { success: false, error: "That player is not active." }; clearCombat(room); clearDamage(room); room.turn.activePlayerId = targetPlayer.id; room.turn.phaseIndex = 0; targetPlayer.game.battlefield.forEach((card) => { card.tapped = false; card.summoningSick = false; }); resetPriority(room, targetPlayer.id); addLog(room, `${actor.name} made ${targetPlayer.name} the active player.`, "turn"); break;
+    case "set-active-player": if (room.hostId !== actor.id) return { success: false, error: "Only the host can change the active player." }; if (!targetPlayer.game || targetPlayer.game.conceded) return { success: false, error: "That player is not active." }; clearCombat(room); clearDamage(room); room.turn.activePlayerId = targetPlayer.id; room.turn.phaseIndex = 0; targetPlayer.game.battlefield.forEach((card) => { card.tapped = false; card.summoningSick = false; }); resetPriority(room, targetPlayer.id); resetTurnDeadline(room); addLog(room, `${actor.name} made ${targetPlayer.name} the active player.`, "turn"); break;
     case "undo-last": { if (room.hostId !== actor.id) return { success: false, error: "Only the host can undo a shared game action." }; const entry = room.undoStack.pop(); if (!entry || !restoreSnapshot(room, entry)) return { success: false, error: "There is no action available to undo." }; addLog(room, `${actor.name} undid: ${entry.label}.`, "undo"); recordAction(room, actor, "undo", entry.label); return { success: true }; }
     case "concede": actor.game.conceded = true; addLog(room, `${actor.name} conceded the game.`, "warning"); if (room.turn.activePlayerId === actor.id) advanceTurn(room); break;
     default: return { success: false, error: "That game action is not supported." };
@@ -1657,8 +1746,8 @@ app.get("/api/health", (request, response) => {
   response.status(200).json({
     success: true,
     status: "online",
-    app: "Torn Commander Sandbox",
-    version: "15.0.0",
+    app: "Arena Commander Table",
+    version: "20.0.0",
     connectedSockets: io.engine.clientsCount,
     activeRooms: rooms.size,
     persistence: persistenceSummary(),
@@ -1667,7 +1756,7 @@ app.get("/api/health", (request, response) => {
 });
 
 app.get("/api", (request, response) => {
-  response.status(200).json({ success: true, name: "Torn Commander Sandbox API", version: "15.0.0", persistence: persistenceSummary() });
+  response.status(200).json({ success: true, name: "Arena Commander Table API", version: "20.0.0", persistence: persistenceSummary() });
 });
 
 io.on("connection", (socket) => {
@@ -1682,7 +1771,7 @@ io.on("connection", (socket) => {
       const player = { id: createId(), name, ready: false, connected: true, socketId: socket.id, sessionToken: createSessionToken(), deck: null, game: null, joinedAt: timestamp, lastSeenAt: timestamp };
       const maxPlayers = ALLOWED_MAX_PLAYERS.has(Number(payload?.maxPlayers)) ? Number(payload.maxPlayers) : 6;
       const startingLife = ALLOWED_STARTING_LIFE.has(Number(payload?.startingLife)) ? Number(payload.startingLife) : 40;
-      const room = { code: createRoomCode(), hostId: player.id, privateRoom: true, maxPlayers, startingLife, status: "waiting", createdAt: timestamp, updatedAt: timestamp, startedAt: null, turn: null, rollOff: null, stack: [], triggerQueue: [], priority: { playerId: null, passedPlayerIds: [] }, actionHistory: [], undoStack: [], players: [player], chat: [], log: [] };
+      const room = { code: createRoomCode(), hostId: player.id, privateRoom: true, maxPlayers, startingLife, status: "waiting", createdAt: timestamp, updatedAt: timestamp, startedAt: null, turn: null, rollOff: null, settings: normalizeRoomSettings(null), spectators: [], emotes: [], replayFrames: [], stack: [], triggerQueue: [], priority: { playerId: null, passedPlayerIds: [] }, actionHistory: [], undoStack: [], players: [player], chat: [], log: [] };
       rooms.set(room.code, room);
       attachSocket(socket, room, player);
       addLog(room, `${name} created the room.`, "room");
@@ -1768,6 +1857,13 @@ io.on("connection", (socket) => {
     if (maxPlayers < auth.room.players.length) return fail(callback, "The maximum cannot be lower than the number of players already present.");
     auth.room.maxPlayers = maxPlayers;
     if (ALLOWED_STARTING_LIFE.has(Number(payload?.startingLife))) auth.room.startingLife = Number(payload.startingLife);
+    const timer = Number(payload?.turnTimerSeconds);
+    auth.room.settings = normalizeRoomSettings({
+      ...auth.room.settings,
+      turnTimerSeconds: ALLOWED_TURN_TIMERS.has(timer) ? timer : auth.room.settings?.turnTimerSeconds,
+      allowSpectators: payload?.allowSpectators == null ? auth.room.settings?.allowSpectators : Boolean(payload.allowSpectators),
+      showCombatPreview: payload?.showCombatPreview == null ? auth.room.settings?.showCombatPreview : Boolean(payload.showCombatPreview)
+    });
     acknowledge(callback, { success: true, room: createPublicRoom(auth.room, auth.player.id) });
     emitRoomUpdate(auth.room);
   });
@@ -1791,6 +1887,8 @@ io.on("connection", (socket) => {
     auth.room.priority = { playerId: null, passedPlayerIds: [] };
     auth.room.actionHistory = [];
     auth.room.undoStack = [];
+    auth.room.replayFrames = [];
+    auth.room.emotes = [];
     addLog(auth.room, "Starting-player d20 roll-off began. Every player must roll once; tied high rolls reroll.", "roll");
     acknowledge(callback, { success: true, room: createPublicRoom(auth.room, auth.player.id) });
     emitRoomUpdate(auth.room);
@@ -1801,6 +1899,7 @@ io.on("connection", (socket) => {
     if (!auth.success) return acknowledge(callback, auth);
     const result = performStartingRoll(auth.room, auth.player);
     if (!result.success) return acknowledge(callback, result);
+    if (result.completed) recordReplayFrame(auth.room, auth.player.name, "Starting player chosen");
     acknowledge(callback, { ...result, room: createPublicRoom(auth.room, auth.player.id) });
     emitRoomUpdate(auth.room);
   });
@@ -1808,8 +1907,10 @@ io.on("connection", (socket) => {
   socket.on("game-action", (payload, callback) => {
     const auth = authenticationFrom(payload);
     if (!auth.success) return acknowledge(callback, auth);
-    const result = processGameAction(auth.room, auth.player, payload?.action || {});
+    const action = payload?.action || {};
+    const result = processGameAction(auth.room, auth.player, action);
     if (!result.success) return acknowledge(callback, result);
+    recordReplayFrame(auth.room, auth.player.name, normalizeText(action.type, 80) || "Game action");
     acknowledge(callback, { success: true, room: createPublicRoom(auth.room, auth.player.id) });
     emitRoomUpdate(auth.room);
   });
@@ -1867,6 +1968,8 @@ io.on("connection", (socket) => {
     auth.room.priority = { playerId: null, passedPlayerIds: [] };
     auth.room.actionHistory = [];
     auth.room.undoStack = [];
+    auth.room.replayFrames = [];
+    auth.room.emotes = [];
     auth.room.players.forEach((player) => { player.game = null; player.ready = false; });
     auth.room.chat = [];
     auth.room.log = [];
@@ -1875,7 +1978,54 @@ io.on("connection", (socket) => {
     emitRoomUpdate(auth.room);
   });
 
+  socket.on("join-spectator", (payload, callback) => {
+    const roomCode = normalizeRoomCode(payload?.roomCode);
+    const room = rooms.get(roomCode);
+    const name = normalizePlayerName(payload?.name) || "Spectator";
+    if (!room) return fail(callback, "That room code was not found.");
+    if (!normalizeRoomSettings(room.settings).allowSpectators) return fail(callback, "Spectators are disabled for this room.");
+    room.spectators = Array.isArray(room.spectators) ? room.spectators : [];
+    if (room.spectators.length >= MAX_SPECTATORS) return fail(callback, "That spectator gallery is full.");
+    if (socket.data.roomCode) detachSocket(socket, socket.data.roomCode);
+    const spectator = { id: createId(), name, socketId: socket.id, connected: true, joinedAt: nowIso() };
+    room.spectators.push(spectator);
+    socket.join(`commander-room:${room.code}`);
+    socket.data.spectatorRoomCode = room.code;
+    socket.data.spectatorId = spectator.id;
+    acknowledge(callback, { success: true, spectatorId: spectator.id, room: createPublicRoom(room, null) });
+    emitRoomUpdate(room);
+  });
+
+  socket.on("leave-spectator", (payload, callback) => {
+    const room = rooms.get(socket.data.spectatorRoomCode);
+    if (room) {
+      room.spectators = (room.spectators || []).filter((entry) => entry.id !== socket.data.spectatorId);
+      socket.leave(`commander-room:${room.code}`);
+      emitRoomUpdate(room);
+    }
+    socket.data.spectatorRoomCode = null;
+    socket.data.spectatorId = null;
+    acknowledge(callback, { success: true });
+  });
+
+  socket.on("send-emote", (payload, callback) => {
+    const auth = authenticationFrom(payload);
+    if (!auth.success) return acknowledge(callback, auth);
+    const allowed = new Set(["👍", "👏", "🔥", "😮", "😂", "🤔", "⚔️", "☠️", "GG", "Nice!"]);
+    const emoji = normalizeText(payload?.emoji, 12);
+    if (!allowed.has(emoji)) return fail(callback, "Choose one of the available table emotes.");
+    auth.room.emotes = normalizeEmotes([...(auth.room.emotes || []), { id: createId(), playerId: auth.player.id, playerName: auth.player.name, emoji, time: nowIso() }]);
+    addLog(auth.room, `${auth.player.name} sent ${emoji}.`, "emote");
+    acknowledge(callback, { success: true });
+    emitRoomUpdate(auth.room);
+  });
+
   socket.on("disconnect", () => {
+    const spectatorRoom = rooms.get(socket.data.spectatorRoomCode);
+    if (spectatorRoom) {
+      spectatorRoom.spectators = (spectatorRoom.spectators || []).filter((entry) => entry.id !== socket.data.spectatorId);
+      emitRoomUpdate(spectatorRoom);
+    }
     const room = rooms.get(socket.data.roomCode);
     const player = findPlayer(room, socket.data.playerId);
     if (!room || !player || player.socketId !== socket.id) return;
@@ -1927,7 +2077,7 @@ async function start() {
     console.error("PostgreSQL initialization failed. Continuing with memory:", error);
   }
   server.listen(PORT, "0.0.0.0", () => {
-    console.log(`Torn Commander Sandbox v15 running on port ${PORT}`);
+    console.log(`Arena Commander Table v20 running on port ${PORT}`);
   });
 }
 
@@ -1961,7 +2111,11 @@ module.exports = {
   performStartingRoll,
   advanceTurn,
   normalizeCardData,
-  resolveCardNames
+  resolveCardNames,
+  normalizeRoomSettings,
+  resetTurnDeadline,
+  recordReplayFrame,
+  createPublicRoom
 };
 
 if (require.main === module) start();
