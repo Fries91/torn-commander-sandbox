@@ -1,12 +1,15 @@
 {
-  "name": "Torn Commander Sandbox",
+  "name": "Arena Commander Table",
   "short_name": "Commander",
-  "description": "A private 2–6 player MTG Commander sandbox for the Torn community.",
+  "description": "A persistent Arena-style 2–6 player MTG Commander table.",
   "start_url": "/",
+  "scope": "/",
   "display": "standalone",
-  "background_color": "#101112",
-  "theme_color": "#101112",
+  "display_override": ["fullscreen", "standalone", "minimal-ui"],
+  "background_color": "#07100e",
+  "theme_color": "#07100e",
   "orientation": "any",
+  "categories": ["games", "entertainment"],
   "icons": [
     {
       "src": "/icon.svg",
