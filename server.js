@@ -34,6 +34,9 @@ const MAX_UNDO_SNAPSHOTS = 20;
 const MAX_EMOTES = 24;
 const MAX_REPLAY_FRAMES = 80;
 const MAX_SPECTATORS = 50;
+const MAX_RULE_DECISIONS = 80;
+const MAX_RULE_EFFECTS = 160;
+const RULES_VERSION = "30.0";
 const ALLOWED_TURN_TIMERS = new Set([0, 60, 90, 120, 180, 300]);
 const PHASES = ["Untap", "Upkeep", "Draw", "Main 1", "Beginning Combat", "Declare Attackers", "Declare Blockers", "First-Strike Damage", "Combat Damage", "End Combat", "Main 2", "End", "Cleanup"];
 const ZONES = new Set(["hand", "battlefield", "graveyard", "exile", "commandZone", "library"]);
@@ -43,7 +46,7 @@ const SCRYFALL_COLLECTION_URL = "https://api.scryfall.com/cards/collection";
 const SCRYFALL_BATCH_SIZE = 75;
 const CARD_CACHE_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000;
 const CARD_LOOKUP_MAX_NAMES = 150;
-const CARD_LOOKUP_USER_AGENT = process.env.SCRYFALL_USER_AGENT || "TornCommanderSandbox/20.0 (+https://torn-commander-sandbox.onrender.com)";
+const CARD_LOOKUP_USER_AGENT = process.env.SCRYFALL_USER_AGENT || "TornCommanderSandbox/30.0 (+https://torn-commander-sandbox.onrender.com)";
 
 const rooms = new Map();
 const disconnectTimers = new Map();
@@ -448,7 +451,11 @@ function normalizeRoomSettings(value) {
   return {
     turnTimerSeconds: ALLOWED_TURN_TIMERS.has(timer) ? timer : 0,
     allowSpectators: value?.allowSpectators !== false,
-    showCombatPreview: value?.showCombatPreview !== false
+    showCombatPreview: value?.showCombatPreview !== false,
+    enforceDeckRules: value?.enforceDeckRules !== false,
+    allowInvalidDecks: Boolean(value?.allowInvalidDecks),
+    autoStateBasedActions: value?.autoStateBasedActions !== false,
+    freeCommanderMulligan: value?.freeCommanderMulligan !== false
   };
 }
 
@@ -493,6 +500,70 @@ function normalizeTemporaryEffects(value) {
 function normalizeTargetList(value) {
   if (!Array.isArray(value)) return [];
   return [...new Set(value.map((entry) => normalizeText(entry, 140)).filter(Boolean))].slice(0, 20);
+}
+
+function normalizeRuleEffect(value) {
+  if (!value || typeof value !== "object") return null;
+  return {
+    id: normalizeText(value.id, 100) || createId(),
+    kind: ["continuous", "replacement", "prevention", "delayed", "emblem"].includes(value.kind) ? value.kind : "continuous",
+    label: normalizeText(value.label, 180) || "Rule effect",
+    sourceCardId: normalizeText(value.sourceCardId, 100) || null,
+    controllerId: normalizeText(value.controllerId, 100) || null,
+    targetIds: normalizeTargetList(value.targetIds),
+    event: normalizeText(value.event, 60),
+    operation: normalizeText(value.operation, 60),
+    amount: clamp(Math.floor(Number(value.amount) || 0), -9999, 9999),
+    power: clamp(Math.floor(Number(value.power) || 0), -999, 999),
+    toughness: clamp(Math.floor(Number(value.toughness) || 0), -999, 999),
+    keyword: normalizeText(value.keyword, 80),
+    layer: clamp(Math.floor(Number(value.layer) || 7), 1, 7),
+    timestamp: value.timestamp || nowIso(),
+    expires: ["end-of-turn", "end-of-combat", "until-removed", "next-turn"].includes(value.expires) ? value.expires : "until-removed",
+    optional: Boolean(value.optional),
+    usesRemaining: value.usesRemaining == null ? null : clamp(Math.floor(Number(value.usesRemaining) || 0), 0, 999),
+    notes: normalizeText(value.notes, 500)
+  };
+}
+
+function normalizeDecision(value) {
+  if (!value || typeof value !== "object") return null;
+  return {
+    id: normalizeText(value.id, 100) || createId(),
+    type: normalizeText(value.type, 60) || "choice",
+    prompt: normalizeText(value.prompt, 500) || "Make a choice",
+    playerIds: normalizeStringArray(value.playerIds, 6, 100),
+    options: Array.isArray(value.options) ? value.options.slice(0, 80).map((option) => ({ id: normalizeText(option?.id, 120), label: normalizeText(option?.label, 180) })).filter((option) => option.id) : [],
+    secret: Boolean(value.secret),
+    minimum: clamp(Math.floor(Number(value.minimum) || 1), 0, 80),
+    maximum: clamp(Math.floor(Number(value.maximum) || 1), 0, 80),
+    responses: value.responses && typeof value.responses === "object" ? value.responses : {},
+    status: ["open", "resolved", "cancelled"].includes(value.status) ? value.status : "open",
+    context: value.context && typeof value.context === "object" ? value.context : {},
+    createdAt: value.createdAt || nowIso()
+  };
+}
+
+function normalizeRulesState(value, playerIds = []) {
+  const validIds = new Set(playerIds);
+  const source = value && typeof value === "object" ? value : {};
+  return {
+    version: RULES_VERSION,
+    gameOver: Boolean(source.gameOver),
+    winnerPlayerIds: normalizeStringArray(source.winnerPlayerIds, 6, 100).filter((id) => validIds.has(id)),
+    loserPlayerIds: normalizeStringArray(source.loserPlayerIds, 6, 100).filter((id) => validIds.has(id)),
+    monarchPlayerId: validIds.has(source.monarchPlayerId) ? source.monarchPlayerId : null,
+    initiativePlayerId: validIds.has(source.initiativePlayerId) ? source.initiativePlayerId : null,
+    dayNight: ["day", "night"].includes(source.dayNight) ? source.dayNight : null,
+    decisions: (Array.isArray(source.decisions) ? source.decisions : []).map(normalizeDecision).filter(Boolean).slice(-MAX_RULE_DECISIONS),
+    continuousEffects: (Array.isArray(source.continuousEffects) ? source.continuousEffects : []).map(normalizeRuleEffect).filter(Boolean).slice(-MAX_RULE_EFFECTS),
+    replacementEffects: (Array.isArray(source.replacementEffects) ? source.replacementEffects : []).map(normalizeRuleEffect).filter(Boolean).slice(-MAX_RULE_EFFECTS),
+    emblems: (Array.isArray(source.emblems) ? source.emblems : []).map(normalizeRuleEffect).filter(Boolean).slice(-MAX_RULE_EFFECTS),
+    dungeonProgress: source.dungeonProgress && typeof source.dungeonProgress === "object" ? source.dungeonProgress : {},
+    loopNotes: Array.isArray(source.loopNotes) ? source.loopNotes.slice(-40).map((entry) => ({ id: normalizeText(entry?.id,100)||createId(), text: normalizeText(entry?.text,500), result: normalizeText(entry?.result,300), createdAt: entry?.createdAt||nowIso() })) : [],
+    lastStateCheckAt: source.lastStateCheckAt || null,
+    stateCheckCount: clamp(Math.floor(Number(source.stateCheckCount) || 0), 0, 999999)
+  };
 }
 
 function normalizeStackItem(value) {
@@ -563,6 +634,16 @@ function migrateCard(card, fallbackOwnerId) {
     temporaryEffects: normalizeTemporaryEffects(migrated.temporaryEffects),
     chosenValues: migrated.chosenValues && typeof migrated.chosenValues === "object" ? migrated.chosenValues : {},
     copiedFromCardId: normalizeText(migrated.copiedFromCardId, 100) || null,
+    linkedCardIds: normalizeStringArray(migrated.linkedCardIds, 30, 100),
+    mergedCardIds: normalizeStringArray(migrated.mergedCardIds, 30, 100),
+    revealed: Boolean(migrated.revealed),
+    objectType: normalizeText(migrated.objectType, 40) || "card",
+    defense: normalizeText(migrated.defense, 20),
+    lore: clamp(Math.floor(Number(migrated.lore) || 0), 0, 999),
+    level: clamp(Math.floor(Number(migrated.level) || 0), 0, 999),
+    ruleEffects: (Array.isArray(migrated.ruleEffects) ? migrated.ruleEffects : []).map(normalizeRuleEffect).filter(Boolean).slice(-60),
+    judgeOverrides: migrated.judgeOverrides && typeof migrated.judgeOverrides === "object" ? migrated.judgeOverrides : {},
+    specialState: migrated.specialState && typeof migrated.specialState === "object" ? migrated.specialState : {},
     notes: normalizeText(migrated.notes, 500),
     cardData
   };
@@ -589,7 +670,18 @@ function migrateGame(game, playerId, startingLife, allPlayerIds) {
     exile: migrateZone("exile"),
     commandZone: migrateZone("commandZone"),
     commanderDamage,
-    manaPool: normalizeManaPool(source.manaPool)
+    manaPool: normalizeManaPool(source.manaPool),
+    lost: Boolean(source.lost),
+    lossReason: normalizeText(source.lossReason, 240),
+    drawFailed: Boolean(source.drawFailed),
+    mulliganCount: clamp(Math.floor(Number(source.mulliganCount) || 0), 0, 99),
+    mulliganBottomRequired: clamp(Math.floor(Number(source.mulliganBottomRequired) || 0), 0, 99),
+    pregameComplete: Boolean(source.pregameComplete),
+    energy: clamp(Math.floor(Number(source.energy) || 0), 0, 999),
+    experience: clamp(Math.floor(Number(source.experience) || 0), 0, 999),
+    radiation: clamp(Math.floor(Number(source.radiation) || 0), 0, 999),
+    maxHandSize: source.maxHandSize == null ? 7 : clamp(Math.floor(Number(source.maxHandSize) || 0), -1, 999),
+    companion: source.companion ? migrateCard(source.companion, playerId) : null
   };
 }
 
@@ -653,6 +745,8 @@ function migrateRoom(room) {
   } : { playerId: room.turn?.activePlayerId || allPlayerIds[0] || null, passedPlayerIds: [] };
   room.actionHistory = Array.isArray(room.actionHistory) ? room.actionHistory.slice(-MAX_ACTION_HISTORY) : [];
   room.undoStack = [];
+  room.rules = normalizeRulesState(room.rules, allPlayerIds);
+  room.players.forEach((player) => { if (player.deck) player.deckValidation = validateCommanderDeck(player.deck); });
   room.updatedAt = room.updatedAt || nowIso();
   return room;
 }
@@ -809,6 +903,33 @@ function normalizeDeck(value) {
   };
 }
 
+function validateCommanderDeck(deck) {
+  const normalized = normalizeDeck(deck);
+  if (!normalized) return { valid: false, errors: ["Deck data is incomplete."], warnings: [], colorIdentity: [] };
+  const errors = [];
+  const warnings = [];
+  if (normalized.totalCards !== 100) errors.push(`Commander decks need exactly 100 cards including commander(s); this deck has ${normalized.totalCards}.`);
+  if (normalized.commanders.length < 1 || normalized.commanders.length > 2) errors.push("Choose one commander, or two commanders when their card rules allow it.");
+  const commanderColors = new Set();
+  for (const data of normalized.commanderData || []) for (const color of data.colorIdentity || []) commanderColors.add(color);
+  if (!(normalized.commanderData || []).length) warnings.push("Commander color identity could not be fully verified because commander data is missing.");
+  const counts = new Map();
+  for (const entry of normalized.cards) {
+    const key = entry.name.toLocaleLowerCase("en-US");
+    counts.set(key, (counts.get(key) || 0) + entry.quantity);
+    const typeLine = entry.cardData?.typeLine || "";
+    const oracle = entry.cardData?.oracleText || "";
+    const unlimited = /basic land/i.test(typeLine) || /a deck can have any number of cards named/i.test(oracle) || /up to nine cards named/i.test(oracle);
+    if (entry.quantity > 1 && !unlimited && !normalized.commanders.some((name) => name.toLocaleLowerCase("en-US") === key)) errors.push(`${entry.name} appears ${entry.quantity} times.`);
+    for (const color of entry.cardData?.colorIdentity || []) if (commanderColors.size && !commanderColors.has(color)) errors.push(`${entry.name} is outside the commander's color identity.`);
+  }
+  for (const commander of normalized.commanders) if (!counts.has(commander.toLocaleLowerCase("en-US"))) warnings.push(`${commander} is not present in the submitted deck list; it will still be created in the command zone.`);
+  const unrecognized = normalized.cards.filter((entry) => !entry.cardData?.scryfallId).length;
+  if (unrecognized) warnings.push(`${unrecognized} unique card name(s) could not be rules-validated and remain manually playable.`);
+  warnings.push("The current Commander banned list is not hard-coded; hosts can reject or allow cards using Judge Mode so rule updates never lock the app.");
+  return { valid: errors.length === 0, errors: [...new Set(errors)], warnings: [...new Set(warnings)], colorIdentity: [...commanderColors], checkedAt: nowIso() };
+}
+
 function createCard(name, ownerId, options = {}) {
   const cardData = normalizeCardData(options.cardData);
   return migrateCard({
@@ -879,7 +1000,18 @@ function buildGameState(player, startingLife, allPlayerIds) {
     exile: [],
     commandZone,
     commanderDamage,
-    manaPool: normalizeManaPool(null)
+    manaPool: normalizeManaPool(null),
+    lost: false,
+    lossReason: "",
+    drawFailed: false,
+    mulliganCount: 0,
+    mulliganBottomRequired: 0,
+    pregameComplete: false,
+    energy: 0,
+    experience: 0,
+    radiation: 0,
+    maxHandSize: 7,
+    companion: null
   };
 }
 
@@ -948,11 +1080,14 @@ function effectiveStats(card) {
   if (basePower === null || baseToughness === null) return null;
   const plus = Number(card.counters?.["+1/+1"]) || 0;
   const minus = Number(card.counters?.["-1/-1"]) || 0;
-  const temporaryPower = (card.temporaryEffects || []).reduce((sum, effect) => sum + (Number(effect.power) || 0), 0);
-  const temporaryToughness = (card.temporaryEffects || []).reduce((sum, effect) => sum + (Number(effect.toughness) || 0), 0);
+  const layered = [...(card.ruleEffects || [])].sort((a,b) => (a.layer - b.layer) || String(a.timestamp).localeCompare(String(b.timestamp)));
+  const temporaryPower = [...(card.temporaryEffects || []), ...layered].reduce((sum, effect) => sum + (Number(effect.power) || 0), 0);
+  const temporaryToughness = [...(card.temporaryEffects || []), ...layered].reduce((sum, effect) => sum + (Number(effect.toughness) || 0), 0);
+  const overridePower = parseStat(card.judgeOverrides?.power);
+  const overrideToughness = parseStat(card.judgeOverrides?.toughness);
   return {
-    power: clamp(basePower + plus - minus + temporaryPower, -99, 999),
-    toughness: clamp(baseToughness + plus - minus + temporaryToughness, -99, 999)
+    power: clamp((overridePower ?? basePower) + plus - minus + temporaryPower, -99, 999),
+    toughness: clamp((overrideToughness ?? baseToughness) + plus - minus + temporaryToughness, -99, 999)
   };
 }
 
@@ -982,7 +1117,8 @@ function publicDeck(deck) {
     totalCards: deck.totalCards,
     uniqueCards: deck.uniqueCards,
     intelligenceCount: deck.intelligenceCount || 0,
-    validation: deck.validation
+    validation: deck.validation,
+    validationDetails: validateCommanderDeck(deck)
   } : null;
 }
 
@@ -1016,6 +1152,16 @@ function publicCard(card) {
     temporaryEffects: card.temporaryEffects.map((effect) => ({ ...effect })),
     chosenValues: { ...card.chosenValues },
     copiedFromCardId: card.copiedFromCardId,
+    linkedCardIds: [...card.linkedCardIds],
+    mergedCardIds: [...card.mergedCardIds],
+    revealed: card.revealed,
+    objectType: card.objectType,
+    defense: card.defense,
+    lore: card.lore,
+    level: card.level,
+    ruleEffects: card.ruleEffects.map((effect) => ({ ...effect })),
+    judgeOverrides: { ...card.judgeOverrides },
+    specialState: { ...card.specialState },
     notes: card.notes,
     keywords: [...keywordSet(card)],
     currentFace: card.faceDown ? null : face,
@@ -1035,6 +1181,16 @@ function publicGame(game, isViewer) {
     libraryCount: game.library.length,
     commanderDamage: { ...game.commanderDamage },
     manaPool: { ...game.manaPool },
+    lost: game.lost,
+    lossReason: game.lossReason,
+    mulliganCount: game.mulliganCount,
+    mulliganBottomRequired: game.mulliganBottomRequired,
+    pregameComplete: game.pregameComplete,
+    energy: game.energy,
+    experience: game.experience,
+    radiation: game.radiation,
+    maxHandSize: game.maxHandSize,
+    companion: game.companion ? publicCard(game.companion) : null,
     battlefield: game.battlefield.map(publicCard),
     graveyard: game.graveyard.map(publicCard),
     exile: game.exile.map(publicCard),
@@ -1081,6 +1237,7 @@ function createPublicRoom(room, viewerId = null) {
     stack: room.stack.map((item) => ({ ...item, card: item.card ? publicCard(item.card) : null })),
     triggerQueue: room.triggerQueue.map((item) => ({ ...item })),
     priority: { ...room.priority, passedPlayerIds: [...(room.priority?.passedPlayerIds || [])] },
+    rules: normalizeRulesState(room.rules, room.players.map((player) => player.id)),
     actionHistory: room.actionHistory.slice(-100),
     canUndo: Boolean(room.undoStack?.length),
     chat: room.chat.slice(-MAX_CHAT_MESSAGES),
@@ -1242,7 +1399,7 @@ function expireEndOfTurnEffects(room) {
 function activePlayers(room) {
   const order = Array.isArray(room.turn?.order) && room.turn.order.length ? room.turn.order : room.players.map((player) => player.id);
   const byId = new Map(room.players.map((player) => [player.id, player]));
-  return order.map((id) => byId.get(id)).filter((player) => player?.game && !player.game.conceded);
+  return order.map((id) => byId.get(id)).filter((player) => player?.game && !player.game.conceded && !player.game.lost);
 }
 
 function activePlayerIds(room) {
@@ -1557,6 +1714,7 @@ function performStartingRoll(room, player, forcedRoll = null) {
     return { success: false, error: "The starting-player roll is not active." };
   }
   if (!player.connected) return { success: false, error: "Reconnect before rolling." };
+  if (player.game?.mulliganBottomRequired > 0) return { success:false, error:"Finish putting mulligan cards on the bottom before rolling." };
   const rollOff = room.rollOff;
   if (!rollOff.currentEligiblePlayerIds.includes(player.id)) {
     return { success: false, error: "Only the tied players need to roll this round." };
@@ -1616,16 +1774,177 @@ function requireOwnedBattlefieldCard(actor, cardId, room = null) {
   return located || null;
 }
 
+function queueRuleDecision(room, decision) {
+  room.rules = normalizeRulesState(room.rules, room.players.map((player) => player.id));
+  const normalized = normalizeDecision(decision);
+  if (!normalized) return null;
+  const duplicate = room.rules.decisions.find((entry) => entry.status === "open" && entry.type === normalized.type && JSON.stringify(entry.context) === JSON.stringify(normalized.context));
+  if (duplicate) return duplicate;
+  room.rules.decisions.push(normalized);
+  if (room.rules.decisions.length > MAX_RULE_DECISIONS) room.rules.decisions.splice(0, room.rules.decisions.length - MAX_RULE_DECISIONS);
+  return normalized;
+}
+
+function playerIsActiveInGame(player) {
+  return Boolean(player?.game && !player.game.conceded && !player.game.lost);
+}
+
+function ownerZoneMove(room, located, destination = "graveyard") {
+  if (!located?.card) return null;
+  const [card] = located.player.game[located.zone].splice(located.index, 1);
+  card.attacking = false; card.blockingCardId = null; card.defendingPlayerId = null; card.attachedToId = null; card.tapped = false;
+  const owner = findPlayer(room, card.ownerId) || located.player;
+  if (card.token && destination !== "battlefield") return card;
+  if (!owner?.game?.[destination]) return card;
+  owner.game[destination].unshift(card);
+  return card;
+}
+
+function findAnyLocatedCard(room, cardId) { return locateCard(room, cardId); }
+
+function runStateBasedActions(room, reason = "priority") {
+  room.rules = normalizeRulesState(room.rules, room.players.map((player) => player.id));
+  if (room.settings?.autoStateBasedActions === false) return [];
+  const results = [];
+  let changed = true;
+  let passes = 0;
+  while (changed && passes < 12) {
+    changed = false; passes += 1;
+    for (const player of room.players) {
+      if (!player.game || player.game.lost || player.game.conceded) continue;
+      let loss = "";
+      if (player.game.life <= 0) loss = "life total reached zero";
+      else if (player.game.poison >= 10) loss = "received ten poison counters";
+      else if (Object.values(player.game.commanderDamage || {}).some((value) => Number(value) >= 21)) loss = "received 21 commander combat damage from one commander";
+      else if (player.game.drawFailed) loss = "attempted to draw from an empty library";
+      if (loss) { player.game.lost = true; player.game.lossReason = loss; results.push(`${player.name} lost: ${loss}.`); changed = true; }
+
+      const battlefield = player.game.battlefield || [];
+      const legendGroups = new Map();
+      for (const card of battlefield) {
+        const plus = Number(card.counters?.["+1/+1"]) || 0;
+        const minus = Number(card.counters?.["-1/-1"]) || 0;
+        const cancel = Math.min(Math.max(0, plus), Math.max(0, minus));
+        if (cancel > 0) { card.counters["+1/+1"] = plus - cancel; card.counters["-1/-1"] = minus - cancel; if (!card.counters["+1/+1"]) delete card.counters["+1/+1"]; if (!card.counters["-1/-1"]) delete card.counters["-1/-1"]; changed = true; }
+        if (/\blegendary\b/i.test(currentTypeLine(card)) && !card.token) {
+          const key = (currentCardFace(card)?.name || card.name).toLocaleLowerCase("en-US");
+          if (!legendGroups.has(key)) legendGroups.set(key, []); legendGroups.get(key).push(card);
+        }
+      }
+      for (const cards of legendGroups.values()) if (cards.length > 1) queueRuleDecision(room, { type: "legend-rule", prompt: `Choose one ${cards[0].name} to keep.`, playerIds: [player.id], options: cards.map((card) => ({ id: card.id, label: card.name })), minimum: 1, maximum: 1, context: { controllerId: player.id, cardIds: cards.map((card) => card.id) } });
+
+      for (let index = battlefield.length - 1; index >= 0; index -= 1) {
+        const card = battlefield[index];
+        const stats = effectiveStats(card);
+        const typeLine = currentTypeLine(card);
+        let shouldDie = false;
+        if (stats && stats.toughness <= 0) shouldDie = true;
+        else if (isCreatureCard(card) && isLethal(card)) shouldDie = true;
+        else if (/planeswalker/i.test(typeLine) && (Number(card.counters?.loyalty ?? card.loyalty) || 0) <= 0) shouldDie = true;
+        else if (/\bbattle\b/i.test(typeLine) && (Number(card.counters?.defense ?? card.defense) || 0) <= 0) shouldDie = true;
+        if (shouldDie) {
+          if ((Number(card.counters?.shield) || 0) > 0 && stats?.toughness > 0) { card.counters.shield -= 1; if (!card.counters.shield) delete card.counters.shield; card.damageMarked = 0; card.deathtouchMarked = false; results.push(`${card.name}'s shield counter prevented destruction.`); changed = true; }
+          else if (stats?.toughness <= 0 || !hasKeyword(card, "indestructible")) { const removed = battlefield.splice(index,1)[0]; if (!removed.token) (findPlayer(room, removed.ownerId) || player).game.graveyard.unshift(removed); results.push(`${removed.name} was put into its owner's graveyard.`); changed = true; }
+        }
+      }
+      for (const zone of ["graveyard", "exile", "hand", "library", "commandZone"]) {
+        for (let index = player.game[zone].length - 1; index >= 0; index -= 1) if (player.game[zone][index].token) { player.game[zone].splice(index,1); changed = true; }
+      }
+    }
+  }
+  const active = room.players.filter(playerIsActiveInGame);
+  if (room.status === "started" && active.length <= 1 && room.players.length > 1) {
+    room.rules.gameOver = true;
+    room.rules.winnerPlayerIds = active.map((player) => player.id);
+    room.rules.loserPlayerIds = room.players.filter((player) => !active.includes(player)).map((player) => player.id);
+  }
+  room.rules.lastStateCheckAt = nowIso(); room.rules.stateCheckCount += 1;
+  for (const text of results) addLog(room, text, "rules");
+  return results;
+}
+
+function parseManaRequirement(card, xValue = 0) {
+  const text = currentCardFace(card)?.manaCost || card?.cardData?.manaCost || "";
+  const requirement = { W:0,U:0,B:0,R:0,G:0,C:0,generic:0 };
+  for (const token of text.match(/\{[^}]+\}/g) || []) {
+    const value = token.slice(1,-1).toUpperCase();
+    if (Object.prototype.hasOwnProperty.call(requirement,value) && value !== "generic") requirement[value] += 1;
+    else if (/^\d+$/.test(value)) requirement.generic += Number(value);
+    else if (value === "X") requirement.generic += Math.max(0, Math.floor(Number(xValue)||0));
+    else if (value.includes("/")) { const choices=value.split("/"); const color=choices.find((choice)=>Object.prototype.hasOwnProperty.call(requirement,choice)); if(color) requirement[color]+=1; else requirement.generic+=1; }
+  }
+  return requirement;
+}
+
+function payManaCost(player, card, payment, xValue = 0, commanderTax = 0) {
+  const pool = player.game.manaPool;
+  const used = normalizeManaPool(payment);
+  for (const symbol of Object.keys(used)) if (used[symbol] > pool[symbol]) return { success:false, error:`Not enough ${symbol} mana.` };
+  const req = parseManaRequirement(card,xValue); req.generic += commanderTax;
+  for (const color of ["W","U","B","R","G","C"]) if (used[color] < req[color]) return { success:false, error:`The payment is missing ${req[color]-used[color]} ${color} mana.` };
+  const coloredSpent=["W","U","B","R","G","C"].reduce((sum,color)=>sum+req[color],0);
+  const totalSpent=Object.values(used).reduce((sum,value)=>sum+value,0);
+  if (totalSpent-coloredSpent < req.generic) return { success:false, error:`The payment is missing ${req.generic-(totalSpent-coloredSpent)} generic mana.` };
+  for (const symbol of Object.keys(used)) pool[symbol]-=used[symbol];
+  return { success:true, requirement:req, spent:used };
+}
+
+function resolveRuleDecision(room, actor, action) {
+  const decision = room.rules?.decisions?.find((entry) => entry.id === action?.decisionId && entry.status === "open");
+  if (!decision || (!decision.playerIds.includes(actor.id) && room.hostId !== actor.id)) return { success:false, error:"That decision is not available to you." };
+  const selections = normalizeStringArray(action?.selections, decision.maximum || 1, 120).filter((id)=>decision.options.some((option)=>option.id===id));
+  if (selections.length < decision.minimum || selections.length > decision.maximum) return { success:false, error:`Choose between ${decision.minimum} and ${decision.maximum}.` };
+  decision.responses[actor.id] = selections;
+  const finished = decision.playerIds.every((id)=>Object.prototype.hasOwnProperty.call(decision.responses,id));
+  if (finished) {
+    decision.status="resolved";
+    if (decision.type === "legend-rule") {
+      const keepId = Object.values(decision.responses).flat()[0];
+      for (const cardId of decision.context.cardIds || []) if (cardId !== keepId) { const located=locateCard(room,cardId); if(located?.zone==="battlefield") ownerZoneMove(room,located,"graveyard"); }
+    }
+  }
+  return { success:true };
+}
+
+function applyJudgeAction(room, actor, action) {
+  if (room.hostId !== actor.id && !action?.selfOnly) return { success:false, error:"Only the host/judge can use shared Judge Mode actions." };
+  const mode=normalizeText(action?.mode,60);
+  if (mode === "set-player") {
+    const player=findPlayer(room,String(action?.targetPlayerId||actor.id)); if(!player?.game) return {success:false,error:"Choose a player."};
+    const field=normalizeText(action?.field,40); const value=Number(action?.value);
+    if (["life","poison","commanderTax","energy","experience","radiation","maxHandSize"].includes(field)) player.game[field]=clamp(Math.floor(value||0), field==="life"?-9999:field==="maxHandSize"?-1:0,99999); else return {success:false,error:"Unsupported player field."};
+    addLog(room,`${actor.name} set ${player.name}'s ${field} to ${player.game[field]}.`,"judge"); return {success:true};
+  }
+  if (mode === "move-card") { const located=locateCard(room,String(action?.cardId||"")); const destination=String(action?.destination||""); if(!located||!ZONES.has(destination)) return {success:false,error:"Choose a card and destination."}; ownerZoneMove(room,located,destination); addLog(room,`${actor.name} moved ${located.card.name} to ${destination} using Judge Mode.`,"judge"); return {success:true}; }
+  if (mode === "set-card") { const located=locateCard(room,String(action?.cardId||"")); if(!located) return {success:false,error:"Choose a card."}; const field=normalizeText(action?.field,50); const value=action?.value; if(["tapped","faceDown","phasedOut","revealed"].includes(field)) located.card[field]=value===true||value==="true"||value==="1"; else if(["power","toughness","typeLine","oracleText","name"].includes(field)) located.card.judgeOverrides[field]=normalizeText(value,field==="oracleText"?2500:200); else if(["damageMarked","lore","level"].includes(field)) located.card[field]=clamp(Math.floor(Number(value)||0),0,9999); else return {success:false,error:"Unsupported card field."}; addLog(room,`${actor.name} changed ${located.card.name}'s ${field}.`,"judge"); return {success:true}; }
+  if (mode === "create-object") { const player=findPlayer(room,String(action?.targetPlayerId||actor.id)); if(!player?.game) return {success:false,error:"Choose a controller."}; const card=createCard(action?.name||"Custom Object",player.id,{token:action?.objectType!=="emblem",power:action?.power,toughness:action?.toughness,notes:action?.notes}); card.objectType=normalizeText(action?.objectType,40)||"token"; card.commander=Boolean(action?.commander); if(card.objectType==="emblem") room.rules.emblems.push(normalizeRuleEffect({kind:"emblem",label:card.name,controllerId:player.id,notes:action?.notes})); else player.game.battlefield.unshift(card); addLog(room,`${actor.name} created ${card.name}.`,"judge"); return {success:true}; }
+  if (mode === "add-effect") { const effect=normalizeRuleEffect({kind:action?.kind,label:action?.label,controllerId:actor.id,targetIds:action?.targetIds,event:action?.event,operation:action?.operation,amount:action?.amount,power:action?.power,toughness:action?.toughness,keyword:action?.keyword,layer:action?.layer,expires:action?.expires,notes:action?.notes}); if(!effect) return {success:false,error:"Unable to create effect."}; if(effect.kind==="replacement"||effect.kind==="prevention") room.rules.replacementEffects.push(effect); else room.rules.continuousEffects.push(effect); for(const target of effect.targetIds){ if(target.startsWith("card:")){ const located=locateCard(room,target.slice(5)); if(located) located.card.ruleEffects.push(effect); }} addLog(room,`${actor.name} created rule effect: ${effect.label}.`,"judge"); return {success:true}; }
+  if (mode === "remove-effect") { const id=String(action?.effectId||""); room.rules.continuousEffects=room.rules.continuousEffects.filter((entry)=>entry.id!==id); room.rules.replacementEffects=room.rules.replacementEffects.filter((entry)=>entry.id!==id); room.rules.emblems=room.rules.emblems.filter((entry)=>entry.id!==id); for(const player of room.players) for(const card of player.game?.battlefield||[]) card.ruleEffects=card.ruleEffects.filter((entry)=>entry.id!==id); return {success:true}; }
+  if (mode === "role") { const target=String(action?.targetPlayerId||""); if(target && !findPlayer(room,target)) return {success:false,error:"Choose a player."}; const role=String(action?.role||""); if(role==="monarch") room.rules.monarchPlayerId=target||null; else if(role==="initiative") room.rules.initiativePlayerId=target||null; else if(role==="day") room.rules.dayNight="day"; else if(role==="night") room.rules.dayNight="night"; else if(role==="none-day-night") room.rules.dayNight=null; else return {success:false,error:"Choose a supported role."}; return {success:true}; }
+  if (mode === "loop") { room.rules.loopNotes.push({id:createId(),text:normalizeText(action?.text,500),result:normalizeText(action?.result,300),createdAt:nowIso()}); return {success:true}; }
+  return { success:false, error:"Unknown Judge Mode action." };
+}
+
 function processGameAction(room, actor, action) {
-  if (room.status !== "started" || !actor.game) return { success: false, error: "The game has not started." };
+  if (!["rolloff", "started"].includes(room.status) || !actor.game) return { success: false, error: "The game has not started." };
   const type = normalizeText(action?.type, 60);
+  const pregameActions = new Set(["take-mulligan", "finish-mulligan", "judge-action", "resolve-decision", "check-state-based"]);
+  if (room.status === "rolloff" && !pregameActions.has(type)) return { success:false, error:"Only mulligans and Judge Mode are available during the starting roll-off." };
   const targetPlayer = findPlayer(room, String(action?.targetPlayerId || "")) || actor;
   const amount = clamp(Math.floor(Number(action?.amount) || 0), -9999, 9999);
-  const noUndo = new Set(["pass-priority", "undo-last"]);
+  const noUndo = new Set(["pass-priority", "undo-last", "check-state-based"]);
   const before = noUndo.has(type) ? null : snapshotCoreRoom(room);
   let detail = type;
 
   switch (type) {
+    case "take-mulligan": {
+      actor.game.library.push(...actor.game.hand); actor.game.hand=[]; actor.game.library=shuffle(actor.game.library); actor.game.hand=actor.game.library.splice(0,Math.min(7,actor.game.library.length)); actor.game.mulliganCount+=1; actor.game.mulliganBottomRequired=Math.max(0,actor.game.mulliganCount-(room.settings?.freeCommanderMulligan!==false?1:0)); actor.game.pregameComplete=actor.game.mulliganBottomRequired===0; addLog(room,`${actor.name} took mulligan ${actor.game.mulliganCount}${actor.game.mulliganBottomRequired?` and must put ${actor.game.mulliganBottomRequired} card(s) on the bottom`:" (free multiplayer mulligan)"}.`,"setup"); break;
+    }
+    case "finish-mulligan": { const ids=normalizeStringArray(action?.cardIds,99,100); if(ids.length!==actor.game.mulliganBottomRequired) return {success:false,error:`Choose exactly ${actor.game.mulliganBottomRequired} card(s) to put on the bottom.`}; for(const id of ids){ const located=getCardFromZone(actor.game,"hand",id); if(!located) return {success:false,error:"A selected card is no longer in hand."}; const [card]=actor.game.hand.splice(located.index,1); actor.game.library.push(card); } actor.game.mulliganBottomRequired=0; actor.game.pregameComplete=true; addLog(room,`${actor.name} completed their mulligan.`,"setup"); break; }
+    case "resolve-decision": { const result=resolveRuleDecision(room,actor,action); if(!result.success)return result; break; }
+    case "judge-action": { const result=applyJudgeAction(room,actor,action); if(!result.success)return result; break; }
+    case "check-state-based": runStateBasedActions(room,"manual"); break;
+    case "player-counter": { const field=normalizeText(action?.field,30); if(!["energy","experience","radiation"].includes(field)) return {success:false,error:"Choose energy, experience or radiation."}; targetPlayer.game[field]=clamp(targetPlayer.game[field]+amount,0,999); break; }
     case "life": targetPlayer.game.life = clamp(targetPlayer.game.life + amount, -999, 9999); addLog(room, `${actor.name} changed ${targetPlayer.name}'s life to ${targetPlayer.game.life}.`, "life"); break;
     case "poison": targetPlayer.game.poison = clamp(targetPlayer.game.poison + amount, 0, 99); addLog(room, `${targetPlayer.name} now has ${targetPlayer.game.poison} poison.`, "counter"); break;
     case "commander-tax": targetPlayer.game.commanderTax = clamp(targetPlayer.game.commanderTax + amount, 0, 99); addLog(room, `${targetPlayer.name}'s commander tax is ${targetPlayer.game.commanderTax}.`, "counter"); break;
@@ -1635,7 +1954,7 @@ function processGameAction(room, actor, action) {
       targetPlayer.game.commanderDamage[sourceId] = clamp((Number(targetPlayer.game.commanderDamage[sourceId]) || 0) + amount, 0, 99);
       addLog(room, `${targetPlayer.name} has ${targetPlayer.game.commanderDamage[sourceId]} commander damage from ${source.name}.`, "counter"); break;
     }
-    case "draw": { let drawn = 0; const count = clamp(amount || 1, 1, 20); while (drawn < count && actor.game.library.length) { actor.game.hand.push(actor.game.library.shift()); drawn += 1; } addLog(room, `${actor.name} drew ${drawn} card${drawn === 1 ? "" : "s"}.`, "card"); break; }
+    case "draw": { let drawn = 0; const count = clamp(amount || 1, 1, 20); while (drawn < count && actor.game.library.length) { actor.game.hand.push(actor.game.library.shift()); drawn += 1; } if (drawn < count) actor.game.drawFailed = true; addLog(room, `${actor.name} drew ${drawn} card${drawn === 1 ? "" : "s"}.`, "card"); break; }
     case "mill": { let milled = 0; const count = clamp(amount || 1, 1, 50); while (milled < count && actor.game.library.length) { actor.game.graveyard.unshift(actor.game.library.shift()); milled += 1; } addLog(room, `${actor.name} milled ${milled} card${milled === 1 ? "" : "s"}.`, "card"); break; }
     case "shuffle": actor.game.library = shuffle(actor.game.library); addLog(room, `${actor.name} shuffled their library.`, "card"); break;
     case "mulligan": actor.game.library.push(...actor.game.hand); actor.game.hand = []; actor.game.library = shuffle(actor.game.library); actor.game.hand = actor.game.library.splice(0, Math.min(7, actor.game.library.length)); addLog(room, `${actor.name} took a sandbox mulligan to seven.`, "card"); break;
@@ -1677,8 +1996,11 @@ function processGameAction(room, actor, action) {
     case "mana": { const symbol = String(action?.symbol || "C").toUpperCase(); if (!Object.prototype.hasOwnProperty.call(actor.game.manaPool, symbol)) return { success: false, error: "Choose W, U, B, R, G or C mana." }; actor.game.manaPool[symbol] = clamp(actor.game.manaPool[symbol] + amount, 0, 999); addLog(room, `${actor.name}'s ${symbol} mana is now ${actor.game.manaPool[symbol]}.`, "mana"); break; }
     case "clear-mana": actor.game.manaPool = normalizeManaPool(null); addLog(room, `${actor.name} emptied their mana pool.`, "mana"); break;
     case "cast-card": {
-      const fromZone = ["hand", "commandZone"].includes(action?.fromZone) ? action.fromZone : "hand"; const located = getCardFromZone(actor.game, fromZone, String(action?.cardId || "")); if (!located) return { success: false, error: "That card is no longer in the selected zone." };
-      const [card] = actor.game[fromZone].splice(located.index, 1); const item = pushStack(room, { kind: "spell", name: card.name, controllerId: actor.id, sourceCardId: card.id, sourceZone: fromZone, card, text: currentOracleText(card), targets: validateTargets(room, action?.targets), createdAt: nowIso() }, actor.id);
+      const fromZone = ["hand", "commandZone", "exile", "graveyard"].includes(action?.fromZone) ? action.fromZone : "hand"; const located = getCardFromZone(actor.game, fromZone, String(action?.cardId || "")); if (!located) return { success: false, error: "That card is no longer in the selected zone." };
+      const commanderTax = fromZone === "commandZone" && located.card.commander ? actor.game.commanderTax : 0;
+      if (action?.enforcePayment) { const paid=payManaCost(actor,located.card,action?.manaPayment,action?.xValue,commanderTax); if(!paid.success)return paid; }
+      const [card] = actor.game[fromZone].splice(located.index, 1); if(fromZone==="commandZone"&&card.commander) actor.game.commanderTax=clamp(actor.game.commanderTax+2,0,99);
+      const item = pushStack(room, { kind: "spell", name: card.name, controllerId: actor.id, sourceCardId: card.id, sourceZone: fromZone, card, text: currentOracleText(card), targets: validateTargets(room, action?.targets), createdAt: nowIso(), choices:{modes:normalizeStringArray(action?.modes,10,120),xValue:clamp(Math.floor(Number(action?.xValue)||0),0,999),additionalCosts:normalizeStringArray(action?.additionalCosts,20,180)} }, actor.id);
       queueSuggestedTriggers(room, "SPELL_CAST", { card, controllerId: actor.id }); addLog(room, `${actor.name} cast ${item.name} onto the stack.`, "stack"); break;
     }
     case "activate-card": { const located = controlledBattlefieldCard(room, actor, action?.cardId); if (!located) return { success: false, error: "You no longer control that permanent." }; if (action?.tapCost) located.card.tapped = true; const item = pushStack(room, { kind: "ability", name: `${located.card.name} ability`, controllerId: actor.id, sourceCardId: located.card.id, text: normalizeText(action?.text, 2500) || currentOracleText(located.card), targets: validateTargets(room, action?.targets), effect: action?.effect, createdAt: nowIso() }, actor.id); addLog(room, `${actor.name} activated ${item.name}.`, "stack"); break; }
@@ -1722,10 +2044,18 @@ function processGameAction(room, actor, action) {
   }
 
   if (before) pushUndo(room, actor, type, before);
+  if (type !== "resolve-decision" || room.settings?.autoStateBasedActions !== false) runStateBasedActions(room, type);
   recordAction(room, actor, type, detail);
   return { success: true };
 }
 
+
+app.post("/api/decks/validate", (request, response) => {
+  const result = validateCommanderDeck(request.body?.deck);
+  return response.status(result.valid ? 200 : 422).json({ success: result.valid, validation: result });
+});
+
+app.get("/api/rules/coverage", (request, response) => response.json({ success:true, version:RULES_VERSION, automatic:["Commander setup validation","multiplayer London mulligans","mana-payment checking for standard symbols","stack and clockwise priority","combat damage and common keywords","state-based losses","lethal and zero-toughness creatures","planeswalker loyalty and battle defense","legend-rule decisions","tokens leaving valid zones"], assisted:["targets and modes","replacement and prevention effects","continuous effects and layers","trigger ordering","special card layouts","votes and secret choices","loops and shortcuts"], universalFallback:"Judge Mode can move objects, change players/cards, create objects, add effects, assign roles and record loop results." }));
 
 app.post("/api/cards/resolve", async (request, response) => {
   const names = Array.isArray(request.body?.names) ? request.body.names : [];
@@ -1747,7 +2077,7 @@ app.get("/api/health", (request, response) => {
     success: true,
     status: "online",
     app: "Arena Commander Table",
-    version: "20.0.0",
+    version: "30.0.0",
     connectedSockets: io.engine.clientsCount,
     activeRooms: rooms.size,
     persistence: persistenceSummary(),
@@ -1756,7 +2086,7 @@ app.get("/api/health", (request, response) => {
 });
 
 app.get("/api", (request, response) => {
-  response.status(200).json({ success: true, name: "Arena Commander Table API", version: "20.0.0", persistence: persistenceSummary() });
+  response.status(200).json({ success: true, name: "Arena Commander Table API", version: "30.0.0", persistence: persistenceSummary() });
 });
 
 io.on("connection", (socket) => {
@@ -1771,7 +2101,7 @@ io.on("connection", (socket) => {
       const player = { id: createId(), name, ready: false, connected: true, socketId: socket.id, sessionToken: createSessionToken(), deck: null, game: null, joinedAt: timestamp, lastSeenAt: timestamp };
       const maxPlayers = ALLOWED_MAX_PLAYERS.has(Number(payload?.maxPlayers)) ? Number(payload.maxPlayers) : 6;
       const startingLife = ALLOWED_STARTING_LIFE.has(Number(payload?.startingLife)) ? Number(payload.startingLife) : 40;
-      const room = { code: createRoomCode(), hostId: player.id, privateRoom: true, maxPlayers, startingLife, status: "waiting", createdAt: timestamp, updatedAt: timestamp, startedAt: null, turn: null, rollOff: null, settings: normalizeRoomSettings(null), spectators: [], emotes: [], replayFrames: [], stack: [], triggerQueue: [], priority: { playerId: null, passedPlayerIds: [] }, actionHistory: [], undoStack: [], players: [player], chat: [], log: [] };
+      const room = { code: createRoomCode(), hostId: player.id, privateRoom: true, maxPlayers, startingLife, status: "waiting", createdAt: timestamp, updatedAt: timestamp, startedAt: null, turn: null, rollOff: null, settings: normalizeRoomSettings(null), spectators: [], emotes: [], replayFrames: [], stack: [], triggerQueue: [], priority: { playerId: null, passedPlayerIds: [] }, rules: normalizeRulesState(null,[player.id]), actionHistory: [], undoStack: [], players: [player], chat: [], log: [] };
       rooms.set(room.code, room);
       attachSocket(socket, room, player);
       addLog(room, `${name} created the room.`, "room");
@@ -1831,6 +2161,7 @@ io.on("connection", (socket) => {
       const deck = normalizeDeck(payload.deck);
       if (!deck) return fail(callback, "The selected deck is incomplete or invalid.");
       auth.player.deck = deck;
+      auth.player.deckValidation = validateCommanderDeck(deck);
       auth.player.ready = false;
     }
     acknowledge(callback, { success: true, room: createPublicRoom(auth.room, auth.player.id) });
@@ -1842,6 +2173,8 @@ io.on("connection", (socket) => {
     if (!auth.success) return acknowledge(callback, auth);
     if (auth.room.status !== "waiting") return fail(callback, "The game has already started.");
     if (!auth.player.deck && !auth.player.ready) return fail(callback, "Select a Commander deck first.");
+    auth.player.deckValidation = auth.player.deck ? validateCommanderDeck(auth.player.deck) : null;
+    if (!auth.player.ready && auth.room.settings?.enforceDeckRules !== false && !auth.room.settings?.allowInvalidDecks && !auth.player.deckValidation?.valid) return fail(callback, auth.player.deckValidation?.errors?.[0] || "That deck did not pass Commander validation.");
     auth.player.ready = !auth.player.ready;
     addLog(auth.room, `${auth.player.name} is ${auth.player.ready ? "ready" : "not ready"}.`, "room");
     acknowledge(callback, { success: true, room: createPublicRoom(auth.room, auth.player.id) });
@@ -1862,7 +2195,11 @@ io.on("connection", (socket) => {
       ...auth.room.settings,
       turnTimerSeconds: ALLOWED_TURN_TIMERS.has(timer) ? timer : auth.room.settings?.turnTimerSeconds,
       allowSpectators: payload?.allowSpectators == null ? auth.room.settings?.allowSpectators : Boolean(payload.allowSpectators),
-      showCombatPreview: payload?.showCombatPreview == null ? auth.room.settings?.showCombatPreview : Boolean(payload.showCombatPreview)
+      showCombatPreview: payload?.showCombatPreview == null ? auth.room.settings?.showCombatPreview : Boolean(payload.showCombatPreview),
+      enforceDeckRules: payload?.enforceDeckRules == null ? auth.room.settings?.enforceDeckRules : Boolean(payload.enforceDeckRules),
+      allowInvalidDecks: payload?.allowInvalidDecks == null ? auth.room.settings?.allowInvalidDecks : Boolean(payload.allowInvalidDecks),
+      autoStateBasedActions: payload?.autoStateBasedActions == null ? auth.room.settings?.autoStateBasedActions : Boolean(payload.autoStateBasedActions),
+      freeCommanderMulligan: payload?.freeCommanderMulligan == null ? auth.room.settings?.freeCommanderMulligan : Boolean(payload.freeCommanderMulligan)
     });
     acknowledge(callback, { success: true, room: createPublicRoom(auth.room, auth.player.id) });
     emitRoomUpdate(auth.room);
@@ -1970,6 +2307,7 @@ io.on("connection", (socket) => {
     auth.room.undoStack = [];
     auth.room.replayFrames = [];
     auth.room.emotes = [];
+    auth.room.rules = normalizeRulesState(null, auth.room.players.map((player) => player.id));
     auth.room.players.forEach((player) => { player.game = null; player.ready = false; });
     auth.room.chat = [];
     auth.room.log = [];
@@ -2077,7 +2415,7 @@ async function start() {
     console.error("PostgreSQL initialization failed. Continuing with memory:", error);
   }
   server.listen(PORT, "0.0.0.0", () => {
-    console.log(`Arena Commander Table v20 running on port ${PORT}`);
+    console.log(`Arena Commander Final Rules v30 running on port ${PORT}`);
   });
 }
 
@@ -2115,7 +2453,14 @@ module.exports = {
   normalizeRoomSettings,
   resetTurnDeadline,
   recordReplayFrame,
-  createPublicRoom
+  createPublicRoom,
+  validateCommanderDeck,
+  runStateBasedActions,
+  normalizeRulesState,
+  parseManaRequirement,
+  payManaCost,
+  resolveRuleDecision,
+  applyJudgeAction
 };
 
 if (require.main === module) start();
