@@ -1,8 +1,8 @@
 {
   "name": "torn-commander-sandbox",
-  "version": "6.0.0",
+  "version": "7.0.0",
   "private": true,
-  "description": "A persistent mobile-friendly 2-6 player MTG Commander sandbox for the Torn community.",
+  "description": "Persistent mobile-friendly MTG Commander sandbox with Arena-style card actions.",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
