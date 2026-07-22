@@ -54,6 +54,58 @@
       .replace(/'/g, "&#039;");
   }
 
+
+  function escapeAttribute(value) {
+    return escapeHtml(value).replace(/`/g, "&#096;");
+  }
+
+  function cardLookupKey(value) {
+    return String(value || "").trim().toLocaleLowerCase("en-US");
+  }
+
+  function cardImage(card) {
+    return card?.cardData?.imageUrl || card?.imageUrl || card?.cardData?.faces?.[0]?.imageUrl || "";
+  }
+
+  function cardArtCrop(card) {
+    return card?.cardData?.artCropUrl || card?.artCropUrl || card?.cardData?.faces?.[0]?.artCropUrl || "";
+  }
+
+  function cardTypeLine(card) {
+    return card?.cardData?.typeLine || "";
+  }
+
+  function cardOracleText(card) {
+    return card?.cardData?.oracleText || card?.cardData?.faces?.map((face) => `${face.name}\n${face.oracleText || ""}`).join("\n\n") || "";
+  }
+
+  function manaCost(card) {
+    return card?.cardData?.manaCost || "";
+  }
+
+  function renderOracleText(value) {
+    return escapeHtml(value || "No Oracle text loaded.").replace(/\n/g, "<br>");
+  }
+
+  async function resolveCardIntelligence(names) {
+    const unique = [...new Map(names.map((name) => String(name || "").trim()).filter(Boolean).map((name) => [cardLookupKey(name), name])).values()];
+    const controller = new AbortController();
+    const timeout = window.setTimeout(() => controller.abort(), 45000);
+    try {
+      const response = await fetch("/api/cards/resolve", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Accept": "application/json" },
+        body: JSON.stringify({ names: unique }),
+        signal: controller.signal
+      });
+      const payload = await response.json().catch(() => null);
+      if (!response.ok || !payload?.success) throw new Error(payload?.error || "Card lookup failed.");
+      return payload;
+    } finally {
+      window.clearTimeout(timeout);
+    }
+  }
+
   function uid() {
     return globalThis.crypto?.randomUUID?.() || `deck-${Date.now()}-${Math.random().toString(16).slice(2)}`;
   }
@@ -207,8 +259,8 @@
     return `
       <section class="hero-panel">
         <p class="eyebrow">MTG Commander • 2–6 Players</p>
-        <h1>Shared Commander table with Arena-style card actions.</h1>
-        <p>Roll a server-side d20 to choose first player, continue clockwise, mark attacks, block, add named counters, fight creatures and reconnect after a restart.</p>
+        <h1>Shared Commander table with intelligent cards and Arena-style actions.</h1>
+        <p>Import a deck to load real card images, Oracle text, types, mana costs and printed stats, then roll a server-side d20 and play clockwise.</p>
       </section>
       ${savedRoom ? `<section class="notice-row"><strong>Saved room ${escapeHtml(savedRoom)}</strong><div class="button-row"><button class="primary-button" data-action="rejoin">Rejoin</button><button class="ghost-button" data-action="forget-session">Forget</button></div></section>` : ""}
       <section class="home-grid">
@@ -240,7 +292,9 @@
   }
 
   function renderDeckCard(deck) {
-    return `<article class="deck-card"><div><h3>${escapeHtml(deck.name)}</h3><p>${escapeHtml(deck.commanders.join(" / "))}</p></div><div class="button-row"><span class="badge ${deck.totalCards === 100 ? "success" : "warning"}">${deck.totalCards} cards</span><button class="small-button" data-action="edit-deck" data-deck-id="${escapeHtml(deck.id)}">Edit</button><button class="small-button danger-button" data-action="delete-deck" data-deck-id="${escapeHtml(deck.id)}">Delete</button></div></article>`;
+    const recognized = deck.intelligenceCount ?? deck.cards?.filter((card) => card.cardData?.scryfallId).length ?? 0;
+    const commanderImage = deck.commanderData?.[0]?.artCropUrl || deck.commanderData?.[0]?.imageUrl || deck.cards?.find((card) => deck.commanders?.some((name) => cardLookupKey(name) === cardLookupKey(card.name)))?.cardData?.artCropUrl || "";
+    return `<article class="deck-card smart-deck-card">${commanderImage ? `<div class="deck-card-art" style="background-image:url('${escapeAttribute(commanderImage)}')"></div>` : ""}<div class="deck-card-content"><div><h3>${escapeHtml(deck.name)}</h3><p>${escapeHtml(deck.commanders.join(" / "))}</p></div><div class="card-intelligence-progress"><span style="width:${deck.uniqueCards ? Math.round((recognized / deck.uniqueCards) * 100) : 0}%"></span></div><small>${recognized}/${deck.uniqueCards || 0} unique cards recognized</small><div class="button-row"><span class="badge ${deck.totalCards === 100 ? "success" : "warning"}">${deck.totalCards} cards</span><span class="badge ${recognized === deck.uniqueCards ? "success" : "info"}">🧠 Card data</span><button class="small-button" data-action="edit-deck" data-deck-id="${escapeHtml(deck.id)}">Edit</button><button class="small-button danger-button" data-action="delete-deck" data-deck-id="${escapeHtml(deck.id)}">Delete</button></div></div></article>`;
   }
 
   function renderLobby() {
@@ -401,7 +455,9 @@
     const targetEligible = state.targetMode && zone === "battlefield" && card.id !== state.targetMode.sourceCardId && (state.targetMode.type !== "block" || card.attacking);
     const stats = card.effectiveStats || ((card.power || card.toughness) ? { power: card.power || "?", toughness: card.toughness || "?" } : null);
     const blockerText = card.blockingCardId ? "Blocking" : "";
-    return `<article class="mtg-card ${card.tapped ? "is-tapped" : ""} ${card.commander ? "is-commander" : ""} ${card.token ? "is-token" : ""} ${card.attacking ? "is-attacking" : ""} ${card.lethal ? "is-lethal" : ""} ${targetEligible ? "target-eligible" : ""}" data-action="open-card" data-card-id="${card.id}" data-zone="${zone}" data-owner-id="${ownerId}" data-can-control="${canControl ? "1" : "0"}"><header><strong>${escapeHtml(card.name)}</strong></header><div class="card-art">${card.commander ? "♛" : card.token ? "◈" : "✦"}</div><div class="card-status-row">${stats ? `<span class="pt-badge">${escapeHtml(stats.power)}/${escapeHtml(stats.toughness)}</span>` : ""}${card.damageMarked ? `<span class="damage-chip">${card.damageMarked} damage</span>` : ""}${card.attacking ? `<span class="attack-chip">Attacking</span>` : ""}${blockerText ? `<span class="block-chip">${blockerText}</span>` : ""}${card.lethal ? `<span class="lethal-chip">LETHAL</span>` : ""}</div><div class="card-counters">${counterBadges(card)}</div><footer><span>${card.tapped ? "Tapped" : zone === "battlefield" ? "Tap for actions" : "Tap for actions"}</span></footer></article>`;
+    const art = cardArtCrop(card) || cardImage(card);
+    const typeLine = cardTypeLine(card);
+    return `<article class="mtg-card ${card.tapped ? "is-tapped" : ""} ${card.commander ? "is-commander" : ""} ${card.token ? "is-token" : ""} ${card.attacking ? "is-attacking" : ""} ${card.lethal ? "is-lethal" : ""} ${targetEligible ? "target-eligible" : ""} ${art ? "has-real-art" : ""}" data-action="open-card" data-card-id="${card.id}" data-zone="${zone}" data-owner-id="${ownerId}" data-can-control="${canControl ? "1" : "0"}"><header><strong>${escapeHtml(card.name)}</strong>${manaCost(card) ? `<span class="mana-cost">${escapeHtml(manaCost(card))}</span>` : ""}</header><div class="card-art ${art ? "real-card-art" : ""}" ${art ? `style="background-image:url('${escapeAttribute(art)}')"` : ""}>${art ? "" : card.commander ? "♛" : card.token ? "◈" : "✦"}</div>${typeLine ? `<div class="card-type-line">${escapeHtml(typeLine)}</div>` : ""}<div class="card-status-row">${stats ? `<span class="pt-badge">${escapeHtml(stats.power)}/${escapeHtml(stats.toughness)}</span>` : ""}${card.loyalty ? `<span class="pt-badge">Loyalty ${escapeHtml(card.loyalty)}</span>` : ""}${card.damageMarked ? `<span class="damage-chip">${card.damageMarked} damage</span>` : ""}${card.attacking ? `<span class="attack-chip">Attacking</span>` : ""}${blockerText ? `<span class="block-chip">${blockerText}</span>` : ""}${card.lethal ? `<span class="lethal-chip">LETHAL</span>` : ""}</div><div class="card-counters">${counterBadges(card)}</div><footer><span>${card.cardData?.scryfallId ? "Card data loaded" : "Manual card"} • Tap for actions</span></footer></article>`;
   }
 
   function renderToolsTab() {
@@ -414,7 +470,7 @@
   }
 
   function renderHelp() {
-    return `<section class="panel"><p class="eyebrow">v8 guide</p><h1>Roll, play and pass clockwise</h1><div class="help-grid"><article><h3>Starting roll</h3><p>After the host starts, every player rolls one server-generated d20. Tied highest players reroll until one winner remains.</p></article><article><h3>Clockwise turns</h3><p>The winner becomes seat one for turn order. End Turn automatically moves to the next active player clockwise and skips conceded players.</p></article><article><h3>Tap a card</h3><p>Tap any card you control to open its Arena-style action menu.</p></article><article><h3>Counters and fight</h3><p>Add named counters, edit stats, mark damage and select creatures to fight.</p></article><article><h3>Attack and block</h3><p>Mark creatures attacking, then choose blockers from the highlighted battlefield targets.</p></article><article><h3>Autosave</h3><p>The d20 results, winner, clockwise order and every card action are saved to PostgreSQL.</p></article></div></section>`;
+    return `<section class="panel"><p class="eyebrow">v9 guide</p><h1>Intelligent cards, roll-off and clockwise play</h1><div class="help-grid"><article><h3>Smart deck import</h3><p>Saving a deck identifies each card and stores its image, Oracle text, type, mana cost, keywords and printed stats.</p></article><article><h3>Card details</h3><p>Tap any card to read its full Oracle text and view the current counters, damage and effective stats.</p></article><article><h3>Existing mechanics</h3><p>Counters, fights, attacking, blocking, d20 roll-off and clockwise turns continue to work.</p></article><article><h3>Manual fallback</h3><p>If a name is not recognized, the card remains playable with manual power, toughness, notes and movement controls.</p></article><article><h3>API care</h3><p>Card lookups are batched and cached so repeated deck imports do not overload the card-data service.</p></article><article><h3>Autosave</h3><p>Card intelligence is stored inside each deck and game object, while active rooms remain saved to PostgreSQL.</p></article></div></section>`;
   }
 
   function findCard(cardId) {
@@ -437,7 +493,10 @@
     const stats = card.effectiveStats || { power: card.power || "?", toughness: card.toughness || "?" };
     const counterList = Object.entries(card.counters || {}).map(([name, amount]) => `<span class="counter-chip">${escapeHtml(name)} ${amount}</span>`).join("") || "No counters";
     const owned = canControl && ownerId === state.session.playerId;
-    openModal(card.name, `<div class="card-sheet-summary"><div class="large-card-symbol">${card.commander ? "♛" : card.token ? "◈" : "✦"}</div><div><strong>${escapeHtml(stats.power)}/${escapeHtml(stats.toughness)}</strong><p>${card.damageMarked || 0} damage marked ${card.lethal ? "• LETHAL" : ""}</p><div>${counterList}</div></div></div>${owned ? renderOwnedCardActions(card, zone) : `<div class="notice">You can view this card but only its controller can change it.</div>`}`);
+    const image = cardImage(card);
+    const details = card.cardData;
+    const faces = details?.faces?.length > 1 ? `<div class="card-face-tabs">${details.faces.map((face) => `<article><strong>${escapeHtml(face.name)}</strong><small>${escapeHtml(face.typeLine || "")}</small><p>${renderOracleText(face.oracleText)}</p></article>`).join("")}</div>` : "";
+    openModal(card.name, `<div class="intelligent-card-sheet">${image ? `<img class="card-detail-image" src="${escapeAttribute(image)}" alt="${escapeAttribute(card.name)} card image" loading="lazy">` : `<div class="large-card-symbol">${card.commander ? "♛" : card.token ? "◈" : "✦"}</div>`}<div class="card-detail-copy"><div class="card-detail-title"><strong>${escapeHtml(manaCost(card))}</strong><span>${escapeHtml(cardTypeLine(card) || (card.token ? "Token" : "Card data unavailable"))}</span></div><p class="oracle-text">${renderOracleText(cardOracleText(card))}</p>${details?.keywords?.length ? `<div class="keyword-row">${details.keywords.map((keyword) => `<span class="counter-chip">${escapeHtml(keyword)}</span>`).join("")}</div>` : ""}<div class="current-card-state"><strong>${escapeHtml(stats.power)}/${escapeHtml(stats.toughness)}</strong><span>${card.damageMarked || 0} damage ${card.lethal ? "• LETHAL" : ""}</span><div>${counterList}</div></div><small class="scryfall-credit">Card data and images supplied by Scryfall.</small></div></div>${faces}${owned ? renderOwnedCardActions(card, zone) : `<div class="notice">You can view this card but only its controller can change it.</div>`}`);
   }
 
   function moveAction(label, card, from, to, className = "secondary-button") {
@@ -488,7 +547,7 @@
 
   function openDeckEditor(deck = null) {
     const list = deck ? deck.cards.map((card) => `${card.quantity} ${card.name}`).join("\n") : "";
-    openModal(deck ? "Edit deck" : "Import Commander deck", `<form id="deckForm"><input type="hidden" name="deckId" value="${escapeHtml(deck?.id || "")}"><label>Deck name<input name="deckName" maxlength="60" required value="${escapeHtml(deck?.name || "")}" placeholder="Toxic Control"></label><label>Commander name(s)<input name="commanders" maxlength="310" required value="${escapeHtml(deck?.commanders.join(" / ") || "")}" placeholder="Atraxa, Praetors' Voice"></label><label>Deck list<textarea name="deckList" rows="15" required placeholder="1 Sol Ring\n1 Command Tower">${escapeHtml(list)}</textarea></label><p class="form-help">Use one line per card: quantity followed by card name.</p><button class="primary-button" type="submit">Save deck</button></form>`);
+    openModal(deck ? "Edit deck" : "Import Commander deck", `<form id="deckForm"><input type="hidden" name="deckId" value="${escapeHtml(deck?.id || "")}"><label>Deck name<input name="deckName" maxlength="60" required value="${escapeHtml(deck?.name || "")}" placeholder="Toxic Control"></label><label>Commander name(s)<input name="commanders" maxlength="310" required value="${escapeHtml(deck?.commanders.join(" / ") || "")}" placeholder="Atraxa, Praetors' Voice"></label><label>Deck list<textarea name="deckList" rows="15" required placeholder="1 Sol Ring\n1 Command Tower">${escapeHtml(list)}</textarea></label><p class="form-help">Use one line per card: quantity followed by card name. Saving will identify the cards and load images, Oracle text, types, mana costs and printed stats.</p><button class="primary-button" type="submit">🧠 Identify and save deck</button></form>`);
   }
 
   function parseDeckList(text) {
@@ -633,10 +692,37 @@
       const commanders = String(data.get("commanders") || "").split(/\s*\/\s*|\s*\+\s*/).map((entry) => entry.trim()).filter(Boolean).slice(0, 2);
       const totalCards = cards.reduce((sum, card) => sum + card.quantity, 0);
       if (!cards.length || !commanders.length) return showToast("Add a commander and a valid deck list.", "error");
-      const deck = { id: data.get("deckId") || uid(), name: String(data.get("deckName") || "Commander Deck").trim(), commanders, cards, totalCards, uniqueCards: cards.length };
-      const existing = state.decks.findIndex((entry) => entry.id === deck.id);
-      if (existing >= 0) state.decks[existing] = deck; else state.decks.unshift(deck);
-      saveDecks(); closeModal(); render();
+      const submitButton = event.submitter;
+      if (submitButton) { submitButton.disabled = true; submitButton.textContent = "Identifying cards…"; }
+      try {
+        const lookup = await resolveCardIntelligence([...cards.map((card) => card.name), ...commanders]);
+        const lookupMap = new Map(lookup.resolved.map((entry) => [cardLookupKey(entry.requestedName), entry.card]));
+        const intelligentCards = cards.map((entry) => {
+          const cardData = lookupMap.get(cardLookupKey(entry.name)) || null;
+          return { ...entry, name: cardData?.name || entry.name, cardData };
+        });
+        const commanderData = commanders.map((name) => lookupMap.get(cardLookupKey(name)) || null).filter(Boolean);
+        const intelligenceCount = intelligentCards.filter((entry) => entry.cardData?.scryfallId).length;
+        const deck = {
+          id: data.get("deckId") || uid(),
+          name: String(data.get("deckName") || "Commander Deck").trim(),
+          commanders: commanders.map((name) => lookupMap.get(cardLookupKey(name))?.name || name),
+          commanderData,
+          cards: intelligentCards,
+          totalCards,
+          uniqueCards: intelligentCards.length,
+          intelligenceCount,
+          cardDataUpdatedAt: new Date().toISOString()
+        };
+        const existing = state.decks.findIndex((entry) => entry.id === deck.id);
+        if (existing >= 0) state.decks[existing] = deck; else state.decks.unshift(deck);
+        saveDecks(); closeModal(); render();
+        if (lookup.notFound?.length) showToast(`${lookup.notFound.length} card name${lookup.notFound.length === 1 ? " was" : "s were"} not recognized. They remain playable manually.`, "warning");
+        else showToast(`Card intelligence loaded for ${intelligenceCount} unique cards.`, "success");
+      } catch (error) {
+        showToast(error.name === "AbortError" ? "Card lookup timed out. Try saving again." : error.message, "error");
+        if (submitButton) { submitButton.disabled = false; submitButton.textContent = "🧠 Identify and save deck"; }
+      }
     }
     if (form.id === "roomSettingsForm") {
       const response = await emitAck("update-room-settings", { maxPlayers: Number(data.get("maxPlayers")), startingLife: Number(data.get("startingLife")) });
