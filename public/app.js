@@ -4,7 +4,21 @@
   const STORAGE = {
     decks: "tornCommander.decks.v5",
     session: "tornCommander.session.v5",
-    playerName: "tornCommander.playerName.v5"
+    spectator: "tornCommander.spectator.v20",
+    playerName: "tornCommander.playerName.v5",
+    uiSettings: "tornCommander.uiSettings.v20"
+  };
+
+  const DEFAULT_UI_SETTINGS = {
+    sound: true,
+    vibration: true,
+    animations: true,
+    lowData: false,
+    highContrast: false,
+    largeText: false,
+    autoPassEmpty: false,
+    showArrows: true,
+    groupCards: true
   };
 
   const app = document.getElementById("app");
@@ -17,16 +31,29 @@
   const toastRegion = document.getElementById("toastRegion");
   const installButton = document.getElementById("installButton");
   const brandButton = document.getElementById("brandButton");
+  const settingsButton = document.getElementById("settingsButton");
+  const fullscreenButton = document.getElementById("fullscreenButton");
+  const reconnectOverlay = document.getElementById("reconnectOverlay");
 
   const state = {
     view: "home",
     room: null,
+    previousRoom: null,
     session: loadJson(STORAGE.session, null),
+    spectator: loadJson(STORAGE.spectator, null),
     decks: loadJson(STORAGE.decks, []),
+    uiSettings: { ...DEFAULT_UI_SETTINGS, ...loadJson(STORAGE.uiSettings, {}) },
     activeGameTab: "table",
+    activeDrawer: null,
     targetMode: null,
+    dragSource: null,
+    expandedGroups: {},
+    fullControl: false,
+    replayFrameId: null,
     deferredInstallPrompt: null,
-    toolResult: "—"
+    toolResult: "—",
+    autoPassTimer: null,
+    audioContext: null
   };
 
   const socket = io({ transports: ["websocket", "polling"] });
@@ -42,7 +69,12 @@
   }
 
   function saveJson(key, value) {
-    localStorage.setItem(key, JSON.stringify(value));
+    try { localStorage.setItem(key, JSON.stringify(value)); }
+    catch (error) { console.warn(`Unable to save ${key}`, error); }
+  }
+
+  function removeStored(key) {
+    try { localStorage.removeItem(key); } catch (error) { console.warn(`Unable to remove ${key}`, error); }
   }
 
   function escapeHtml(value) {
@@ -116,11 +148,13 @@
   }
 
   function playerName() {
-    return localStorage.getItem(STORAGE.playerName) || "";
+    try { return localStorage.getItem(STORAGE.playerName) || ""; }
+    catch { return ""; }
   }
 
   function rememberPlayerName(name) {
-    localStorage.setItem(STORAGE.playerName, String(name || "").trim());
+    try { localStorage.setItem(STORAGE.playerName, String(name || "").trim()); }
+    catch (error) { console.warn("Unable to remember player name", error); }
   }
 
   function showToast(message, type = "info") {
@@ -174,6 +208,8 @@
   }
 
   function setSession(response) {
+    state.spectator = null;
+    removeStored(STORAGE.spectator);
     state.session = {
       roomCode: response.room.code,
       playerId: response.playerId,
@@ -185,17 +221,34 @@
     state.targetMode = null;
   }
 
+  function setSpectator(response, name) {
+    state.session = null;
+    removeStored(STORAGE.session);
+    state.spectator = { roomCode: response.room.code, name: String(name || "Spectator").trim(), spectatorId: response.spectatorId };
+    saveJson(STORAGE.spectator, state.spectator);
+    state.room = response.room;
+    state.view = "game";
+    state.targetMode = null;
+  }
+
   function clearSession() {
     state.session = null;
+    state.spectator = null;
     state.room = null;
     state.targetMode = null;
-    localStorage.removeItem(STORAGE.session);
+    state.activeDrawer = null;
+    removeStored(STORAGE.session);
+    removeStored(STORAGE.spectator);
     state.view = "home";
     state.activeGameTab = "table";
   }
 
   function currentPlayer() {
     return state.room?.players.find((player) => player.id === state.session?.playerId) || null;
+  }
+
+  function isSpectator() {
+    return Boolean(state.spectator && !state.session);
   }
 
   function isHost() {
@@ -228,13 +281,22 @@
     });
   }
 
+  function applyUiSettings() {
+    document.documentElement.classList.toggle("low-data", Boolean(state.uiSettings.lowData));
+    document.documentElement.classList.toggle("reduce-motion", !state.uiSettings.animations);
+    document.documentElement.classList.toggle("high-contrast", Boolean(state.uiSettings.highContrast));
+    document.documentElement.classList.toggle("large-text", Boolean(state.uiSettings.largeText));
+    document.body.classList.toggle("in-game", Boolean(state.room?.status === "started"));
+  }
+
   function render() {
+    applyUiSettings();
     if (state.room) {
       setActiveNav("game");
       app.innerHTML = state.room.status === "waiting"
-        ? renderLobby()
+        ? (isSpectator() ? renderSpectatorWaiting() : renderLobby())
         : state.room.status === "rolloff"
-          ? renderRollOff()
+          ? (isSpectator() ? renderSpectatorRollOff() : renderRollOff())
           : renderGame();
     } else if (state.view === "decks") {
       setActiveNav("decks");
@@ -246,44 +308,48 @@
       setActiveNav("home");
       app.innerHTML = renderHome();
     }
+    window.requestAnimationFrame(() => {
+      drawArenaLines();
+      observeCardImages();
+      updateTurnClock();
+    });
     if (state.room?.status === "started" && state.activeGameTab === "chat") {
-      window.requestAnimationFrame(() => {
-        const messages = document.querySelector(".chat-messages");
-        if (messages) messages.scrollTop = messages.scrollHeight;
-      });
+      const messages = document.querySelector(".chat-messages");
+      if (messages) messages.scrollTop = messages.scrollHeight;
     }
   }
 
   function renderHome() {
     const savedRoom = state.session?.roomCode;
+    const savedSpectator = state.spectator?.roomCode;
     return `
-      <section class="hero-panel">
-        <p class="eyebrow">MTG Commander • 2–6 Players</p>
-        <h1>Shared Commander table with intelligent cards and complete assisted mechanics.</h1>
-        <p>Import a deck to load real card images, Oracle text, types, mana costs and printed stats, then roll a server-side d20 and play clockwise.</p>
+      <section class="hero-panel arena-hero">
+        <div><p class="eyebrow">Arena Commander v20 • 2–6 Players</p><h1>A full digital Commander table built for phones, tablets and desktop.</h1><p>Real cards, shared stack and priority, assisted combat, clockwise turns, drag-and-drop, spectators, replays and persistent games.</p></div>
+        <div class="hero-orb">♛</div>
       </section>
-      ${savedRoom ? `<section class="notice-row"><strong>Saved room ${escapeHtml(savedRoom)}</strong><div class="button-row"><button class="primary-button" data-action="rejoin">Rejoin</button><button class="ghost-button" data-action="forget-session">Forget</button></div></section>` : ""}
-      <section class="home-grid">
+      ${savedRoom ? `<section class="notice-row"><strong>Saved player room ${escapeHtml(savedRoom)}</strong><div class="button-row"><button class="primary-button" data-action="rejoin">Rejoin</button><button class="ghost-button" data-action="forget-session">Forget</button></div></section>` : ""}
+      ${savedSpectator ? `<section class="notice-row"><strong>Saved spectator room ${escapeHtml(savedSpectator)}</strong><div class="button-row"><button class="primary-button" data-action="rejoin-spectator">Watch again</button><button class="ghost-button" data-action="forget-session">Forget</button></div></section>` : ""}
+      <section class="home-grid three">
         <form id="createRoomForm" class="panel">
           <p class="eyebrow">Host</p><h2>Create game</h2>
           <label>Player name<input name="playerName" maxlength="24" required value="${escapeHtml(playerName())}" placeholder="Fries91"></label>
-          <div class="form-grid two">
-            <label>Players<select name="maxPlayers">${[2,3,4,5,6].map((n) => `<option value="${n}" ${n === 6 ? "selected" : ""}>${n}</option>`).join("")}</select></label>
-            <label>Starting life<select name="startingLife">${[20,30,40,50,60].map((n) => `<option value="${n}" ${n === 40 ? "selected" : ""}>${n}</option>`).join("")}</select></label>
-          </div>
+          <div class="form-grid two"><label>Players<select name="maxPlayers">${[2,3,4,5,6].map((n) => `<option value="${n}" ${n === 6 ? "selected" : ""}>${n}</option>`).join("")}</select></label><label>Starting life<select name="startingLife">${[20,30,40,50,60].map((n) => `<option value="${n}" ${n === 40 ? "selected" : ""}>${n}</option>`).join("")}</select></label></div>
           <button class="primary-button" type="submit">Create private room</button>
         </form>
         <form id="joinRoomForm" class="panel">
-          <p class="eyebrow">Guest</p><h2>Join game</h2>
+          <p class="eyebrow">Player</p><h2>Join game</h2>
           <label>Player name<input name="playerName" maxlength="24" required value="${escapeHtml(playerName())}" placeholder="Your Torn name"></label>
           <label>Room code<input name="roomCode" maxlength="6" required autocomplete="off" autocapitalize="characters" placeholder="ABC234"></label>
           <button class="secondary-button" type="submit">Join room</button>
         </form>
+        <form id="spectatorForm" class="panel spectator-panel">
+          <p class="eyebrow">Spectator</p><h2>Watch a table</h2>
+          <label>Display name<input name="name" maxlength="24" required value="${escapeHtml(playerName() || "Spectator")}" placeholder="Spectator"></label>
+          <label>Room code<input name="roomCode" maxlength="6" required autocomplete="off" autocapitalize="characters" placeholder="ABC234"></label>
+          <button class="ghost-button" type="submit">Enter spectator mode</button>
+        </form>
       </section>
-      <section class="panel">
-        <div class="section-heading"><div><p class="eyebrow">Saved on this device</p><h2>My decks</h2></div><button class="primary-button" data-action="import-deck">Import deck</button></div>
-        ${state.decks.length ? `<div class="deck-grid">${state.decks.slice(0, 4).map(renderDeckCard).join("")}</div>` : `<div class="empty-state">No decks imported yet.</div>`}
-      </section>
+      <section class="panel"><div class="section-heading"><div><p class="eyebrow">Saved on this device</p><h2>My decks</h2></div><div class="button-row"><button class="ghost-button" data-action="open-ui-settings">Display settings</button><button class="primary-button" data-action="import-deck">Import deck</button></div></div>${state.decks.length ? `<div class="deck-grid">${state.decks.slice(0, 4).map(renderDeckCard).join("")}</div>` : `<div class="empty-state">No decks imported yet.</div>`}</section>
     `;
   }
 
@@ -301,17 +367,22 @@
     const me = currentPlayer();
     const selectedDeckId = me?.deck?.id || "";
     const allReady = state.room.players.length >= 2 && state.room.players.every((player) => player.ready && player.connected && player.deck);
+    const settings = state.room.settings || {};
     return `
-      <section class="panel lobby-top"><div><p class="eyebrow">Private lobby</p><h1>Room <span class="room-code">${escapeHtml(state.room.code)}</span></h1><p>${state.room.players.length}/${state.room.maxPlayers} players • ${state.room.startingLife} life</p><div>${persistenceBadge()}</div></div><div class="button-row"><button class="secondary-button" data-action="copy-room-code">Copy code</button><button class="ghost-button" data-action="leave-room">Leave</button></div></section>
+      <section class="panel lobby-top"><div><p class="eyebrow">Private Arena Commander lobby</p><h1>Room <span class="room-code">${escapeHtml(state.room.code)}</span></h1><p>${state.room.players.length}/${state.room.maxPlayers} players • ${state.room.startingLife} life • ${state.room.spectatorCount || 0} watching</p><div>${persistenceBadge()}</div></div><div class="button-row"><button class="secondary-button" data-action="copy-room-code">Copy code</button><button class="ghost-button" data-action="leave-room">Leave</button></div></section>
       <section class="lobby-grid">
-        <div class="panel"><div class="section-heading"><h2>Players</h2><span class="badge ${allReady ? "success" : "warning"}">${allReady ? "Ready" : "Waiting"}</span></div><div class="player-list">${state.room.players.map(renderLobbyPlayer).join("")}</div></div>
-        <div class="panel"><h2>Your setup</h2><label>Commander deck<select id="lobbyDeckSelect"><option value="">Choose a deck…</option>${state.decks.map((deck) => `<option value="${escapeHtml(deck.id)}" ${deck.id === selectedDeckId ? "selected" : ""}>${escapeHtml(deck.name)} — ${escapeHtml(deck.commanders.join(" / "))}</option>`).join("")}</select></label><div class="button-row"><button class="secondary-button" data-action="import-deck">Import deck</button><button class="primary-button" data-action="toggle-ready" ${!me?.deck ? "disabled" : ""}>${me?.ready ? "Mark not ready" : "Mark ready"}</button></div>${isHost() ? `<div class="divider"></div><form id="roomSettingsForm"><div class="form-grid two"><label>Maximum players<select name="maxPlayers">${[2,3,4,5,6].map((n) => `<option value="${n}" ${n === state.room.maxPlayers ? "selected" : ""}>${n}</option>`).join("")}</select></label><label>Starting life<select name="startingLife">${[20,30,40,50,60].map((n) => `<option value="${n}" ${n === state.room.startingLife ? "selected" : ""}>${n}</option>`).join("")}</select></label></div><div class="button-row"><button class="secondary-button" type="submit">Save</button><button class="primary-button" type="button" data-action="start-game" ${allReady ? "" : "disabled"}>Start game</button></div></form>` : ""}</div>
+        <div class="panel"><div class="section-heading"><h2>Clockwise seats</h2><span class="badge ${allReady ? "success" : "warning"}">${allReady ? "Ready" : "Waiting"}</span></div><div class="player-list">${state.room.players.map(renderLobbyPlayer).join("")}</div>${state.room.spectators?.length ? `<div class="spectator-list"><strong>Spectators</strong><span>${state.room.spectators.map((entry) => escapeHtml(entry.name)).join(", ")}</span></div>` : ""}</div>
+        <div class="panel"><h2>Your setup</h2><label>Commander deck<select id="lobbyDeckSelect"><option value="">Choose a deck…</option>${state.decks.map((deck) => `<option value="${escapeHtml(deck.id)}" ${deck.id === selectedDeckId ? "selected" : ""}>${escapeHtml(deck.name)} — ${escapeHtml(deck.commanders.join(" / "))}</option>`).join("")}</select></label><div class="button-row"><button class="secondary-button" data-action="import-deck">Import deck</button><button class="primary-button" data-action="toggle-ready" ${!me?.deck ? "disabled" : ""}>${me?.ready ? "Mark not ready" : "Mark ready"}</button></div>${isHost() ? `<div class="divider"></div><form id="roomSettingsForm"><div class="form-grid two"><label>Maximum players<select name="maxPlayers">${[2,3,4,5,6].map((n) => `<option value="${n}" ${n === state.room.maxPlayers ? "selected" : ""}>${n}</option>`).join("")}</select></label><label>Starting life<select name="startingLife">${[20,30,40,50,60].map((n) => `<option value="${n}" ${n === state.room.startingLife ? "selected" : ""}>${n}</option>`).join("")}</select></label><label>Turn timer<select name="turnTimerSeconds">${[[0,"Off"],[60,"1 minute"],[90,"90 seconds"],[120,"2 minutes"],[180,"3 minutes"],[300,"5 minutes"]].map(([value,label]) => `<option value="${value}" ${Number(settings.turnTimerSeconds || 0) === value ? "selected" : ""}>${label}</option>`).join("")}</select></label><label class="check-row"><input type="checkbox" name="allowSpectators" value="1" ${settings.allowSpectators !== false ? "checked" : ""}> Allow spectators</label></div><div class="button-row"><button class="secondary-button" type="submit">Save settings</button><button class="primary-button" type="button" data-action="start-game" ${allReady ? "" : "disabled"}>Start d20 roll-off</button></div></form>` : ""}</div>
       </section>
     `;
   }
 
+  function renderSpectatorWaiting() {
+    return `<section class="panel spectator-waiting"><p class="eyebrow">Spectator mode</p><h1>Watching room ${escapeHtml(state.room.code)}</h1><p>The game is still in the lobby. You will enter the Arena table automatically when it starts.</p><div class="player-list">${state.room.players.map(renderLobbyPlayer).join("")}</div><button class="ghost-button" data-action="leave-spectator">Leave spectator mode</button></section>`;
+  }
+
   function renderLobbyPlayer(player) {
-    const self = player.id === state.session.playerId;
+    const self = player.id === state.session?.playerId;
     return `<article class="lobby-player"><div><strong>${escapeHtml(player.name)}</strong> ${player.id === state.room.hostId ? `<span class="badge info">Host</span>` : ""} ${self ? `<span class="badge">You</span>` : ""}<p>${player.deck ? `${escapeHtml(player.deck.name)} • ${escapeHtml(player.deck.commanders.join(" / "))}` : "No deck selected"}</p></div><div><span class="status-dot ${player.connected ? "online" : "offline"}"></span>${player.connected ? (player.ready ? "Ready" : "Waiting") : "Offline"}${isHost() && !self ? `<button class="small-button danger-button" data-action="kick-player" data-player-id="${player.id}">Remove</button>` : ""}</div></article>`;
   }
 
@@ -399,23 +470,217 @@
     `;
   }
 
+  function renderSpectatorRollOff() {
+    const rollOff = state.room.rollOff;
+    return `<section class="rolloff-shell spectator-rolloff"><div class="rolloff-hero"><p class="eyebrow">Spectator mode • Starting-player roll</p><h1>d20 roll-off</h1><p>Waiting for all players to roll. Tied highest players automatically reroll.</p></div><div class="dice-player-grid">${orderedPlayers().map((player) => { const roll = latestStartingRoll(player.id); return `<article class="dice-player-card"><strong>${escapeHtml(player.name)}</strong><div class="d20-face ${roll ? "has-roll" : ""}">${roll ?? "?"}</div><span>${roll ? `Rolled ${roll}` : "Waiting"}</span></article>`; }).join("")}</div><button class="ghost-button" data-action="leave-spectator">Leave spectator mode</button></section>`;
+  }
+
+  function saveUiSettings() {
+    saveJson(STORAGE.uiSettings, state.uiSettings);
+    applyUiSettings();
+  }
+
+  function openUiSettings() {
+    const setting = (key, label, help) => `<label class="arena-setting"><span><strong>${escapeHtml(label)}</strong><small>${escapeHtml(help)}</small></span><input type="checkbox" name="${key}" ${state.uiSettings[key] ? "checked" : ""}></label>`;
+    openModal("Arena display settings", `<form id="uiSettingsForm"><div class="settings-list">${setting("sound","Sound cues","Your turn, priority, damage and spells.")}${setting("vibration","Vibration","Short haptic alerts on supported phones.")}${setting("animations","Animations","Card movement, glows and transitions.")}${setting("lowData","Low-data mode","Hide card artwork and reduce network use.")}${setting("highContrast","High contrast","Stronger borders and brighter readable text.")}${setting("largeText","Larger text","Increase interface and card label sizes.")}${setting("autoPassEmpty","Auto-pass empty priority","Automatically pass when the stack is empty and it is not your turn.")}${setting("showArrows","Targeting arrows","Show attacks, blocks and attachments as arrows.")}${setting("groupCards","Group similar cards","Stack identical lands and simple tokens together.")}</div><button class="primary-button" type="submit">Save settings</button></form>`);
+  }
+
+  function manaSymbolHtml(cost) {
+    const parts = String(cost || "").match(/\{[^}]+\}/g) || [];
+    return parts.map((part) => `<span class="mana-symbol mana-${escapeAttribute(part.slice(1,-1).toLowerCase().replace(/\//g,"-"))}">${escapeHtml(part.slice(1,-1))}</span>`).join("");
+  }
+
+  function playerById(id) {
+    return state.room?.players.find((player) => player.id === id) || null;
+  }
+
+  function recentEmote(playerId) {
+    const cutoff = Date.now() - 9000;
+    return [...(state.room?.emotes || [])].reverse().find((entry) => entry.playerId === playerId && Date.parse(entry.time) >= cutoff) || null;
+  }
+
+  function turnSecondsRemaining() {
+    const deadline = Date.parse(state.room?.turn?.deadlineAt || "");
+    if (!Number.isFinite(deadline)) return null;
+    return Math.ceil((deadline - Date.now()) / 1000);
+  }
+
+  function formatClock(seconds) {
+    if (seconds == null) return "";
+    const overdue = seconds < 0;
+    const value = Math.abs(seconds);
+    const minutes = Math.floor(value / 60);
+    const remainder = String(value % 60).padStart(2, "0");
+    return `${overdue ? "−" : ""}${minutes}:${remainder}`;
+  }
+
+  function updateTurnClock() {
+    const element = document.getElementById("turnClock");
+    if (!element) return;
+    const remaining = turnSecondsRemaining();
+    element.textContent = remaining == null ? "No timer" : formatClock(remaining);
+    element.classList.toggle("is-low", remaining != null && remaining <= 20);
+    element.classList.toggle("is-overdue", remaining != null && remaining < 0);
+  }
+
+  function renderPhaseBar() {
+    const current = state.room.turn?.phaseIndex || 0;
+    return `<div class="arena-phase-bar">${state.room.phases.map((phase,index) => `<button type="button" class="arena-phase ${index === current ? "is-current" : ""} ${index < current ? "is-past" : ""}" data-action="phase-step" data-phase-index="${index}" ${isSpectator() || (index !== current + 1 && index !== current) ? "disabled" : ""}><span>${index + 1}</span>${escapeHtml(phase.replace("Beginning ","").replace("Declare ",""))}</button>`).join("")}</div>`;
+  }
+
+  function combatPreview() {
+    const attacks = [];
+    const outcomes = new Map();
+    for (const attackerPlayer of state.room.players) {
+      for (const attacker of attackerPlayer.game?.battlefield || []) {
+        if (!attacker.attacking || attacker.phasedOut) continue;
+        const defender = playerById(attacker.defendingPlayerId);
+        if (!defender) continue;
+        const blockers = state.room.players.flatMap((player) => (player.game?.battlefield || []).filter((card) => card.blockingCardId === attacker.id));
+        const power = Number(attacker.effectiveStats?.power);
+        const amount = Number.isFinite(power) ? Math.max(0,power) : 0;
+        attacks.push({ attacker, attackerPlayer, defender, blockers, amount });
+        if (!blockers.length) outcomes.set(defender.id, (outcomes.get(defender.id) || 0) + amount);
+      }
+    }
+    if (!attacks.length) return `<div class="combat-empty"><span>⚔</span><strong>No attackers declared</strong><small>Drag a creature to an opponent or use its action menu.</small></div>`;
+    return `<div class="combat-preview"><strong>Combat preview</strong>${[...outcomes.entries()].map(([id,amount]) => `<span>${escapeHtml(playerById(id)?.name || "Player")}: approximately ${amount} unblocked damage</span>`).join("")}${attacks.map((entry) => `<small>${escapeHtml(entry.attacker.name)} → ${escapeHtml(entry.defender.name)}${entry.blockers.length ? ` • blocked by ${entry.blockers.map((card) => escapeHtml(card.name)).join(", ")}` : " • unblocked"}</small>`).join("")}</div>`;
+  }
+
+  function simpleGroupKey(card) {
+    const type = cardTypeLine(card);
+    const groupable = card.token || /\bLand\b/i.test(type);
+    if (!groupable || card.damageMarked || card.attacking || card.blockingCardId || card.attachedToId || card.lethal || Object.keys(card.counters || {}).length || card.temporaryEffects?.length) return `single:${card.id}`;
+    return `${card.name}|${card.tapped ? 1 : 0}|${card.faceDown ? 1 : 0}|${card.phasedOut ? 1 : 0}`;
+  }
+
+  function groupedBattlefieldCards(cards) {
+    if (!state.uiSettings.groupCards) return cards.map((card) => ({ key: `single:${card.id}`, cards: [card] }));
+    const groups = new Map();
+    for (const card of cards) {
+      if (card.attachedToId) continue;
+      const key = simpleGroupKey(card);
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key).push(card);
+    }
+    return [...groups.entries()].map(([key,entries]) => ({ key, cards: entries }));
+  }
+
+  function renderBattlefield(player, self = false) {
+    const battlefield = player.game?.battlefield || [];
+    const attachmentsByTarget = new Map();
+    for (const card of battlefield) {
+      if (!card.attachedToId) continue;
+      if (!attachmentsByTarget.has(card.attachedToId)) attachmentsByTarget.set(card.attachedToId, []);
+      attachmentsByTarget.get(card.attachedToId).push(card);
+    }
+    const groups = groupedBattlefieldCards(battlefield);
+    if (!groups.length) return `<div class="arena-empty-board">No permanents</div>`;
+    return `<div class="arena-battlefield-cards">${groups.map((group) => {
+      const expanded = state.expandedGroups[group.key];
+      const shown = expanded ? group.cards : group.cards.slice(0,1);
+      return `<div class="arena-card-group ${group.cards.length > 1 ? "is-stack" : ""}" data-group-key="${escapeAttribute(group.key)}">${shown.map((card,index) => renderCard(card,"battlefield",player.id,self,{ stackCount: index === 0 ? group.cards.length : 1, attachments: attachmentsByTarget.get(card.id) || [] })).join("")}${group.cards.length > 1 ? `<button class="card-stack-count" data-action="toggle-card-group" data-group-key="${escapeAttribute(group.key)}">${expanded ? "Collapse" : `×${group.cards.length}`}</button>` : ""}</div>`;
+    }).join("")}</div>`;
+  }
+
+  function renderZonePiles(player, self) {
+    const game = player.game;
+    const pile = (zone,label,count,symbol) => `<button class="arena-zone-pile zone-${zone}" data-action="open-zone-drawer" data-zone="${zone}" data-player-id="${player.id}" ${!self && zone === "hand" ? "disabled" : ""} data-drop-zone="${self ? zone : ""}"><span>${symbol}</span><strong>${count}</strong><small>${label}</small></button>`;
+    return `<div class="arena-zone-piles">${pile("library","Library",game.libraryCount,"▤")}${pile("graveyard","Grave",game.graveyard.length,"☠")}${pile("exile","Exile",game.exile.length,"◇")}${pile("commandZone","Command",game.commandZone.length,"♛")}${pile("hand","Hand",game.handCount ?? game.hand?.length ?? 0,"▱")}</div>`;
+  }
+
+  function renderCommanderDamageMini(player) {
+    const entries = Object.entries(player.game?.commanderDamage || {}).filter(([,amount]) => amount > 0);
+    if (!entries.length) return "";
+    return `<div class="commander-damage-mini">${entries.map(([sourceId,amount]) => `<span title="Commander damage from ${escapeAttribute(playerById(sourceId)?.name || "Player")}">♛${amount}</span>`).join("")}</div>`;
+  }
+
+  function renderArenaSeat(player, self = false, spectatorFocus = false) {
+    const game = player.game;
+    if (!game) return "";
+    const active = player.id === state.room.turn?.activePlayerId;
+    const priority = player.id === state.room.priority?.playerId;
+    const emote = recentEmote(player.id);
+    const canAdjust = !isSpectator();
+    return `<section class="arena-seat ${self ? "is-self" : "is-opponent"} ${spectatorFocus ? "is-spectator-focus" : ""} ${active ? "is-active" : ""} ${priority ? "has-priority" : ""} ${game.conceded ? "is-conceded" : ""}" data-player-seat-id="${player.id}" data-drop-player-id="${player.id}">
+      ${emote ? `<div class="seat-emote">${escapeHtml(emote.emoji)}</div>` : ""}
+      <header class="arena-seat-header"><div class="seat-avatar">${escapeHtml(player.name.slice(0,2).toUpperCase())}</div><div class="seat-name"><strong>${escapeHtml(player.name)}</strong><small>${escapeHtml(player.deck?.commanders.join(" / ") || "Commander")}</small></div><div class="seat-status">${active ? `<span>TURN</span>` : ""}${priority ? `<span>PRIORITY</span>` : ""}${!player.connected ? `<span>OFFLINE</span>` : ""}</div></header>
+      <div class="seat-life"><button ${canAdjust ? "" : "disabled"} data-action="game" data-game-type="life" data-target-player-id="${player.id}" data-amount="-1">−</button><div><strong>${game.life}</strong><small>life</small></div><button ${canAdjust ? "" : "disabled"} data-action="game" data-game-type="life" data-target-player-id="${player.id}" data-amount="1">+</button></div>
+      <div class="seat-secondary"><span>☠ ${game.poison}</span><span>♛ tax ${game.commanderTax}</span><span>▱ ${game.handCount ?? game.hand?.length ?? 0}</span>${renderCommanderDamageMini(player)}</div>
+      <div class="arena-seat-board">${renderBattlefield(player,self)}</div>
+      ${renderZonePiles(player,self)}
+    </section>`;
+  }
+
+  function renderHandTray(me) {
+    if (!me?.game?.hand) return "";
+    const cards = me.game.hand;
+    return `<section class="arena-hand-tray ${state.uiSettings.lowData ? "low-data-hand" : ""}" data-drop-zone="hand"><div class="hand-label"><strong>Your hand</strong><span>${cards.length}</span></div><div class="arena-hand-fan">${cards.map((card,index) => { const delta = index - (cards.length - 1) / 2; return `<div class="hand-card-wrap" style="--hand-rotate:${delta * 2.4}deg;--hand-lift:${Math.abs(delta) * 1.4}px">${renderCard(card,"hand",me.id,true)}</div>`; }).join("")}</div></section>`;
+  }
+
+  function renderTargetBanner() {
+    return `<div class="arena-target-banner"><strong>${escapeHtml(state.targetMode.sourceName)}</strong><span>${state.targetMode.type === "fight" ? "Choose a creature to fight" : state.targetMode.type === "block" ? "Choose an attacking creature" : "Choose a permanent to attach to"}</span><button data-action="cancel-target">Cancel</button></div>`;
+  }
+
+  function renderStackPreview() {
+    const top = state.room.stack.at(-1);
+    if (!top) return `<button class="center-stack empty" data-action="open-arena-drawer" data-drawer="mechanics"><span>STACK</span><strong>Empty</strong></button>`;
+    return `<button class="center-stack" data-action="open-arena-drawer" data-drawer="mechanics"><span>STACK • ${state.room.stack.length}</span><strong>${escapeHtml(top.name)}</strong><small>${escapeHtml(playerById(top.controllerId)?.name || "Unknown")}</small></button>`;
+  }
+
+  function renderArenaDrawer() {
+    const drawer = state.activeDrawer || (state.activeGameTab !== "table" ? state.activeGameTab : null);
+    if (!drawer) return "";
+    let title = "Table drawer";
+    let content = "";
+    if (drawer === "zones") { title = "Your zones"; content = isSpectator() ? `<div class="empty-state">Spectators cannot view hidden hands.</div>` : renderZonesTab(); }
+    if (drawer === "mechanics") { title = "Stack, priority & triggers"; content = renderMechanicsTab(); }
+    if (drawer === "tools") { title = "Table tools"; content = renderToolsTab(); }
+    if (drawer === "chat") { title = "Table chat"; content = renderChatTab(); }
+    if (drawer === "replay") { title = "Replay timeline"; content = renderReplayDrawer(); }
+    return `<aside class="arena-drawer drawer-${drawer}"><header><h2>${escapeHtml(title)}</h2><button class="icon-button" data-action="close-arena-drawer">×</button></header><div class="arena-drawer-body">${content}</div></aside><button class="drawer-scrim" data-action="close-arena-drawer" aria-label="Close drawer"></button>`;
+  }
+
+  function renderReplayDrawer() {
+    const frames = [...(state.room.replayFrames || [])].reverse();
+    return frames.length ? `<div class="replay-list">${frames.map((frame,index) => `<button class="replay-frame-button" data-action="view-replay-frame" data-frame-id="${frame.id}"><span>${frames.length-index}</span><div><strong>${escapeHtml(frame.label)}</strong><small>${escapeHtml(frame.actorName || "Table")} • ${formatTime(frame.time)} • ${escapeHtml(frame.phase || "")}</small></div></button>`).join("")}</div>` : `<div class="empty-state">Replay frames appear after game actions.</div>`;
+  }
+
+  function renderArenaBottomBar(me) {
+    const priorityMine = state.room.priority?.playerId === me?.id;
+    const activeMine = state.room.turn?.activePlayerId === me?.id;
+    return `<nav class="arena-action-bar">
+      <button data-action="open-arena-drawer" data-drawer="zones"><span>▱</span>Zones</button>
+      <button data-action="open-arena-drawer" data-drawer="mechanics"><span>⚡</span>Stack${state.room.stack.length ? `<b>${state.room.stack.length}</b>` : ""}</button>
+      <button data-action="open-arena-drawer" data-drawer="chat"><span>●</span>Chat</button>
+      ${isSpectator() ? `<div class="spectator-action"><strong>SPECTATING</strong><button data-action="leave-spectator">Leave</button></div>` : `<button class="full-control-button ${state.fullControl ? "active" : ""}" data-action="toggle-full-control"><span>◎</span>Full control</button><button class="priority-button ${priorityMine ? "is-ready" : ""}" data-action="game" data-game-type="pass-priority" ${priorityMine ? "" : "disabled"}><span>${priorityMine ? "PASS" : "WAIT"}</span><small>${priorityMine ? "Priority" : escapeHtml(playerById(state.room.priority?.playerId)?.name || "")}</small></button><button class="turn-button ${activeMine ? "is-ready" : ""}" data-action="game" data-game-type="end-turn" ${activeMine || isHost() ? "" : "disabled"}><span>END</span><small>Turn</small></button>`}
+      <button data-action="open-emotes" ${isSpectator() ? "disabled" : ""}><span>☺</span>Emote</button>
+      <button data-action="open-arena-drawer" data-drawer="replay"><span>↶</span>Replay</button>
+    </nav>`;
+  }
+
   function renderGame() {
     const players = orderedPlayers();
-    const active = players.find((player) => player.id === state.room.turn?.activePlayerId) || null;
-    const living = players.filter((player) => !player.game?.conceded);
-    const livingIndex = living.findIndex((player) => player.id === active?.id);
-    const next = living.length ? living[(livingIndex + 1 + living.length) % living.length] : null;
+    const me = currentPlayer();
+    const active = playerById(state.room.turn?.activePlayerId);
+    const priority = playerById(state.room.priority?.playerId);
+    const opponents = me ? players.filter((player) => player.id !== me.id) : players;
     const phase = state.room.phases[state.room.turn?.phaseIndex || 0] || "Untap";
-    const priorityPlayer = state.room.players.find((player) => player.id === state.room.priority?.playerId);
-    return `
+    return `<div class="arena-game-shell player-count-${players.length} ${isSpectator() ? "spectator-mode" : ""}">
       ${state.targetMode ? renderTargetBanner() : ""}
-      <section class="turn-banner"><div><p class="eyebrow">Room ${escapeHtml(state.room.code)} • Turn ${state.room.turn?.number || 1}</p><h2>${escapeHtml(active?.name || "Unknown")} is active</h2><div class="button-row"><span class="phase-badge">${escapeHtml(phase)}</span>${persistenceBadge()}${next ? `<span class="badge info">Next clockwise: ${escapeHtml(next.name)}</span>` : ""}<span class="badge ${state.room.stack.length ? "warning" : ""}">Stack ${state.room.stack.length}</span><span class="badge info">Priority: ${escapeHtml(priorityPlayer?.name || active?.name || "—")}</span></div></div><div class="button-row"><button class="secondary-button" data-action="game" data-game-type="next-phase">Next phase</button><button class="secondary-button" data-action="game" data-game-type="pass-priority">Pass priority</button><button class="primary-button" data-action="game" data-game-type="end-turn">End turn</button></div></section>
-      <section class="clockwise-order"><strong>Clockwise order</strong><div>${players.map((player, index) => `<span class="turn-order-seat ${player.id === active?.id ? "is-active" : ""} ${player.game?.conceded ? "is-conceded" : ""}"><b>${index + 1}</b>${escapeHtml(player.name)}</span>${index < players.length - 1 ? `<span class="order-arrow">→</span>` : ""}`).join("")}</div></section>
-      <div class="tab-bar">${[["table","Table"],["zones","My Zones"],["mechanics",`Mechanics (${state.room.stack.length + state.room.triggerQueue.length})`],["tools","Tools"],["chat",`Chat (${state.room.chat.length})`]].map(([id,label]) => `<button class="tab-button ${state.activeGameTab === id ? "active" : ""}" data-action="game-tab" data-tab="${id}">${label}</button>`).join("")}</div>
-      <section class="player-grid">${players.map(renderPlayerCard).join("")}</section>
-      ${renderGameTab()}
-    `;
+      <header class="arena-game-topbar"><div class="arena-room-meta"><button class="room-pill" data-action="copy-room-code">${escapeHtml(state.room.code)}</button><span>Turn ${state.room.turn?.number || 1}</span><strong>${escapeHtml(active?.name || "Player")}</strong><span>${escapeHtml(phase)}</span>${persistenceBadge()}</div><div class="arena-top-actions"><span class="priority-label">Priority: <strong>${escapeHtml(priority?.name || "—")}</strong></span><span id="turnClock" class="turn-clock">${formatClock(turnSecondsRemaining())}</span><button data-action="open-ui-settings">⚙</button><button data-action="toggle-fullscreen">⛶</button></div></header>
+      ${renderPhaseBar()}
+      <main class="arena-stage">
+        <svg id="arenaLines" class="arena-lines" aria-hidden="true"><defs><marker id="arrowAttack" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto"><path d="M0,0 L0,6 L9,3 z"></path></marker><marker id="arrowLink" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto"><path d="M0,0 L0,6 L9,3 z"></path></marker></defs></svg>
+        <div class="arena-opponent-ring count-${opponents.length}">${opponents.map((player,index) => `<div class="opponent-slot slot-${index+1}">${renderArenaSeat(player,false,!me && index === 0)}</div>`).join("")}</div>
+        <section class="arena-center-zone">${renderStackPreview()}${state.room.settings?.showCombatPreview !== false ? combatPreview() : ""}<div class="arena-center-controls">${!isSpectator() ? `<button data-action="game" data-game-type="next-phase">Next phase</button><button data-action="combat-damage" data-pass="first">First strike</button><button data-action="combat-damage" data-pass="normal">Combat damage</button>` : ""}</div></section>
+        ${me ? `<div class="self-slot">${renderArenaSeat(me,true)}</div>${renderHandTray(me)}` : ""}
+      </main>
+      ${renderArenaBottomBar(me)}
+      ${renderArenaDrawer()}
+    </div>`;
   }
+
 
   function renderPlayerCard(player) {
     const game = player.game;
@@ -449,19 +714,33 @@
   }
 
   function counterBadges(card) {
-    return Object.entries(card.counters || {}).map(([name, amount]) => `<span class="counter-chip">${escapeHtml(name)} ${amount}</span>`).join("");
+    return Object.entries(card.counters || {}).map(([name, amount]) => `<span class="arena-counter" title="${escapeAttribute(name)} counter">${escapeHtml(name)} <b>${amount}</b></span>`).join("");
   }
 
-  function renderCard(card, zone, ownerId, canControl) {
+  function renderCard(card, zone, ownerId, canControl, options = {}) {
     const targetEligible = state.targetMode && zone === "battlefield" && card.id !== state.targetMode.sourceCardId && (state.targetMode.type !== "block" || card.attacking);
     const stats = card.effectiveStats || ((card.power || card.toughness) ? { power: card.power || "?", toughness: card.toughness || "?" } : null);
-    const art = card.faceDown ? "" : (cardArtCrop(card) || cardImage(card));
-    const typeLine = card.faceDown ? "Face-down 2/2 creature" : cardTypeLine(card);
-    const defender = state.room.players.find((player) => player.id === card.defendingPlayerId);
-    const attached = card.attachedToId ? findCard(card.attachedToId)?.card : null;
-    const temp = card.temporaryEffects?.length || 0;
-    return `<article class="mtg-card ${card.tapped ? "is-tapped" : ""} ${card.commander ? "is-commander" : ""} ${card.token ? "is-token" : ""} ${card.attacking ? "is-attacking" : ""} ${card.lethal ? "is-lethal" : ""} ${targetEligible ? "target-eligible" : ""} ${art ? "has-real-art" : ""} ${card.faceDown ? "is-face-down" : ""} ${card.phasedOut ? "is-phased" : ""} ${card.attachedToId ? "is-attached" : ""}" data-action="open-card" data-card-id="${card.id}" data-zone="${zone}" data-owner-id="${ownerId}" data-can-control="${canControl ? "1" : "0"}"><header><strong>${escapeHtml(card.name)}</strong>${manaCost(card) ? `<span class="mana-cost">${escapeHtml(manaCost(card))}</span>` : ""}</header><div class="card-art ${art ? "real-card-art" : ""}" ${art ? `style="background-image:url('${escapeAttribute(art)}')"` : ""}>${art ? "" : card.faceDown ? "?" : card.commander ? "♛" : card.token ? "◈" : "✦"}</div>${typeLine ? `<div class="card-type-line">${escapeHtml(typeLine)}</div>` : ""}<div class="card-status-row">${stats ? `<span class="pt-badge">${escapeHtml(stats.power)}/${escapeHtml(stats.toughness)}</span>` : ""}${card.loyalty ? `<span class="pt-badge">Loyalty ${escapeHtml(card.loyalty)}</span>` : ""}${card.damageMarked ? `<span class="damage-chip">${card.damageMarked} damage</span>` : ""}${card.attacking ? `<span class="attack-chip">Attacking ${defender ? escapeHtml(defender.name) : ""}</span>` : ""}${card.blockingCardId ? `<span class="block-chip">Blocking</span>` : ""}${card.summoningSick ? `<span class="status-chip">Sick</span>` : ""}${card.phasedOut ? `<span class="status-chip">Phased out</span>` : ""}${attached ? `<span class="status-chip">Attached to ${escapeHtml(attached.name)}</span>` : ""}${temp ? `<span class="status-chip">${temp} temp effect${temp === 1 ? "" : "s"}</span>` : ""}${card.lethal ? `<span class="lethal-chip">LETHAL</span>` : ""}</div><div class="card-counters">${counterBadges(card)}</div><footer><span>${card.cardData?.scryfallId ? "Card data loaded" : "Manual card"} • Tap for actions</span></footer></article>`;
+    const image = card.faceDown || state.uiSettings.lowData ? "" : (cardArtCrop(card) || cardImage(card));
+    const art = image;
+    const defender = playerById(card.defendingPlayerId);
+    const keywords = (card.keywords || []).slice(0,3);
+    const stackCount = Number(options.stackCount || 1);
+    const attachments = options.attachments || [];
+    const draggable = canControl && !isSpectator();
+    return `<div class="arena-card-nest ${attachments.length ? "has-attachments" : ""}">
+      ${attachments.map((attached,index) => `<div class="attachment-peek" style="--attachment-index:${index}" data-card-id="${attached.id}" data-action="open-card" data-zone="battlefield" data-owner-id="${ownerId}" data-can-control="${canControl ? 1 : 0}"><span>${escapeHtml(attached.name)}</span></div>`).join("")}
+      <article class="arena-card ${zone === "hand" ? "in-hand" : "on-board"} ${card.tapped ? "is-tapped" : ""} ${card.commander ? "is-commander" : ""} ${card.token ? "is-token" : ""} ${card.attacking ? "is-attacking" : ""} ${card.blockingCardId ? "is-blocking" : ""} ${card.lethal ? "is-lethal" : ""} ${targetEligible ? "target-eligible" : ""} ${card.faceDown ? "is-face-down" : ""} ${card.phasedOut ? "is-phased" : ""}" data-action="open-card" data-card-id="${card.id}" data-zone="${zone}" data-owner-id="${ownerId}" data-can-control="${canControl ? "1" : "0"}" draggable="${draggable ? "true" : "false"}" tabindex="0">
+        <div class="arena-card-frame">
+          <header><strong>${escapeHtml(card.name)}</strong><span class="card-mana">${manaSymbolHtml(manaCost(card))}</span></header>
+          <div class="arena-card-image">${image ? `<img src="${escapeAttribute(image)}" alt="${escapeAttribute(card.name)}" loading="lazy" decoding="async">` : art ? `<div class="arena-card-artcrop" style="background-image:url('${escapeAttribute(art)}')"></div>` : `<div class="card-placeholder">${card.faceDown ? "?" : card.commander ? "♛" : card.token ? "◈" : "✦"}</div>`}</div>
+          <div class="arena-card-type">${escapeHtml(card.faceDown ? "Face-down 2/2 creature" : cardTypeLine(card) || (card.token ? "Token" : "Card"))}</div>
+          <div class="arena-card-badges">${counterBadges(card)}${card.damageMarked ? `<span class="damage-badge">${card.damageMarked}</span>` : ""}${card.attacking ? `<span class="attack-badge">→ ${escapeHtml(defender?.name || "attack")}</span>` : ""}${card.blockingCardId ? `<span class="block-badge">BLOCK</span>` : ""}${card.summoningSick ? `<span class="sick-badge">SICK</span>` : ""}${card.lethal ? `<span class="lethal-badge">LETHAL</span>` : ""}${stackCount > 1 ? `<span class="group-badge">×${stackCount}</span>` : ""}</div>
+          <footer>${keywords.length ? `<span class="keyword-mini">${keywords.map(escapeHtml).join(" • ")}</span>` : `<span></span>`}${stats ? `<strong>${escapeHtml(stats.power)}/${escapeHtml(stats.toughness)}</strong>` : card.loyalty ? `<strong>◆${escapeHtml(card.loyalty)}</strong>` : ""}</footer>
+        </div>
+      </article>
+    </div>`;
   }
+
 
   function renderTargetOptions() {
     const players = state.room.players.map((player) => `<label class="target-option"><input type="checkbox" name="targets" value="player:${player.id}"><span>Player: ${escapeHtml(player.name)}</span></label>`).join("");
@@ -471,25 +750,29 @@
 
   function renderMechanicsTab() {
     const me = currentPlayer();
-    const priority = state.room.players.find((player) => player.id === state.room.priority?.playerId);
-    const stack = [...state.room.stack].reverse().map((item, index) => `<article class="stack-item"><div><span class="stack-number">${state.room.stack.length - index}</span><strong>${escapeHtml(item.name)}</strong><small>${escapeHtml(item.kind)} • ${escapeHtml(state.room.players.find((player) => player.id === item.controllerId)?.name || "Unknown")}</small></div><p>${renderOracleText(item.text || "Manual resolution")}</p><div class="button-row">${index === 0 ? `<button class="primary-button" data-action="game" data-game-type="resolve-stack-top">Resolve top</button>` : ""}<button class="danger-button" data-action="counter-stack" data-stack-item-id="${item.id}">Counter/remove</button></div></article>`).join("") || `<div class="empty-state">The stack is empty.</div>`;
-    const triggers = state.room.triggerQueue.map((item) => `<article class="trigger-item"><div><strong>${escapeHtml(item.sourceName)}</strong><small>${escapeHtml(item.event || "Trigger")}</small></div><p>${renderOracleText(item.text)}</p><div class="button-row"><button class="primary-button" data-action="trigger-to-stack" data-trigger-id="${item.id}">Put on stack</button><button class="ghost-button" data-action="dismiss-trigger" data-trigger-id="${item.id}">Dismiss</button></div></article>`).join("") || `<div class="empty-state">No triggers waiting.</div>`;
-    const history = [...(state.room.actionHistory || [])].reverse().slice(0, 20).map((entry) => `<article class="history-item"><strong>${escapeHtml(entry.actorName)}</strong><span>${escapeHtml(entry.type)}</span><small>${formatTime(entry.time)}</small></article>`).join("") || `<div class="empty-state">No structured actions yet.</div>`;
-    return `<section class="mechanics-grid"><article class="mechanics-panel"><div class="section-heading"><div><p class="eyebrow">v10</p><h2>Stack & priority</h2></div><span class="badge info">Priority: ${escapeHtml(priority?.name || "—")}</span></div><div class="button-row"><button class="primary-button" data-action="game" data-game-type="pass-priority">Pass priority</button><button class="secondary-button" data-action="open-custom-stack">Add custom stack item</button></div><div class="stack-list">${stack}</div></article><article class="mechanics-panel"><div class="section-heading"><div><p class="eyebrow">v12</p><h2>Trigger queue</h2></div><span class="badge">${state.room.triggerQueue.length}</span></div>${triggers}</article><article class="mechanics-panel"><div class="section-heading"><div><p class="eyebrow">v13</p><h2>Your mana pool</h2></div></div><div class="mana-control-grid">${["W","U","B","R","G","C"].map((symbol) => `<div><strong>${symbol}</strong><button data-action="mana" data-symbol="${symbol}" data-amount="-1">−</button><span>${me.game.manaPool?.[symbol] || 0}</span><button data-action="mana" data-symbol="${symbol}" data-amount="1">+</button></div>`).join("")}</div><button class="ghost-button" data-action="game" data-game-type="clear-mana">Empty mana pool</button></article><article class="mechanics-panel"><div class="section-heading"><div><p class="eyebrow">v11</p><h2>Combat resolution</h2></div></div><div class="button-row"><button class="combat-button" data-action="combat-damage" data-pass="first">Resolve first strike</button><button class="combat-button" data-action="combat-damage" data-pass="normal">Resolve normal damage</button><button class="ghost-button" data-action="game" data-game-type="clear-combat">End combat markers</button></div><p class="form-help">Assists with first strike, double strike, trample, deathtouch, lifelink, vigilance and commander damage. Players can still correct unusual interactions manually.</p></article><article class="mechanics-panel"><div class="section-heading"><div><p class="eyebrow">v15</p><h2>Undo & history</h2></div>${isHost() ? `<button class="danger-button" data-action="game" data-game-type="undo-last" ${state.room.canUndo ? "" : "disabled"}>Undo last</button>` : ""}</div><div class="history-list">${history}</div></article></section>`;
+    const priority = playerById(state.room.priority?.playerId);
+    const stack = [...state.room.stack].reverse().map((item,index) => `<article class="stack-item arena-stack-item"><div class="stack-art">${item.card && !state.uiSettings.lowData && cardImage(item.card) ? `<img src="${escapeAttribute(cardImage(item.card))}" alt="" loading="lazy">` : `<span>${item.kind === "spell" ? "✦" : item.kind === "trigger" ? "!" : "⚡"}</span>`}</div><div class="stack-copy"><small>#${state.room.stack.length-index} • ${escapeHtml(item.kind)}</small><strong>${escapeHtml(item.name)}</strong><p>${renderOracleText(item.text || "Manual resolution")}</p><div class="target-summary">${(item.targets || []).map((target) => `<span>${escapeHtml(target.replace(/^player:/,"Player: ").replace(/^card:/,"Card: "))}</span>`).join("")}</div></div>${!isSpectator() ? `<div class="stack-actions">${index === 0 ? `<button class="primary-button" data-action="game" data-game-type="resolve-stack-top">Resolve</button>` : ""}<button class="danger-button" data-action="counter-stack" data-stack-item-id="${item.id}">Counter</button></div>` : ""}</article>`).join("") || `<div class="empty-state">The stack is empty.</div>`;
+    const triggers = state.room.triggerQueue.map((item) => `<article class="trigger-item"><div><strong>${escapeHtml(item.sourceName)}</strong><small>${escapeHtml(item.event || "Trigger")}</small><p>${renderOracleText(item.text)}</p></div>${!isSpectator() ? `<div class="button-row"><button class="primary-button" data-action="trigger-to-stack" data-trigger-id="${item.id}">Put on stack</button><button class="ghost-button" data-action="dismiss-trigger" data-trigger-id="${item.id}">Dismiss</button></div>` : ""}</article>`).join("") || `<div class="empty-state">No triggers waiting.</div>`;
+    const mana = me ? `<section class="drawer-section"><div class="section-heading"><h3>Mana pool</h3><button class="ghost-button" data-action="game" data-game-type="clear-mana">Empty</button></div><div class="mana-control-grid">${["W","U","B","R","G","C"].map((symbol) => `<div class="mana-control mana-${symbol.toLowerCase()}"><strong>${symbol}</strong><button data-action="mana" data-symbol="${symbol}" data-amount="-1">−</button><span>${me.game.manaPool?.[symbol] || 0}</span><button data-action="mana" data-symbol="${symbol}" data-amount="1">+</button></div>`).join("")}</div></section>` : "";
+    const history = [...(state.room.actionHistory || [])].reverse().slice(0,40).map((entry) => `<article class="history-item"><strong>${escapeHtml(entry.actorName)}</strong><span>${escapeHtml(entry.type)}</span><small>${formatTime(entry.time)}</small></article>`).join("") || `<div class="empty-state">No structured actions yet.</div>`;
+    return `<div class="arena-mechanics"><section class="drawer-section"><div class="section-heading"><div><p class="eyebrow">Live priority</p><h3>Stack</h3></div><span class="priority-orb ${priority?.id === me?.id ? "is-mine" : ""}">${escapeHtml(priority?.name || "—")}</span></div>${!isSpectator() ? `<div class="button-row"><button class="primary-button" data-action="game" data-game-type="pass-priority">Pass priority</button><button class="secondary-button" data-action="open-custom-stack">Add custom item</button></div>` : ""}<div class="stack-list">${stack}</div></section><section class="drawer-section"><div class="section-heading"><h3>Trigger queue</h3><span class="badge">${state.room.triggerQueue.length}</span></div>${triggers}</section>${mana}<details class="drawer-section"><summary>Action history</summary><div class="history-list">${history}</div></details>${isHost() && state.room.canUndo ? `<button class="danger-button wide-button" data-action="game" data-game-type="undo-last">Undo last shared action</button>` : ""}</div>`;
   }
 
   function renderToolsTab() {
     const me = currentPlayer();
-    return `<section class="tool-grid"><article class="tool-card"><h3>Draw and deck</h3><p>${me.game.libraryCount} cards in library.</p><div class="button-row"><button class="secondary-button" data-action="game" data-game-type="draw" data-amount="1">Draw 1</button><button class="secondary-button" data-action="game" data-game-type="draw" data-amount="7">Draw 7</button><button class="ghost-button" data-action="game" data-game-type="mill" data-amount="1">Mill 1</button><button class="ghost-button" data-action="game" data-game-type="shuffle">Shuffle</button><button class="danger-button" data-action="game" data-game-type="mulligan">Mulligan to 7</button></div></article><article class="tool-card"><h3>Combat cleanup</h3><div class="button-row"><button class="secondary-button" data-action="game" data-game-type="clear-combat">Clear attack/block</button><button class="secondary-button" data-action="game" data-game-type="clear-all-damage">Clear all damage</button></div></article><form id="tokenForm" class="tool-card"><h3>Create token</h3><label>Name<input name="name" maxlength="80" value="Soldier" required></label><div class="form-grid two"><label>Power<input name="power" maxlength="12" value="1"></label><label>Toughness<input name="toughness" maxlength="12" value="1"></label></div><button class="primary-button" type="submit">Create token</button></form><article class="tool-card"><h3>Dice and coin</h3><div class="tool-result">${escapeHtml(state.toolResult)}</div><div class="button-row">${[6,10,20,100].map((sides) => `<button class="secondary-button" data-action="roll" data-sides="${sides}">d${sides}</button>`).join("")}<button class="secondary-button" data-action="coin">Coin</button></div></article><article class="tool-card"><h3>Game controls</h3><div class="button-row">${!me.game.conceded ? `<button class="danger-button" data-action="game" data-game-type="concede">Concede</button>` : `<span class="badge danger">Conceded</span>`}${isHost() ? `<button class="secondary-button" data-action="reset-game">New game lobby</button>` : ""}</div></article></section>`;
+    return `<div class="tool-grid arena-tools"><article class="tool-card"><h3>Dice & coin</h3><div class="tool-result">${escapeHtml(state.toolResult)}</div><div class="button-row">${[6,10,20,100].map((sides) => `<button class="secondary-button" data-action="roll" data-sides="${sides}">d${sides}</button>`).join("")}<button class="secondary-button" data-action="coin">Coin</button></div></article>${me ? `<article class="tool-card"><h3>Deck controls</h3><div class="button-row"><button class="secondary-button" data-action="game" data-game-type="draw" data-amount="1">Draw 1</button><button class="secondary-button" data-action="game" data-game-type="draw" data-amount="7">Draw 7</button><button class="ghost-button" data-action="game" data-game-type="mill" data-amount="1">Mill 1</button><button class="ghost-button" data-action="game" data-game-type="shuffle">Shuffle</button><button class="danger-button" data-action="game" data-game-type="mulligan">Mulligan</button></div></article><form id="tokenForm" class="tool-card"><h3>Create token</h3><label>Name<input name="name" maxlength="80" value="Soldier" required></label><div class="form-grid two"><label>Power<input name="power" maxlength="12" value="1"></label><label>Toughness<input name="toughness" maxlength="12" value="1"></label></div><button class="primary-button" type="submit">Create token</button></form><article class="tool-card"><h3>Board tools</h3><div class="button-row"><button class="secondary-button" data-action="game" data-game-type="untap-all">Untap mine</button><button class="secondary-button" data-action="game" data-game-type="clear-combat">Clear combat</button><button class="ghost-button" data-action="game" data-game-type="clear-all-damage">Clear damage</button><button class="ghost-button" data-action="export-board-snapshot">Export board snapshot</button>${!me.game.conceded ? `<button class="danger-button" data-action="game" data-game-type="concede">Concede</button>` : ""}${isHost() ? `<button class="danger-button" data-action="reset-game">New game lobby</button>` : ""}</div></article>` : `<article class="tool-card"><h3>Spectator tools</h3><button class="ghost-button" data-action="export-board-snapshot">Export public board snapshot</button></article>`}</div>`;
   }
 
   function renderChatTab() {
-    return `<section class="chat-layout"><div class="chat-panel"><h2>Chat</h2><div class="chat-messages">${state.room.chat.length ? state.room.chat.map((message) => `<article class="chat-message ${message.playerId === state.session.playerId ? "is-self" : ""}"><div><strong>${escapeHtml(message.playerName)}</strong><span>${formatTime(message.time)}</span></div><p>${escapeHtml(message.message)}</p></article>`).join("") : `<div class="empty-state">No messages yet.</div>`}</div><form id="chatForm" class="chat-form"><input name="message" maxlength="500" autocomplete="off" placeholder="Send a table message…"><button class="primary-button" type="submit">Send</button></form></div><div class="log-panel"><h2>Game log</h2><div class="log-entries">${state.room.log.length ? [...state.room.log].reverse().map((entry) => `<article><div><span>${escapeHtml(entry.type)}</span><span>${formatTime(entry.time)}</span></div><p>${escapeHtml(entry.text)}</p></article>`).join("") : `<div class="empty-state">No activity yet.</div>`}</div></div></section>`;
+    const chat = state.room.chat || [];
+    const log = state.room.log || [];
+    return `<div class="chat-layout"><section class="chat-panel"><div class="panel-heading"><h3>Table chat</h3><div class="emote-row">${["👍","👏","🔥","😮","😂","🤔","⚔️","☠️"].map((emoji) => `<button data-action="send-emote" data-emoji="${emoji}" ${isSpectator() ? "disabled" : ""}>${emoji}</button>`).join("")}</div></div><div class="chat-messages">${chat.length ? chat.map((message) => `<article class="chat-message ${message.playerId === state.session?.playerId ? "is-self" : ""}"><div class="chat-meta"><strong>${escapeHtml(message.playerName)}</strong><span>${formatTime(message.time)}</span></div><p>${escapeHtml(message.message)}</p></article>`).join("") : `<div class="empty-state">No messages yet.</div>`}</div>${!isSpectator() ? `<form id="chatForm" class="chat-form"><input name="message" maxlength="500" autocomplete="off" placeholder="Send a table message…"><button class="primary-button" type="submit">Send</button></form>` : `<div class="notice">Spectator chat is read-only.</div>`}</section><section class="log-panel"><div class="panel-heading"><h3>Game log</h3></div><div class="log-entries">${log.length ? [...log].reverse().slice(0,100).map((entry) => `<article class="log-entry"><div class="log-meta"><span>${escapeHtml(entry.type)}</span><span>${formatTime(entry.time)}</span></div><p>${escapeHtml(entry.text)}</p></article>`).join("") : `<div class="empty-state">No game activity yet.</div>`}</div></section></div>`;
   }
 
   function renderHelp() {
-    return `<section class="panel"><p class="eyebrow">v15 guide</p><h1>Complete assisted Commander mechanics</h1><div class="help-grid"><article><h3>Stack & priority</h3><p>Cast spells and activate abilities onto a shared server stack. Priority moves clockwise and the top resolves after all active players pass.</p></article><article><h3>Combat</h3><p>Declare a defending player, assign blockers and resolve first-strike or normal damage with common keyword assistance.</p></article><article><h3>Triggers & effects</h3><p>Common Oracle-text patterns create trigger reminders. Add manual triggers and reusable simple effects when a card needs help.</p></article><article><h3>Mana & abilities</h3><p>Track six mana types and keep complex costs player-controlled. Activated abilities can include tap costs and selected targets.</p></article><article><h3>Advanced permanents</h3><p>Attach cards, change controllers, add temporary stat or keyword effects, transform, phase, turn face down and create copies.</p></article><article><h3>Undo & manual fallback</h3><p>The host can undo recent shared actions. Unusual layers, replacement effects and card-specific corner cases remain manually adjustable.</p></article></div></section>`;
+    return `<section class="panel"><div class="section-heading"><div><p class="eyebrow">Arena Commander v20</p><h1>How the digital table works</h1></div></div><div class="help-grid"><article class="help-card"><h3>Full-screen table</h3><p>Your seat stays at the bottom while opponents are arranged clockwise around the battlefield. Spectators see the whole public table without hidden hands.</p></article><article class="help-card"><h3>Drag or tap</h3><p>Drag cards between your zones, drag creatures to opponents to attack, or use the card action sheet on touch devices.</p></article><article class="help-card"><h3>Stack & priority</h3><p>The priority holder glows. Pass clockwise; when everyone passes, the top stack item resolves.</p></article><article class="help-card"><h3>Combat</h3><p>Attack and block arrows, damage previews and assisted keyword handling make multiplayer combat easier to follow.</p></article><article class="help-card"><h3>Performance</h3><p>Low-data, reduced-animation, high-contrast and large-text options are stored on each device.</p></article><article class="help-card"><h3>Sandbox fallback</h3><p>Complex replacement effects and difficult layer interactions remain manually adjustable so unusual cards never lock the game.</p></article></div></section>`;
   }
+
 
   function findCard(cardId) {
     if (!state.room) return null;
@@ -624,10 +907,204 @@
     render();
   }
 
+  function openEmotes() {
+    openModal("Table emote", `<div class="large-emote-grid">${["👍","👏","🔥","😮","😂","🤔","⚔️","☠️","GG","Nice!"].map((emoji) => `<button data-action="send-emote" data-emoji="${escapeAttribute(emoji)}">${escapeHtml(emoji)}</button>`).join("")}</div>`);
+  }
+
+  function viewReplayFrame(frameId) {
+    const frame = (state.room.replayFrames || []).find((entry) => entry.id === frameId);
+    if (!frame) return showToast("That replay frame is no longer available.", "warning");
+    const playerRows = frame.players.map((player) => `<article class="replay-player"><header><strong>${escapeHtml(player.name)}</strong><span>${player.life} life • ${player.poison} poison</span></header><div class="replay-card-list">${(player.battlefield || []).map((card) => `<span class="${card.tapped ? "tapped" : ""} ${card.attacking ? "attacking" : ""}">${escapeHtml(card.name)}${card.damageMarked ? ` (${card.damageMarked} dmg)` : ""}</span>`).join("") || `<small>Empty battlefield</small>`}</div></article>`).join("");
+    openModal(`Replay — ${frame.label}`, `<div class="replay-frame-view"><div class="replay-meta"><strong>${escapeHtml(frame.actorName || "Table")}</strong><span>${formatTime(frame.time)}</span><span>${escapeHtml(frame.phase || "")}</span></div><div class="replay-stack"><strong>Stack</strong>${(frame.stack || []).map((item) => `<span>${escapeHtml(item.name)}</span>`).join("") || `<small>Empty</small>`}</div>${playerRows}</div>`);
+  }
+
+  function exportBoardSnapshot() {
+    if (!state.room) return;
+    const snapshot = {
+      exportedAt: new Date().toISOString(),
+      roomCode: state.room.code,
+      turn: state.room.turn,
+      phase: state.room.phases[state.room.turn?.phaseIndex || 0],
+      stack: state.room.stack,
+      players: state.room.players.map((player) => ({
+        id: player.id,
+        name: player.name,
+        life: player.game?.life,
+        poison: player.game?.poison,
+        commanderTax: player.game?.commanderTax,
+        commanderDamage: player.game?.commanderDamage,
+        handCount: player.game?.handCount ?? player.game?.hand?.length,
+        libraryCount: player.game?.libraryCount,
+        battlefield: player.game?.battlefield,
+        graveyard: player.game?.graveyard,
+        exile: player.game?.exile,
+        commandZone: player.game?.commandZone
+      }))
+    };
+    const blob = new Blob([JSON.stringify(snapshot,null,2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `commander-${state.room.code}-turn-${state.room.turn?.number || 0}.json`;
+    link.click();
+    URL.revokeObjectURL(url);
+    showToast("Board snapshot exported.", "success");
+  }
+
+  function ensureAudioContext() {
+    if (state.audioContext) return state.audioContext;
+    const Context = window.AudioContext || window.webkitAudioContext;
+    if (!Context) return null;
+    state.audioContext = new Context();
+    return state.audioContext;
+  }
+
+  function playCue(kind = "info") {
+    if (!state.uiSettings.sound) return;
+    const context = ensureAudioContext();
+    if (!context) return;
+    const map = { turn: [520, 760], priority: [660, 880], spell: [420, 620], damage: [180, 120], emote: [740, 740], info: [440, 520] };
+    const frequencies = map[kind] || map.info;
+    const start = context.currentTime;
+    frequencies.forEach((frequency,index) => {
+      const oscillator = context.createOscillator();
+      const gain = context.createGain();
+      oscillator.type = kind === "damage" ? "square" : "sine";
+      oscillator.frequency.value = frequency;
+      gain.gain.setValueAtTime(0.0001,start + index * 0.09);
+      gain.gain.exponentialRampToValueAtTime(0.08,start + index * 0.09 + 0.015);
+      gain.gain.exponentialRampToValueAtTime(0.0001,start + index * 0.09 + 0.12);
+      oscillator.connect(gain).connect(context.destination);
+      oscillator.start(start + index * 0.09);
+      oscillator.stop(start + index * 0.09 + 0.14);
+    });
+  }
+
+  function vibrate(pattern) {
+    if (state.uiSettings.vibration && navigator.vibrate) navigator.vibrate(pattern);
+  }
+
+  function processRoomTransition(previous, next) {
+    if (!previous || !next || isSpectator()) return;
+    const me = state.session?.playerId;
+    if (previous.turn?.activePlayerId !== next.turn?.activePlayerId && next.turn?.activePlayerId === me) { playCue("turn"); vibrate([80,40,120]); showToast("Your turn.", "success"); }
+    if (previous.priority?.playerId !== next.priority?.playerId && next.priority?.playerId === me) { playCue("priority"); vibrate(60); showToast("You have priority.", "info"); }
+    if ((next.stack?.length || 0) > (previous.stack?.length || 0)) playCue("spell");
+    const oldMe = previous.players?.find((player) => player.id === me);
+    const newMe = next.players?.find((player) => player.id === me);
+    if (oldMe?.game && newMe?.game && oldMe.game.life !== newMe.game.life) { playCue("damage"); vibrate(40); }
+    if ((next.emotes?.length || 0) > (previous.emotes?.length || 0)) playCue("emote");
+  }
+
+  function maybeAutoPass() {
+    window.clearTimeout(state.autoPassTimer);
+    if (!state.uiSettings.autoPassEmpty || state.fullControl || isSpectator() || !state.room || state.room.stack.length || state.room.priority?.playerId !== state.session?.playerId || state.room.turn?.activePlayerId === state.session?.playerId) return;
+    state.autoPassTimer = window.setTimeout(() => gameAction({ type: "pass-priority" }), 1400);
+  }
+
+  function observeCardImages() {
+    if (state.uiSettings.lowData || !("IntersectionObserver" in window)) return;
+    const images = document.querySelectorAll(".arena-card-image img[loading='lazy']");
+    const observer = new IntersectionObserver((entries,instance) => {
+      for (const entry of entries) if (entry.isIntersecting) { entry.target.classList.add("is-visible"); instance.unobserve(entry.target); }
+    }, { rootMargin: "200px" });
+    images.forEach((image) => observer.observe(image));
+  }
+
+  function cssEscape(value) {
+    if (globalThis.CSS?.escape) return globalThis.CSS.escape(String(value));
+    return String(value).replace(/[^a-zA-Z0-9_-]/g, (character) => `\${character}`);
+  }
+
+  function linePoint(element) {
+    const stage = document.querySelector(".arena-stage")?.getBoundingClientRect();
+    const rect = element?.getBoundingClientRect();
+    if (!stage || !rect) return null;
+    return { x: rect.left - stage.left + rect.width / 2, y: rect.top - stage.top + rect.height / 2 };
+  }
+
+  function appendArenaLine(svg, from, to, type, label = "") {
+    if (!from || !to) return;
+    const dx = Math.max(35, Math.abs(to.x-from.x) * 0.35);
+    const path = document.createElementNS("http://www.w3.org/2000/svg","path");
+    path.setAttribute("d",`M ${from.x} ${from.y} C ${from.x} ${from.y-dx/2}, ${to.x} ${to.y+dx/2}, ${to.x} ${to.y}`);
+    path.setAttribute("class",`arena-line line-${type}`);
+    path.setAttribute("marker-end",type === "attack" || type === "block" ? "url(#arrowAttack)" : "url(#arrowLink)");
+    svg.appendChild(path);
+    if (label) {
+      const text = document.createElementNS("http://www.w3.org/2000/svg","text");
+      text.setAttribute("x",String((from.x+to.x)/2)); text.setAttribute("y",String((from.y+to.y)/2)); text.setAttribute("class","arena-line-label"); text.textContent=label; svg.appendChild(text);
+    }
+  }
+
+  function drawArenaLines() {
+    const svg = document.getElementById("arenaLines");
+    if (!svg || !state.uiSettings.showArrows || !state.room) return;
+    [...svg.querySelectorAll(".arena-line,.arena-line-label")].forEach((node) => node.remove());
+    for (const player of state.room.players) {
+      for (const card of player.game?.battlefield || []) {
+        const source = document.querySelector(`[data-card-id="${cssEscape(card.id)}"] .arena-card-frame`) || document.querySelector(`[data-card-id="${cssEscape(card.id)}"]`);
+        if (card.attacking && card.defendingPlayerId) {
+          const target = document.querySelector(`[data-player-seat-id="${cssEscape(card.defendingPlayerId)}"] .seat-life`);
+          appendArenaLine(svg,linePoint(source),linePoint(target),"attack","");
+        }
+        if (card.blockingCardId) {
+          const target = document.querySelector(`[data-card-id="${cssEscape(card.blockingCardId)}"] .arena-card-frame`) || document.querySelector(`[data-card-id="${cssEscape(card.blockingCardId)}"]`);
+          appendArenaLine(svg,linePoint(source),linePoint(target),"block","BLOCK");
+        }
+        if (card.attachedToId) {
+          const target = document.querySelector(`[data-card-id="${cssEscape(card.attachedToId)}"] .arena-card-frame`) || document.querySelector(`[data-card-id="${cssEscape(card.attachedToId)}"]`);
+          appendArenaLine(svg,linePoint(source),linePoint(target),"attach","");
+        }
+      }
+    }
+  }
+
+  async function rejoinSpectator() {
+    if (!state.spectator || !socket.connected) return;
+    const response = await emitAck("join-spectator", { roomCode: state.spectator.roomCode, name: state.spectator.name }, false);
+    if (!response.success) { clearSession(); render(); showToast(response.error,"error"); }
+    else { setSpectator(response,state.spectator.name); render(); }
+  }
+
+  function cardFromElement(element) {
+    const cardElement = element?.closest?.("[data-card-id]");
+    if (!cardElement) return null;
+    const found = findCard(cardElement.dataset.cardId);
+    return found ? { ...found, cardElement } : null;
+  }
+
+
   document.addEventListener("click", async (event) => {
     const button = event.target.closest("button, [data-action]");
     if (!button) return;
     const action = button.dataset.action;
+
+    if (action === "open-ui-settings") return openUiSettings();
+    if (action === "toggle-fullscreen") {
+      if (!document.fullscreenElement) await document.documentElement.requestFullscreen?.().catch(() => undefined);
+      else await document.exitFullscreen?.().catch(() => undefined);
+      return;
+    }
+    if (action === "open-arena-drawer") { state.activeDrawer = button.dataset.drawer; state.activeGameTab = button.dataset.drawer; render(); return; }
+    if (action === "close-arena-drawer") { state.activeDrawer = null; state.activeGameTab = "table"; render(); return; }
+    if (action === "toggle-card-group") { state.expandedGroups[button.dataset.groupKey] = !state.expandedGroups[button.dataset.groupKey]; render(); return; }
+    if (action === "toggle-full-control") { state.fullControl = !state.fullControl; render(); return; }
+    if (action === "open-emotes") return openEmotes();
+    if (action === "send-emote") { const response = await emitAck("send-emote", { emoji: button.dataset.emoji }); if (!response.success) showToast(response.error,"error"); else closeModal(); return; }
+    if (action === "view-replay-frame") return viewReplayFrame(button.dataset.frameId);
+    if (action === "export-board-snapshot") return exportBoardSnapshot();
+    if (action === "phase-step") { const targetIndex = Number(button.dataset.phaseIndex); if (targetIndex === (state.room.turn?.phaseIndex || 0) + 1) return gameAction({ type: "next-phase" }); return; }
+    if (action === "leave-spectator") { await emitAck("leave-spectator", {}, false); clearSession(); render(); return; }
+    if (action === "rejoin-spectator") return rejoinSpectator();
+    if (action === "open-zone-drawer") {
+      const player = playerById(button.dataset.playerId);
+      const zone = button.dataset.zone;
+      if (!player?.game) return;
+      if (player.id === state.session?.playerId) { state.activeDrawer = "zones"; state.activeGameTab = "zones"; render(); return; }
+      const cards = ["graveyard","exile","commandZone"].includes(zone) ? player.game[zone] || [] : [];
+      return openModal(`${player.name} — ${zone}`, cards.length ? `<div class="zone-cards">${cards.map((card) => renderCard(card,zone,player.id,false)).join("")}</div>` : `<div class="empty-state">This public zone is empty or hidden.</div>`);
+    }
 
     if (button.dataset.nav) {
       if (state.room && button.dataset.nav !== "game") return showToast("Leave the room before changing sections.", "warning");
@@ -749,6 +1226,16 @@
       if (!response.success) showToast(response.error, "error");
       else { setSession(response); render(); }
     }
+    if (form.id === "spectatorForm") {
+      const name = String(data.get("name") || "Spectator").trim();
+      const response = await emitAck("join-spectator", { name, roomCode: data.get("roomCode") }, false);
+      if (!response.success) showToast(response.error, "error");
+      else { setSpectator(response, name); render(); }
+    }
+    if (form.id === "uiSettingsForm") {
+      for (const key of Object.keys(DEFAULT_UI_SETTINGS)) state.uiSettings[key] = data.get(key) === "on";
+      saveUiSettings(); closeModal(); render(); return;
+    }
     if (form.id === "deckForm") {
       const cards = parseDeckList(data.get("deckList"));
       const commanders = String(data.get("commanders") || "").split(/\s*\/\s*|\s*\+\s*/).map((entry) => entry.trim()).filter(Boolean).slice(0, 2);
@@ -787,7 +1274,7 @@
       }
     }
     if (form.id === "roomSettingsForm") {
-      const response = await emitAck("update-room-settings", { maxPlayers: Number(data.get("maxPlayers")), startingLife: Number(data.get("startingLife")) });
+      const response = await emitAck("update-room-settings", { maxPlayers: Number(data.get("maxPlayers")), startingLife: Number(data.get("startingLife")), turnTimerSeconds: Number(data.get("turnTimerSeconds") || 0), allowSpectators: data.get("allowSpectators") === "1" });
       if (!response.success) showToast(response.error, "error");
       else { state.room = response.room; render(); }
     }
@@ -810,6 +1297,60 @@
     }
   });
 
+  document.addEventListener("dragstart", (event) => {
+    const cardElement = event.target.closest(".arena-card[draggable='true']");
+    if (!cardElement || isSpectator()) return;
+    state.dragSource = { cardId: cardElement.dataset.cardId, zone: cardElement.dataset.zone, ownerId: cardElement.dataset.ownerId };
+    event.dataTransfer.effectAllowed = "move";
+    event.dataTransfer.setData("text/plain", cardElement.dataset.cardId);
+    document.body.classList.add("is-dragging-card");
+  });
+
+  document.addEventListener("dragend", () => {
+    state.dragSource = null;
+    document.body.classList.remove("is-dragging-card");
+    document.querySelectorAll(".drag-over").forEach((element) => element.classList.remove("drag-over"));
+  });
+
+  document.addEventListener("dragover", (event) => {
+    const target = event.target.closest("[data-drop-player-id],[data-drop-zone],.arena-card[data-card-id]");
+    if (!target || !state.dragSource) return;
+    event.preventDefault();
+    target.classList.add("drag-over");
+  });
+
+  document.addEventListener("dragleave", (event) => event.target.closest(".drag-over")?.classList.remove("drag-over"));
+
+  document.addEventListener("drop", async (event) => {
+    const source = state.dragSource;
+    if (!source) return;
+    event.preventDefault();
+    const playerTarget = event.target.closest("[data-drop-player-id]");
+    const zoneTarget = event.target.closest("[data-drop-zone]");
+    const cardTarget = event.target.closest(".arena-card[data-card-id]");
+    state.dragSource = null;
+    document.body.classList.remove("is-dragging-card");
+    if (cardTarget && cardTarget.dataset.cardId !== source.cardId) {
+      const target = findCard(cardTarget.dataset.cardId)?.card;
+      const sourceCard = findCard(source.cardId)?.card;
+      if (!target || !sourceCard) return;
+      const blockOption = target.attacking && target.defendingPlayerId === state.session?.playerId;
+      openModal("Choose card interaction", `<div class="drag-choice"><p><strong>${escapeHtml(sourceCard.name)}</strong> → <strong>${escapeHtml(target.name)}</strong></p><button class="combat-button" data-action="confirm-target" data-game-type="fight-card" data-source-card-id="${sourceCard.id}" data-target-card-id="${target.id}">Fight</button>${blockOption ? `<button class="combat-button" data-action="confirm-target" data-game-type="block-card" data-source-card-id="${sourceCard.id}" data-target-card-id="${target.id}">Block</button>` : ""}<button class="secondary-button" data-action="confirm-target" data-game-type="attach-card" data-source-card-id="${sourceCard.id}" data-target-card-id="${target.id}">Attach</button></div>`);
+      return;
+    }
+    if (zoneTarget?.dataset.dropZone && zoneTarget.dataset.dropZone !== source.zone) {
+      return gameAction({ type: "move-card", cardId: source.cardId, fromZone: source.zone, toZone: zoneTarget.dataset.dropZone });
+    }
+    if (playerTarget && source.zone === "battlefield" && playerTarget.dataset.dropPlayerId !== state.session?.playerId) {
+      return gameAction({ type: "declare-attacker", cardId: source.cardId, defenderPlayerId: playerTarget.dataset.dropPlayerId });
+    }
+  });
+
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape") { state.targetMode = null; state.activeDrawer = null; closeModal(); render(); }
+    if ((event.key === " " || event.key === "Enter") && event.target.matches(".arena-card")) event.target.click();
+  });
+
   async function rejoinSavedRoom() {
     if (!state.session || !socket.connected) return;
     const response = await emitAck("rejoin-room");
@@ -822,16 +1363,22 @@
 
   socket.on("connect", () => {
     setConnection("online", "Online");
+    reconnectOverlay?.classList.add("is-hidden");
     if (state.session) rejoinSavedRoom();
+    else if (state.spectator) rejoinSpectator();
   });
-  socket.on("disconnect", () => setConnection("offline", "Reconnecting…"));
-  socket.on("connect_error", () => setConnection("offline", "Connection error"));
-  socket.on("room-updated", (room) => { state.room = room; render(); });
+  socket.on("disconnect", () => { setConnection("offline", "Reconnecting…"); if (state.room) reconnectOverlay?.classList.remove("is-hidden"); });
+  socket.on("connect_error", () => { setConnection("offline", "Connection error"); if (state.room) reconnectOverlay?.classList.remove("is-hidden"); });
+  socket.on("room-updated", (room) => { const previous = state.room; state.previousRoom = previous; state.room = room; processRoomTransition(previous, room); render(); maybeAutoPass(); });
   socket.on("removed-from-room", (payload) => { clearSession(); closeModal(); render(); showToast(payload?.message || "You left the room.", "warning"); });
   socket.on("server-message", (payload) => { if (payload?.message) showToast(payload.message, payload.type); });
 
   modalBackdrop.addEventListener("click", (event) => { if (event.target === modalBackdrop) closeModal(); });
   brandButton.addEventListener("click", () => { if (!state.room) { state.view = "home"; render(); } });
+  settingsButton?.addEventListener("click", openUiSettings);
+  fullscreenButton?.addEventListener("click", async () => { if (!document.fullscreenElement) await document.documentElement.requestFullscreen?.().catch(() => undefined); else await document.exitFullscreen?.().catch(() => undefined); });
+  window.addEventListener("resize", () => window.requestAnimationFrame(drawArenaLines));
+  window.setInterval(updateTurnClock, 1000);
 
   window.addEventListener("beforeinstallprompt", (event) => {
     event.preventDefault();
