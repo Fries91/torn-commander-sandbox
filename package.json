@@ -1,8 +1,8 @@
 {
   "name": "torn-commander-sandbox",
-  "version": "15.0.0",
+  "version": "20.0.0",
   "private": true,
-  "description": "Persistent mobile-friendly MTG Commander sandbox with card intelligence, stack, priority, assisted combat, triggers, mana, attachments, special layouts and undo history.",
+  "description": "Persistent Arena-style 2-6 player MTG Commander table with card intelligence, stack, priority, assisted combat, spectators, replays and accessibility settings.",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
