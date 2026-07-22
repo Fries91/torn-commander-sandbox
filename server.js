@@ -123,6 +123,57 @@ function shuffle(input) {
   return output;
 }
 
+function createStartingRollOff(playerIds) {
+  return {
+    round: 1,
+    currentEligiblePlayerIds: [...playerIds],
+    currentRolls: {},
+    rounds: [],
+    tiedPlayerIds: [],
+    winnerPlayerId: null,
+    winningRoll: null,
+    completed: false
+  };
+}
+
+function migrateStartingRollOff(value, playerIds) {
+  const validIds = new Set(playerIds);
+  const source = value && typeof value === "object" ? value : {};
+  const eligible = Array.isArray(source.currentEligiblePlayerIds)
+    ? source.currentEligiblePlayerIds.filter((id) => validIds.has(id))
+    : [...playerIds];
+  const currentRolls = {};
+  for (const [id, rawRoll] of Object.entries(source.currentRolls || {})) {
+    if (validIds.has(id)) currentRolls[id] = clamp(Math.floor(Number(rawRoll) || 0), 1, 20);
+  }
+  const rounds = Array.isArray(source.rounds)
+    ? source.rounds.slice(-20).map((entry, index) => {
+        const rolls = {};
+        for (const [id, rawRoll] of Object.entries(entry?.rolls || {})) {
+          if (validIds.has(id)) rolls[id] = clamp(Math.floor(Number(rawRoll) || 0), 1, 20);
+        }
+        return { round: clamp(Math.floor(Number(entry?.round) || index + 1), 1, 99), rolls };
+      })
+    : [];
+  const winnerPlayerId = validIds.has(source.winnerPlayerId) ? source.winnerPlayerId : null;
+  return {
+    round: clamp(Math.floor(Number(source.round) || 1), 1, 99),
+    currentEligiblePlayerIds: eligible.length ? eligible : winnerPlayerId ? [] : [...playerIds],
+    currentRolls,
+    rounds,
+    tiedPlayerIds: Array.isArray(source.tiedPlayerIds) ? source.tiedPlayerIds.filter((id) => validIds.has(id)) : [],
+    winnerPlayerId,
+    winningRoll: source.winningRoll == null ? null : clamp(Math.floor(Number(source.winningRoll) || 1), 1, 20),
+    completed: Boolean(source.completed && winnerPlayerId)
+  };
+}
+
+function createClockwiseTurnOrder(playerIds, startingPlayerId) {
+  if (!Array.isArray(playerIds) || playerIds.length === 0) return [];
+  const startIndex = Math.max(0, playerIds.indexOf(startingPlayerId));
+  return [...playerIds.slice(startIndex), ...playerIds.slice(0, startIndex)];
+}
+
 function normalizeCounterMap(value) {
   if (typeof value === "number") {
     return value === 0 ? {} : { counter: clamp(Math.floor(value), -99, 999) };
@@ -187,6 +238,7 @@ function migrateRoom(room) {
   if (room.code.length !== ROOM_CODE_LENGTH) return null;
   room.maxPlayers = ALLOWED_MAX_PLAYERS.has(Number(room.maxPlayers)) ? Number(room.maxPlayers) : 6;
   room.startingLife = ALLOWED_STARTING_LIFE.has(Number(room.startingLife)) ? Number(room.startingLife) : 40;
+  room.status = ["waiting", "rolloff", "started"].includes(room.status) ? room.status : "waiting";
   room.chat = Array.isArray(room.chat) ? room.chat.slice(-MAX_CHAT_MESSAGES) : [];
   room.log = Array.isArray(room.log) ? room.log.slice(-MAX_LOG_ENTRIES) : [];
   room.players = room.players.map((player) => ({
@@ -201,10 +253,32 @@ function migrateRoom(room) {
   }));
   const allPlayerIds = room.players.map((player) => player.id);
   room.players.forEach((player) => {
-    if (room.status === "started") {
+    if (room.status === "rolloff" || room.status === "started") {
       player.game = migrateGame(player.game, player.id, room.startingLife, allPlayerIds);
     }
   });
+  room.rollOff = room.status === "waiting"
+    ? null
+    : migrateStartingRollOff(room.rollOff, allPlayerIds);
+  if (room.status === "started") {
+    const existingOrder = Array.isArray(room.turn?.order)
+      ? room.turn.order.filter((id) => allPlayerIds.includes(id))
+      : [];
+    const order = existingOrder.length === allPlayerIds.length ? existingOrder : [...allPlayerIds];
+    const activePlayerId = allPlayerIds.includes(room.turn?.activePlayerId)
+      ? room.turn.activePlayerId
+      : order[0] || null;
+    room.turn = {
+      number: Math.max(1, Math.floor(Number(room.turn?.number) || 1)),
+      phaseIndex: clamp(Math.floor(Number(room.turn?.phaseIndex) || 0), 0, PHASES.length - 1),
+      activePlayerId,
+      order
+    };
+  } else if (room.status === "rolloff") {
+    room.turn = { number: 0, phaseIndex: 0, activePlayerId: null, order: [] };
+  } else {
+    room.turn = null;
+  }
   room.updatedAt = room.updatedAt || nowIso();
   return room;
 }
@@ -489,6 +563,20 @@ function publicGame(game, isViewer) {
   return result;
 }
 
+function publicStartingRollOff(rollOff) {
+  if (!rollOff) return null;
+  return {
+    round: rollOff.round,
+    currentEligiblePlayerIds: [...rollOff.currentEligiblePlayerIds],
+    currentRolls: { ...rollOff.currentRolls },
+    rounds: rollOff.rounds.map((entry) => ({ round: entry.round, rolls: { ...entry.rolls } })),
+    tiedPlayerIds: [...rollOff.tiedPlayerIds],
+    winnerPlayerId: rollOff.winnerPlayerId,
+    winningRoll: rollOff.winningRoll,
+    completed: rollOff.completed
+  };
+}
+
 function createPublicRoom(room, viewerId = null) {
   return {
     code: room.code,
@@ -502,7 +590,8 @@ function createPublicRoom(room, viewerId = null) {
     startedAt: room.startedAt,
     persistence: persistenceSummary(),
     phases: PHASES,
-    turn: room.turn ? { ...room.turn } : null,
+    turn: room.turn ? { ...room.turn, order: [...(room.turn.order || [])] } : null,
+    rollOff: publicStartingRollOff(room.rollOff),
     chat: room.chat.slice(-MAX_CHAT_MESSAGES),
     log: room.log.slice(-MAX_LOG_ENTRIES),
     players: room.players.map((player) => ({
@@ -632,7 +721,13 @@ function clearDamage(room) {
 }
 
 function activePlayers(room) {
-  return room.players.filter((player) => player.game && !player.game.conceded);
+  const order = Array.isArray(room.turn?.order) && room.turn.order.length
+    ? room.turn.order
+    : room.players.map((player) => player.id);
+  const byId = new Map(room.players.map((player) => [player.id, player]));
+  return order
+    .map((id) => byId.get(id))
+    .filter((player) => player?.game && !player.game.conceded);
 }
 
 function advanceTurn(room) {
@@ -646,7 +741,63 @@ function advanceTurn(room) {
   room.turn.phaseIndex = 0;
   room.turn.number += 1;
   next.game.battlefield.forEach((card) => { card.tapped = false; });
-  addLog(room, `Turn ${room.turn.number}: ${next.name} is active.`, "turn");
+  addLog(room, `Turn ${room.turn.number}: ${next.name} is active. Clockwise play continues.`, "turn");
+}
+
+function performStartingRoll(room, player, forcedRoll = null) {
+  if (room.status !== "rolloff" || !room.rollOff) {
+    return { success: false, error: "The starting-player roll is not active." };
+  }
+  if (!player.connected) return { success: false, error: "Reconnect before rolling." };
+  const rollOff = room.rollOff;
+  if (!rollOff.currentEligiblePlayerIds.includes(player.id)) {
+    return { success: false, error: "Only the tied players need to roll this round." };
+  }
+  if (Object.prototype.hasOwnProperty.call(rollOff.currentRolls, player.id)) {
+    return { success: false, error: "You already rolled for this round." };
+  }
+
+  const roll = forcedRoll == null
+    ? crypto.randomInt(1, 21)
+    : clamp(Math.floor(Number(forcedRoll) || 1), 1, 20);
+  rollOff.currentRolls[player.id] = roll;
+  addLog(room, `${player.name} rolled ${roll} on a d20 for starting player.`, "roll");
+
+  const everyoneRolled = rollOff.currentEligiblePlayerIds.every((id) =>
+    Object.prototype.hasOwnProperty.call(rollOff.currentRolls, id)
+  );
+  if (!everyoneRolled) return { success: true, roll, completed: false };
+
+  const completedRolls = {};
+  for (const id of rollOff.currentEligiblePlayerIds) completedRolls[id] = rollOff.currentRolls[id];
+  rollOff.rounds.push({ round: rollOff.round, rolls: completedRolls });
+  const highest = Math.max(...Object.values(completedRolls));
+  const highestIds = rollOff.currentEligiblePlayerIds.filter((id) => completedRolls[id] === highest);
+
+  if (highestIds.length > 1) {
+    rollOff.tiedPlayerIds = [...highestIds];
+    rollOff.currentEligiblePlayerIds = [...highestIds];
+    rollOff.currentRolls = {};
+    rollOff.round += 1;
+    const tiedNames = highestIds.map((id) => findPlayer(room, id)?.name || "Player").join(", ");
+    addLog(room, `${tiedNames} tied with ${highest}. They must reroll.`, "roll");
+    return { success: true, roll, completed: false, tied: true };
+  }
+
+  const winnerId = highestIds[0];
+  const winner = findPlayer(room, winnerId);
+  const playerIds = room.players.map((roomPlayer) => roomPlayer.id);
+  const order = createClockwiseTurnOrder(playerIds, winnerId);
+  rollOff.winnerPlayerId = winnerId;
+  rollOff.winningRoll = highest;
+  rollOff.completed = true;
+  rollOff.tiedPlayerIds = [];
+  rollOff.currentEligiblePlayerIds = [];
+  rollOff.currentRolls = {};
+  room.status = "started";
+  room.turn = { number: 1, phaseIndex: 0, activePlayerId: winnerId, order };
+  addLog(room, `${winner?.name || "The winner"} won the d20 roll with ${highest} and takes the first turn. Play proceeds clockwise.`, "turn");
+  return { success: true, roll, completed: true, winnerPlayerId: winnerId };
 }
 
 function requireOwnedBattlefieldCard(actor, cardId) {
@@ -875,7 +1026,7 @@ app.get("/api/health", (request, response) => {
     success: true,
     status: "online",
     app: "Torn Commander Sandbox",
-    version: "7.0.0",
+    version: "8.0.0",
     connectedSockets: io.engine.clientsCount,
     activeRooms: rooms.size,
     persistence: persistenceSummary(),
@@ -884,7 +1035,7 @@ app.get("/api/health", (request, response) => {
 });
 
 app.get("/api", (request, response) => {
-  response.status(200).json({ success: true, name: "Torn Commander Sandbox API", version: "7.0.0", persistence: persistenceSummary() });
+  response.status(200).json({ success: true, name: "Torn Commander Sandbox API", version: "8.0.0", persistence: persistenceSummary() });
 });
 
 io.on("connection", (socket) => {
@@ -899,7 +1050,7 @@ io.on("connection", (socket) => {
       const player = { id: createId(), name, ready: false, connected: true, socketId: socket.id, sessionToken: createSessionToken(), deck: null, game: null, joinedAt: timestamp, lastSeenAt: timestamp };
       const maxPlayers = ALLOWED_MAX_PLAYERS.has(Number(payload?.maxPlayers)) ? Number(payload.maxPlayers) : 6;
       const startingLife = ALLOWED_STARTING_LIFE.has(Number(payload?.startingLife)) ? Number(payload.startingLife) : 40;
-      const room = { code: createRoomCode(), hostId: player.id, privateRoom: true, maxPlayers, startingLife, status: "waiting", createdAt: timestamp, updatedAt: timestamp, startedAt: null, turn: null, players: [player], chat: [], log: [] };
+      const room = { code: createRoomCode(), hostId: player.id, privateRoom: true, maxPlayers, startingLife, status: "waiting", createdAt: timestamp, updatedAt: timestamp, startedAt: null, turn: null, rollOff: null, players: [player], chat: [], log: [] };
       rooms.set(room.code, room);
       attachSocket(socket, room, player);
       addLog(room, `${name} created the room.`, "room");
@@ -999,11 +1150,21 @@ io.on("connection", (socket) => {
     if (unavailable) return fail(callback, `${unavailable.name} must be connected, choose a deck and mark ready.`);
     const ids = auth.room.players.map((player) => player.id);
     auth.room.players.forEach((player) => { player.game = buildGameState(player, auth.room.startingLife, ids); });
-    auth.room.status = "started";
+    auth.room.status = "rolloff";
     auth.room.startedAt = nowIso();
-    auth.room.turn = { number: 1, phaseIndex: 0, activePlayerId: auth.room.players[0].id };
-    addLog(auth.room, `Game started. ${auth.room.players[0].name} is active.`, "turn");
+    auth.room.rollOff = createStartingRollOff(ids);
+    auth.room.turn = { number: 0, phaseIndex: 0, activePlayerId: null, order: [] };
+    addLog(auth.room, "Starting-player d20 roll-off began. Every player must roll once; tied high rolls reroll.", "roll");
     acknowledge(callback, { success: true, room: createPublicRoom(auth.room, auth.player.id) });
+    emitRoomUpdate(auth.room);
+  });
+
+  socket.on("roll-starting-d20", (payload, callback) => {
+    const auth = authenticationFrom(payload);
+    if (!auth.success) return acknowledge(callback, auth);
+    const result = performStartingRoll(auth.room, auth.player);
+    if (!result.success) return acknowledge(callback, result);
+    acknowledge(callback, { ...result, room: createPublicRoom(auth.room, auth.player.id) });
     emitRoomUpdate(auth.room);
   });
 
@@ -1063,6 +1224,7 @@ io.on("connection", (socket) => {
     auth.room.status = "waiting";
     auth.room.startedAt = null;
     auth.room.turn = null;
+    auth.room.rollOff = null;
     auth.room.players.forEach((player) => { player.game = null; player.ready = false; });
     auth.room.chat = [];
     auth.room.log = [];
@@ -1121,7 +1283,7 @@ async function start() {
     console.error("PostgreSQL initialization failed. Continuing with memory:", error);
   }
   server.listen(PORT, "0.0.0.0", () => {
-    console.log(`Torn Commander Sandbox v7 running on port ${PORT}`);
+    console.log(`Torn Commander Sandbox v8 running on port ${PORT}`);
   });
 }
 
@@ -1143,6 +1305,17 @@ process.on("SIGINT", () => shutdown("SIGINT"));
 process.on("uncaughtException", (error) => console.error("Uncaught exception:", error));
 process.on("unhandledRejection", (reason) => console.error("Unhandled rejection:", reason));
 
-module.exports = { createCard, effectiveStats, isLethal, processGameAction, migrateCard, migrateGame };
+module.exports = {
+  createCard,
+  effectiveStats,
+  isLethal,
+  processGameAction,
+  migrateCard,
+  migrateGame,
+  createStartingRollOff,
+  createClockwiseTurnOrder,
+  performStartingRoll,
+  advanceTurn
+};
 
 if (require.main === module) start();
