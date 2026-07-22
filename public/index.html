@@ -1,63 +1,46 @@
 <!doctype html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
+  <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <meta name="theme-color" content="#101112">
-  <meta name="description" content="A private 2–6 player MTG Commander sandbox for the Torn community.">
-  <meta name="apple-mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="theme-color" content="#111827">
+  <meta name="description" content="Persistent 2–6 player MTG Commander sandbox with counters, combat and fight actions.">
   <title>Torn Commander Sandbox</title>
   <link rel="manifest" href="/manifest.webmanifest">
   <link rel="icon" href="/icon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="/styles.css">
 </head>
 <body>
-  <div class="app-shell">
-    <header class="topbar">
-      <button id="brandButton" class="brand-button" type="button" aria-label="Open home">
-        <span class="brand-icon" aria-hidden="true">🃏</span>
-        <span class="brand-copy">
-          <small>Unofficial Torn Community App</small>
-          <strong>Torn Commander</strong>
-        </span>
-      </button>
+  <header class="app-header">
+    <button id="brandButton" class="brand-button" type="button" aria-label="Home">
+      <span class="brand-mark">♛</span>
+      <span><strong>Torn Commander</strong><small>Sandbox v7</small></span>
+    </button>
+    <div class="header-actions">
+      <div id="connectionStatus" class="connection-status offline"><span></span><span id="connectionText">Connecting…</span></div>
+      <button id="installButton" class="small-button" type="button" hidden>Install</button>
+    </div>
+  </header>
 
-      <div class="topbar-actions">
-        <button id="installButton" class="icon-button is-hidden" type="button" title="Install app" aria-label="Install app">⇩</button>
-        <div id="connectionStatus" class="connection-status is-connecting" role="status">
-          <span class="status-dot"></span>
-          <span id="connectionText">Connecting</span>
-        </div>
-      </div>
-    </header>
+  <main id="app" class="app-main" aria-live="polite"></main>
 
-    <main id="app" class="main-content" aria-live="polite"></main>
-
-    <nav id="bottomNav" class="bottom-nav" aria-label="Application navigation">
-      <button class="nav-item active" type="button" data-nav="home"><span>⌂</span><small>Home</small></button>
-      <button class="nav-item" type="button" data-nav="decks"><span>▤</span><small>Decks</small></button>
-      <button class="nav-item" type="button" data-nav="game"><span>♟</span><small>Game</small></button>
-      <button class="nav-item" type="button" data-nav="help"><span>?</span><small>Help</small></button>
-    </nav>
-  </div>
+  <nav id="bottomNav" class="bottom-nav" aria-label="Main navigation">
+    <button type="button" data-nav="home"><span>⌂</span>Home</button>
+    <button type="button" data-nav="decks"><span>▤</span>Decks</button>
+    <button type="button" data-nav="game"><span>♛</span>Game</button>
+    <button type="button" data-nav="help"><span>?</span>Help</button>
+  </nav>
 
   <div id="modalBackdrop" class="modal-backdrop is-hidden" aria-hidden="true">
-    <section class="modal" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
-      <header class="modal-header">
-        <div>
-          <p class="eyebrow">Commander Sandbox</p>
-          <h2 id="modalTitle">Modal</h2>
-        </div>
-        <button class="icon-button" type="button" data-close-modal aria-label="Close">×</button>
-      </header>
+    <section class="modal-sheet" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
+      <header class="modal-header"><h2 id="modalTitle">Menu</h2><button class="icon-button" type="button" data-action="close-modal" aria-label="Close">×</button></header>
       <div id="modalBody" class="modal-body"></div>
     </section>
   </div>
 
-  <div id="toastRegion" class="toast-region" aria-live="assertive" aria-atomic="true"></div>
+  <div id="toastRegion" class="toast-region" aria-live="assertive"></div>
 
   <script src="/socket.io/socket.io.js"></script>
-  <script src="/app.js"></script>
+  <script src="/app.js" defer></script>
 </body>
 </html>
