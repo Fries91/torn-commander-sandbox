@@ -26,8 +26,12 @@ const ROOM_RETENTION_MS = 48 * 60 * 60 * 1000;
 const SAVE_DEBOUNCE_MS = 100;
 const CLEANUP_INTERVAL_MS = 10 * 60 * 1000;
 const MAX_CHAT_MESSAGES = 100;
-const MAX_LOG_ENTRIES = 200;
-const PHASES = ["Untap", "Upkeep", "Draw", "Main 1", "Combat", "Main 2", "End"];
+const MAX_LOG_ENTRIES = 250;
+const MAX_STACK_ITEMS = 60;
+const MAX_TRIGGER_ITEMS = 80;
+const MAX_ACTION_HISTORY = 250;
+const MAX_UNDO_SNAPSHOTS = 20;
+const PHASES = ["Untap", "Upkeep", "Draw", "Main 1", "Beginning Combat", "Declare Attackers", "Declare Blockers", "First-Strike Damage", "Combat Damage", "End Combat", "Main 2", "End", "Cleanup"];
 const ZONES = new Set(["hand", "battlefield", "graveyard", "exile", "commandZone", "library"]);
 const ALLOWED_MAX_PLAYERS = new Set([2, 3, 4, 5, 6]);
 const ALLOWED_STARTING_LIFE = new Set([20, 30, 40, 50, 60]);
@@ -35,7 +39,7 @@ const SCRYFALL_COLLECTION_URL = "https://api.scryfall.com/cards/collection";
 const SCRYFALL_BATCH_SIZE = 75;
 const CARD_CACHE_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000;
 const CARD_LOOKUP_MAX_NAMES = 150;
-const CARD_LOOKUP_USER_AGENT = process.env.SCRYFALL_USER_AGENT || "TornCommanderSandbox/9.0 (+https://torn-commander-sandbox.onrender.com)";
+const CARD_LOOKUP_USER_AGENT = process.env.SCRYFALL_USER_AGENT || "TornCommanderSandbox/15.0 (+https://torn-commander-sandbox.onrender.com)";
 
 const rooms = new Map();
 const disconnectTimers = new Map();
@@ -428,6 +432,69 @@ async function resolveCardNames(rawNames) {
   };
 }
 
+
+function normalizeManaPool(value) {
+  const result = { W: 0, U: 0, B: 0, R: 0, G: 0, C: 0 };
+  for (const symbol of Object.keys(result)) result[symbol] = clamp(Math.floor(Number(value?.[symbol]) || 0), 0, 999);
+  return result;
+}
+
+function normalizeTemporaryEffects(value) {
+  if (!Array.isArray(value)) return [];
+  return value.slice(-30).map((effect) => ({
+    id: normalizeText(effect?.id, 100) || createId(),
+    label: normalizeText(effect?.label, 100) || "Temporary effect",
+    power: clamp(Math.floor(Number(effect?.power) || 0), -99, 99),
+    toughness: clamp(Math.floor(Number(effect?.toughness) || 0), -99, 99),
+    keyword: normalizeText(effect?.keyword, 60),
+    expires: ["end-of-turn", "until-removed"].includes(effect?.expires) ? effect.expires : "end-of-turn"
+  }));
+}
+
+function normalizeTargetList(value) {
+  if (!Array.isArray(value)) return [];
+  return [...new Set(value.map((entry) => normalizeText(entry, 140)).filter(Boolean))].slice(0, 20);
+}
+
+function normalizeStackItem(value) {
+  if (!value || typeof value !== "object") return null;
+  return {
+    id: normalizeText(value.id, 100) || createId(),
+    kind: ["spell", "ability", "trigger", "custom"].includes(value.kind) ? value.kind : "custom",
+    name: normalizeText(value.name, 180) || "Stack item",
+    controllerId: normalizeText(value.controllerId, 100),
+    sourceCardId: normalizeText(value.sourceCardId, 100) || null,
+    sourceZone: normalizeText(value.sourceZone, 30) || null,
+    card: value.card ? migrateCard(value.card, normalizeText(value.controllerId, 100)) : null,
+    text: normalizeText(value.text, 2500),
+    targets: normalizeTargetList(value.targets),
+    effect: value.effect && typeof value.effect === "object" ? {
+      action: normalizeText(value.effect.action, 40),
+      amount: clamp(Math.floor(Number(value.effect.amount) || 0), -999, 999),
+      counterName: normalizeText(value.effect.counterName, 40),
+      tokenName: normalizeText(value.effect.tokenName, 80),
+      power: normalizeText(value.effect.power, 12),
+      toughness: normalizeText(value.effect.toughness, 12),
+      destination: normalizeText(value.effect.destination, 30)
+    } : null,
+    createdAt: value.createdAt || nowIso()
+  };
+}
+
+function normalizeTriggerItem(value) {
+  if (!value || typeof value !== "object") return null;
+  return {
+    id: normalizeText(value.id, 100) || createId(),
+    controllerId: normalizeText(value.controllerId, 100),
+    sourceCardId: normalizeText(value.sourceCardId, 100) || null,
+    sourceName: normalizeText(value.sourceName, 180) || "Triggered ability",
+    event: normalizeText(value.event, 80),
+    text: normalizeText(value.text, 2500),
+    targets: normalizeTargetList(value.targets),
+    createdAt: value.createdAt || nowIso()
+  };
+}
+
 function migrateCard(card, fallbackOwnerId) {
   const migrated = card && typeof card === "object" ? card : {};
   const cardData = normalizeCardData(migrated.cardData || migrated);
@@ -439,14 +506,25 @@ function migrateCard(card, fallbackOwnerId) {
     tapped: Boolean(migrated.tapped),
     counters: normalizeCounterMap(migrated.counters),
     damageMarked: clamp(Math.floor(Number(migrated.damageMarked) || 0), 0, 999),
+    deathtouchMarked: Boolean(migrated.deathtouchMarked),
     token: Boolean(migrated.token),
     commander: Boolean(migrated.commander),
     power: normalizeText(migrated.power || cardData?.power, 20),
     toughness: normalizeText(migrated.toughness || cardData?.toughness, 20),
     loyalty: normalizeText(migrated.loyalty || cardData?.loyalty, 20),
     attacking: Boolean(migrated.attacking),
+    defendingPlayerId: normalizeText(migrated.defendingPlayerId, 100) || null,
     blockingCardId: normalizeText(migrated.blockingCardId, 100) || null,
-    notes: normalizeText(migrated.notes, 300),
+    attachedToId: normalizeText(migrated.attachedToId, 100) || null,
+    summoningSick: Boolean(migrated.summoningSick),
+    faceDown: Boolean(migrated.faceDown),
+    phasedOut: Boolean(migrated.phasedOut),
+    activeFaceIndex: clamp(Math.floor(Number(migrated.activeFaceIndex) || 0), 0, 3),
+    manualKeywords: normalizeStringArray(migrated.manualKeywords, 30, 60),
+    temporaryEffects: normalizeTemporaryEffects(migrated.temporaryEffects),
+    chosenValues: migrated.chosenValues && typeof migrated.chosenValues === "object" ? migrated.chosenValues : {},
+    copiedFromCardId: normalizeText(migrated.copiedFromCardId, 100) || null,
+    notes: normalizeText(migrated.notes, 500),
     cardData
   };
 }
@@ -471,7 +549,8 @@ function migrateGame(game, playerId, startingLife, allPlayerIds) {
     graveyard: migrateZone("graveyard"),
     exile: migrateZone("exile"),
     commandZone: migrateZone("commandZone"),
-    commanderDamage
+    commanderDamage,
+    manaPool: normalizeManaPool(source.manaPool)
   };
 }
 
@@ -522,6 +601,14 @@ function migrateRoom(room) {
   } else {
     room.turn = null;
   }
+  room.stack = Array.isArray(room.stack) ? room.stack.map(normalizeStackItem).filter(Boolean).slice(-MAX_STACK_ITEMS) : [];
+  room.triggerQueue = Array.isArray(room.triggerQueue) ? room.triggerQueue.map(normalizeTriggerItem).filter(Boolean).slice(-MAX_TRIGGER_ITEMS) : [];
+  room.priority = room.priority && typeof room.priority === "object" ? {
+    playerId: allPlayerIds.includes(room.priority.playerId) ? room.priority.playerId : room.turn?.activePlayerId || allPlayerIds[0] || null,
+    passedPlayerIds: Array.isArray(room.priority.passedPlayerIds) ? room.priority.passedPlayerIds.filter((id) => allPlayerIds.includes(id)) : []
+  } : { playerId: room.turn?.activePlayerId || allPlayerIds[0] || null, passedPlayerIds: [] };
+  room.actionHistory = Array.isArray(room.actionHistory) ? room.actionHistory.slice(-MAX_ACTION_HISTORY) : [];
+  room.undoStack = [];
   room.updatedAt = room.updatedAt || nowIso();
   return room;
 }
@@ -540,6 +627,7 @@ function persistenceSummary() {
 function persistentRoomState(room) {
   return {
     ...room,
+    undoStack: [],
     players: room.players.map((player) => ({ ...player, connected: false, socketId: null }))
   };
 }
@@ -692,7 +780,17 @@ function createCard(name, ownerId, options = {}) {
     toughness: options.toughness || cardData?.toughness,
     loyalty: options.loyalty || cardData?.loyalty,
     attacking: options.attacking,
+    defendingPlayerId: options.defendingPlayerId,
     blockingCardId: options.blockingCardId,
+    attachedToId: options.attachedToId,
+    summoningSick: options.summoningSick,
+    faceDown: options.faceDown,
+    phasedOut: options.phasedOut,
+    activeFaceIndex: options.activeFaceIndex,
+    manualKeywords: options.manualKeywords,
+    temporaryEffects: options.temporaryEffects,
+    chosenValues: options.chosenValues,
+    copiedFromCardId: options.copiedFromCardId,
     notes: options.notes,
     cardData
   }, ownerId);
@@ -735,7 +833,8 @@ function buildGameState(player, startingLife, allPlayerIds) {
     graveyard: [],
     exile: [],
     commandZone,
-    commanderDamage
+    commanderDamage,
+    manaPool: normalizeManaPool(null)
   };
 }
 
@@ -762,21 +861,62 @@ function parseStat(value) {
   return /^-?\d+$/.test(text) ? Number(text) : null;
 }
 
+function currentCardFace(card) {
+  const faces = card?.cardData?.faces || [];
+  return faces[card?.activeFaceIndex || 0] || null;
+}
+
+function currentTypeLine(card) {
+  return currentCardFace(card)?.typeLine || card?.cardData?.typeLine || "";
+}
+
+function currentOracleText(card) {
+  return currentCardFace(card)?.oracleText || card?.cardData?.oracleText || "";
+}
+
+function keywordSet(card) {
+  const result = new Set([...(card?.cardData?.keywords || []), ...(card?.manualKeywords || [])].map((value) => String(value).toLowerCase()));
+  for (const effect of card?.temporaryEffects || []) if (effect.keyword) result.add(effect.keyword.toLowerCase());
+  const oracle = currentOracleText(card).toLowerCase();
+  for (const keyword of ["deathtouch", "double strike", "first strike", "haste", "hexproof", "indestructible", "lifelink", "menace", "reach", "trample", "vigilance", "flying", "defender"]) {
+    if (oracle.includes(keyword)) result.add(keyword);
+  }
+  return result;
+}
+
+function hasKeyword(card, keyword) {
+  return keywordSet(card).has(String(keyword).toLowerCase());
+}
+
+function isCreatureCard(card) {
+  return /\bcreature\b/i.test(currentTypeLine(card)) || (parseStat(card?.power) !== null && parseStat(card?.toughness) !== null);
+}
+
+function isPermanentCard(card) {
+  return /\b(artifact|battle|creature|enchantment|land|planeswalker)\b/i.test(currentTypeLine(card));
+}
+
 function effectiveStats(card) {
-  const basePower = parseStat(card.power);
-  const baseToughness = parseStat(card.toughness);
+  const face = currentCardFace(card);
+  const basePower = parseStat(face?.power || card.power);
+  const baseToughness = parseStat(face?.toughness || card.toughness);
   if (basePower === null || baseToughness === null) return null;
   const plus = Number(card.counters?.["+1/+1"]) || 0;
   const minus = Number(card.counters?.["-1/-1"]) || 0;
+  const temporaryPower = (card.temporaryEffects || []).reduce((sum, effect) => sum + (Number(effect.power) || 0), 0);
+  const temporaryToughness = (card.temporaryEffects || []).reduce((sum, effect) => sum + (Number(effect.toughness) || 0), 0);
   return {
-    power: clamp(basePower + plus - minus, -99, 999),
-    toughness: clamp(baseToughness + plus - minus, -99, 999)
+    power: clamp(basePower + plus - minus + temporaryPower, -99, 999),
+    toughness: clamp(baseToughness + plus - minus + temporaryToughness, -99, 999)
   };
 }
 
 function isLethal(card) {
   const stats = effectiveStats(card);
-  return Boolean(stats && (stats.toughness <= 0 || card.damageMarked >= stats.toughness));
+  if (!stats) return false;
+  if (stats.toughness <= 0) return true;
+  if (hasKeyword(card, "indestructible")) return false;
+  return Boolean(card.deathtouchMarked || card.damageMarked >= stats.toughness);
 }
 
 function addLog(room, text, type = "info") {
@@ -802,24 +942,39 @@ function publicDeck(deck) {
 }
 
 function publicCard(card) {
+  const face = currentCardFace(card);
   return {
     id: card.id,
-    name: card.name,
+    name: card.faceDown ? "Face-down card" : (face?.name || card.name),
+    printedName: card.name,
     ownerId: card.ownerId,
     controllerId: card.controllerId,
     tapped: card.tapped,
     counters: { ...card.counters },
     damageMarked: card.damageMarked,
+    deathtouchMarked: card.deathtouchMarked,
     token: card.token,
     commander: card.commander,
-    power: card.power,
-    toughness: card.toughness,
-    loyalty: card.loyalty,
-    cardData: card.cardData,
+    power: card.faceDown ? "2" : (face?.power || card.power),
+    toughness: card.faceDown ? "2" : (face?.toughness || card.toughness),
+    loyalty: card.faceDown ? "" : (face?.loyalty || card.loyalty),
+    cardData: card.faceDown ? null : card.cardData,
     attacking: card.attacking,
+    defendingPlayerId: card.defendingPlayerId,
     blockingCardId: card.blockingCardId,
+    attachedToId: card.attachedToId,
+    summoningSick: card.summoningSick,
+    faceDown: card.faceDown,
+    phasedOut: card.phasedOut,
+    activeFaceIndex: card.activeFaceIndex,
+    manualKeywords: [...card.manualKeywords],
+    temporaryEffects: card.temporaryEffects.map((effect) => ({ ...effect })),
+    chosenValues: { ...card.chosenValues },
+    copiedFromCardId: card.copiedFromCardId,
     notes: card.notes,
-    effectiveStats: effectiveStats(card),
+    keywords: [...keywordSet(card)],
+    currentFace: card.faceDown ? null : face,
+    effectiveStats: card.faceDown ? { power: 2, toughness: 2 } : effectiveStats(card),
     lethal: isLethal(card)
   };
 }
@@ -834,6 +989,7 @@ function publicGame(game, isViewer) {
     handCount: game.hand.length,
     libraryCount: game.library.length,
     commanderDamage: { ...game.commanderDamage },
+    manaPool: { ...game.manaPool },
     battlefield: game.battlefield.map(publicCard),
     graveyard: game.graveyard.map(publicCard),
     exile: game.exile.map(publicCard),
@@ -872,6 +1028,11 @@ function createPublicRoom(room, viewerId = null) {
     phases: PHASES,
     turn: room.turn ? { ...room.turn, order: [...(room.turn.order || [])] } : null,
     rollOff: publicStartingRollOff(room.rollOff),
+    stack: room.stack.map((item) => ({ ...item, card: item.card ? publicCard(item.card) : null })),
+    triggerQueue: room.triggerQueue.map((item) => ({ ...item })),
+    priority: { ...room.priority, passedPlayerIds: [...(room.priority?.passedPlayerIds || [])] },
+    actionHistory: room.actionHistory.slice(-100),
+    canUndo: Boolean(room.undoStack?.length),
     chat: room.chat.slice(-MAX_CHAT_MESSAGES),
     log: room.log.slice(-MAX_LOG_ENTRIES),
     players: room.players.map((player) => ({
@@ -977,9 +1138,18 @@ function moveCard(player, fromZone, toZone, cardId, position = "top") {
   const [card] = player.game[fromZone].splice(located.index, 1);
   if (card.token && toZone !== "battlefield") return { card, removedToken: true };
   card.attacking = false;
+  card.defendingPlayerId = null;
   card.blockingCardId = null;
+  card.attachedToId = null;
   card.damageMarked = 0;
-  if (toZone !== "battlefield") card.tapped = false;
+  card.deathtouchMarked = false;
+  if (toZone !== "battlefield") {
+    card.tapped = false;
+    card.summoningSick = false;
+  } else {
+    card.controllerId = player.id;
+    card.summoningSick = isCreatureCard(card);
+  }
   if (toZone === "library" && position === "bottom") player.game.library.push(card);
   else player.game[toZone].unshift(card);
   return { card, removedToken: false };
@@ -989,6 +1159,7 @@ function clearCombat(room) {
   for (const player of room.players) {
     for (const card of player.game?.battlefield || []) {
       card.attacking = false;
+      card.defendingPlayerId = null;
       card.blockingCardId = null;
     }
   }
@@ -996,18 +1167,284 @@ function clearCombat(room) {
 
 function clearDamage(room) {
   for (const player of room.players) {
-    for (const card of player.game?.battlefield || []) card.damageMarked = 0;
+    for (const card of player.game?.battlefield || []) {
+      card.damageMarked = 0;
+      card.deathtouchMarked = false;
+    }
+  }
+}
+
+function clearMana(room) {
+  for (const player of room.players) if (player.game) player.game.manaPool = normalizeManaPool(null);
+}
+
+function expireEndOfTurnEffects(room) {
+  for (const player of room.players) {
+    for (const card of player.game?.battlefield || []) card.temporaryEffects = card.temporaryEffects.filter((effect) => effect.expires !== "end-of-turn");
   }
 }
 
 function activePlayers(room) {
-  const order = Array.isArray(room.turn?.order) && room.turn.order.length
-    ? room.turn.order
-    : room.players.map((player) => player.id);
+  const order = Array.isArray(room.turn?.order) && room.turn.order.length ? room.turn.order : room.players.map((player) => player.id);
   const byId = new Map(room.players.map((player) => [player.id, player]));
-  return order
-    .map((id) => byId.get(id))
-    .filter((player) => player?.game && !player.game.conceded);
+  return order.map((id) => byId.get(id)).filter((player) => player?.game && !player.game.conceded);
+}
+
+function activePlayerIds(room) {
+  return activePlayers(room).map((player) => player.id);
+}
+
+function nextPlayerId(room, currentId) {
+  const ids = activePlayerIds(room);
+  if (!ids.length) return null;
+  const index = ids.indexOf(currentId);
+  return ids[(index + 1 + ids.length) % ids.length];
+}
+
+function resetPriority(room, startingPlayerId = null) {
+  const ids = activePlayerIds(room);
+  room.priority = { playerId: ids.includes(startingPlayerId) ? startingPlayerId : room.turn?.activePlayerId || ids[0] || null, passedPlayerIds: [] };
+}
+
+function snapshotCoreRoom(room) {
+  return JSON.parse(JSON.stringify({
+    status: room.status,
+    startedAt: room.startedAt,
+    turn: room.turn,
+    rollOff: room.rollOff,
+    stack: room.stack,
+    priority: room.priority,
+    triggerQueue: room.triggerQueue,
+    players: room.players.map((player) => ({ id: player.id, ready: player.ready, game: player.game }))
+  }));
+}
+
+function pushUndo(room, actor, label, snapshot) {
+  room.undoStack = Array.isArray(room.undoStack) ? room.undoStack : [];
+  room.undoStack.push({ id: createId(), time: nowIso(), actorId: actor.id, actorName: actor.name, label, snapshot });
+  if (room.undoStack.length > MAX_UNDO_SNAPSHOTS) room.undoStack.splice(0, room.undoStack.length - MAX_UNDO_SNAPSHOTS);
+}
+
+function restoreSnapshot(room, entry) {
+  const snapshot = entry?.snapshot;
+  if (!snapshot) return false;
+  room.status = snapshot.status;
+  room.startedAt = snapshot.startedAt;
+  room.turn = snapshot.turn;
+  room.rollOff = snapshot.rollOff;
+  room.stack = (snapshot.stack || []).map(normalizeStackItem).filter(Boolean);
+  room.priority = snapshot.priority || { playerId: room.turn?.activePlayerId || null, passedPlayerIds: [] };
+  room.triggerQueue = (snapshot.triggerQueue || []).map(normalizeTriggerItem).filter(Boolean);
+  const byId = new Map((snapshot.players || []).map((player) => [player.id, player]));
+  for (const player of room.players) {
+    const saved = byId.get(player.id);
+    if (!saved) continue;
+    player.ready = Boolean(saved.ready);
+    player.game = saved.game ? migrateGame(saved.game, player.id, room.startingLife, room.players.map((entry) => entry.id)) : null;
+  }
+  return true;
+}
+
+function recordAction(room, actor, type, detail = "") {
+  room.actionHistory = Array.isArray(room.actionHistory) ? room.actionHistory : [];
+  room.actionHistory.push({ id: createId(), time: nowIso(), actorId: actor.id, actorName: actor.name, type, detail: normalizeText(detail, 300) });
+  if (room.actionHistory.length > MAX_ACTION_HISTORY) room.actionHistory.splice(0, room.actionHistory.length - MAX_ACTION_HISTORY);
+}
+
+function locateCard(room, cardId) {
+  for (const player of room.players) {
+    if (!player.game) continue;
+    for (const zone of ["battlefield", "hand", "graveyard", "exile", "commandZone", "library"]) {
+      const index = player.game[zone].findIndex((card) => card.id === cardId);
+      if (index >= 0) return { player, zone, index, card: player.game[zone][index] };
+    }
+  }
+  return null;
+}
+
+function controlledBattlefieldCard(room, actor, cardId) {
+  const located = findBattlefieldCard(room, String(cardId || ""));
+  return located && located.card.controllerId === actor.id ? located : null;
+}
+
+function validateTargets(room, targets) {
+  const valid = [];
+  for (const target of normalizeTargetList(targets)) {
+    const [kind, id] = target.split(":");
+    if (kind === "player" && findPlayer(room, id)) valid.push(target);
+    if (kind === "card" && locateCard(room, id)) valid.push(target);
+  }
+  return valid;
+}
+
+function pushStack(room, item, priorityPlayerId) {
+  const normalized = normalizeStackItem(item);
+  if (!normalized) return null;
+  room.stack.push(normalized);
+  if (room.stack.length > MAX_STACK_ITEMS) room.stack.splice(0, room.stack.length - MAX_STACK_ITEMS);
+  resetPriority(room, priorityPlayerId || normalized.controllerId);
+  return normalized;
+}
+
+function applySimpleEffect(room, item) {
+  const effect = item.effect;
+  if (!effect?.action) return;
+  const targets = item.targets || [];
+  const playerTarget = targets.map((target) => target.startsWith("player:") ? findPlayer(room, target.slice(7)) : null).find(Boolean);
+  const cardTarget = targets.map((target) => target.startsWith("card:") ? locateCard(room, target.slice(5)) : null).find(Boolean);
+  const controller = findPlayer(room, item.controllerId);
+  const amount = effect.amount || 1;
+  switch (effect.action) {
+    case "draw": {
+      const target = playerTarget || controller;
+      let drawn = 0;
+      while (target?.game?.library.length && drawn < clamp(amount, 1, 20)) { target.game.hand.push(target.game.library.shift()); drawn += 1; }
+      break;
+    }
+    case "gain-life": if (playerTarget || controller) (playerTarget || controller).game.life = clamp((playerTarget || controller).game.life + amount, -999, 9999); break;
+    case "lose-life": if (playerTarget || controller) (playerTarget || controller).game.life = clamp((playerTarget || controller).game.life - Math.abs(amount), -999, 9999); break;
+    case "damage":
+      if (playerTarget) playerTarget.game.life = clamp(playerTarget.game.life - Math.abs(amount), -999, 9999);
+      else if (cardTarget) cardTarget.card.damageMarked = clamp(cardTarget.card.damageMarked + Math.abs(amount), 0, 999);
+      break;
+    case "tap": if (cardTarget) cardTarget.card.tapped = true; break;
+    case "untap": if (cardTarget) cardTarget.card.tapped = false; break;
+    case "counter": if (cardTarget) cardTarget.card.counters[effect.counterName || "+1/+1"] = clamp((Number(cardTarget.card.counters[effect.counterName || "+1/+1"]) || 0) + amount, -99, 999); break;
+    case "destroy": if (cardTarget && !hasKeyword(cardTarget.card, "indestructible")) { const [card] = cardTarget.player.game[cardTarget.zone].splice(cardTarget.index, 1); if (!card.token) cardTarget.player.game.graveyard.unshift(card); } break;
+    case "exile": if (cardTarget) { const [card] = cardTarget.player.game[cardTarget.zone].splice(cardTarget.index, 1); if (!card.token) cardTarget.player.game.exile.unshift(card); } break;
+    case "token": if (controller?.game) controller.game.battlefield.unshift(createCard(effect.tokenName || "Token", controller.id, { token: true, power: effect.power || "1", toughness: effect.toughness || "1" })); break;
+    default: break;
+  }
+}
+
+function resolveStackTop(room, resolverName = "Table") {
+  const item = room.stack.pop();
+  if (!item) return null;
+  const controller = findPlayer(room, item.controllerId);
+  if (item.kind === "spell" && item.card && controller?.game) {
+    item.card.controllerId = controller.id;
+    item.card.tapped = false;
+    item.card.attacking = false;
+    item.card.defendingPlayerId = null;
+    if (isPermanentCard(item.card)) {
+      item.card.summoningSick = isCreatureCard(item.card);
+      controller.game.battlefield.unshift(item.card);
+      queueSuggestedTriggers(room, "PERMANENT_ENTERED", { card: item.card, controllerId: controller.id });
+    } else if (!item.card.token) {
+      const owner = findPlayer(room, item.card.ownerId) || controller;
+      owner.game.graveyard.unshift(item.card);
+    }
+  }
+  applySimpleEffect(room, item);
+  addLog(room, `${resolverName} resolved ${item.name}.`, "stack");
+  resetPriority(room, room.turn?.activePlayerId);
+  return item;
+}
+
+function counterStackItem(room, itemId, actor) {
+  const index = room.stack.findIndex((item) => item.id === itemId);
+  if (index < 0) return null;
+  const [item] = room.stack.splice(index, 1);
+  if (item.kind === "spell" && item.card && !item.card.token) {
+    const owner = findPlayer(room, item.card.ownerId) || findPlayer(room, item.controllerId);
+    owner?.game?.graveyard.unshift(item.card);
+  }
+  addLog(room, `${actor.name} countered or removed ${item.name} from the stack.`, "stack");
+  resetPriority(room, room.turn?.activePlayerId);
+  return item;
+}
+
+function queueTrigger(room, trigger) {
+  const normalized = normalizeTriggerItem(trigger);
+  if (!normalized) return null;
+  room.triggerQueue.push(normalized);
+  if (room.triggerQueue.length > MAX_TRIGGER_ITEMS) room.triggerQueue.splice(0, room.triggerQueue.length - MAX_TRIGGER_ITEMS);
+  return normalized;
+}
+
+function queueSuggestedTriggers(room, event, context = {}) {
+  const patterns = {
+    UPKEEP_START: /at the beginning of (your|each|each player'?s|each opponent'?s) upkeep/i,
+    END_STEP_START: /at the beginning of (your|each|the) end step/i,
+    PERMANENT_ENTERED: /(when|whenever).{0,100}(enters the battlefield|enters)/i,
+    CREATURE_DIED: /(when|whenever).{0,100}(dies|is put into a graveyard)/i,
+    SPELL_CAST: /whenever.{0,100}cast/i,
+    ATTACKS: /(when|whenever).{0,100}attacks/i
+  };
+  const pattern = patterns[event];
+  if (!pattern) return;
+  for (const player of room.players) {
+    for (const card of player.game?.battlefield || []) {
+      if (card.phasedOut || !pattern.test(currentOracleText(card))) continue;
+      queueTrigger(room, { controllerId: card.controllerId, sourceCardId: card.id, sourceName: card.name, event, text: currentOracleText(card), createdAt: nowIso() });
+    }
+  }
+}
+
+function dealsInCombatPass(card, pass) {
+  const first = hasKeyword(card, "first strike");
+  const double = hasKeyword(card, "double strike");
+  return pass === "first" ? first || double : !first || double;
+}
+
+function dealCreatureDamage(room, source, target, amount) {
+  const dealt = Math.max(0, amount);
+  target.damageMarked = clamp(target.damageMarked + dealt, 0, 999);
+  if (dealt > 0 && hasKeyword(source, "deathtouch")) target.deathtouchMarked = true;
+  if (dealt > 0 && hasKeyword(source, "lifelink")) {
+    const controller = findPlayer(room, source.controllerId);
+    if (controller?.game) controller.game.life = clamp(controller.game.life + dealt, -999, 9999);
+  }
+  return dealt;
+}
+
+function dealPlayerDamage(room, source, player, amount) {
+  const dealt = Math.max(0, amount);
+  player.game.life = clamp(player.game.life - dealt, -999, 9999);
+  if (source.commander) {
+    const sourceId = source.ownerId;
+    if (sourceId !== player.id) player.game.commanderDamage[sourceId] = clamp((Number(player.game.commanderDamage[sourceId]) || 0) + dealt, 0, 99);
+  }
+  if (dealt > 0 && hasKeyword(source, "lifelink")) {
+    const controller = findPlayer(room, source.controllerId);
+    if (controller?.game) controller.game.life = clamp(controller.game.life + dealt, -999, 9999);
+  }
+}
+
+function resolveCombatDamage(room, pass = "normal") {
+  const activeId = room.turn?.activePlayerId;
+  const attackers = [];
+  for (const player of room.players) for (const card of player.game?.battlefield || []) if (card.attacking && card.controllerId === activeId && !card.phasedOut) attackers.push(card);
+  for (const attacker of attackers) {
+    const attackerStats = effectiveStats(attacker);
+    if (!attackerStats || !dealsInCombatPass(attacker, pass)) continue;
+    const blockers = [];
+    for (const player of room.players) for (const card of player.game?.battlefield || []) if (card.blockingCardId === attacker.id && !card.phasedOut) blockers.push(card);
+    const defender = findPlayer(room, attacker.defendingPlayerId);
+    if (!blockers.length) {
+      if (defender) dealPlayerDamage(room, attacker, defender, attackerStats.power);
+      continue;
+    }
+    for (const blocker of blockers) {
+      const blockerStats = effectiveStats(blocker);
+      if (blockerStats && dealsInCombatPass(blocker, pass)) dealCreatureDamage(room, blocker, attacker, blockerStats.power);
+    }
+    let remaining = Math.max(0, attackerStats.power);
+    if (hasKeyword(attacker, "trample")) {
+      for (const blocker of blockers) {
+        const stats = effectiveStats(blocker);
+        if (!stats || remaining <= 0) continue;
+        const lethalNeeded = hasKeyword(attacker, "deathtouch") ? 1 : Math.max(1, stats.toughness - blocker.damageMarked);
+        const assigned = Math.min(remaining, lethalNeeded);
+        dealCreatureDamage(room, attacker, blocker, assigned);
+        remaining -= assigned;
+      }
+      if (remaining > 0 && defender) dealPlayerDamage(room, attacker, defender, remaining);
+    } else {
+      dealCreatureDamage(room, attacker, blockers[0], remaining);
+    }
+  }
+  addLog(room, `${pass === "first" ? "First-strike" : "Normal"} combat damage was resolved with assisted keyword handling.`, "combat");
 }
 
 function advanceTurn(room) {
@@ -1015,12 +1452,15 @@ function advanceTurn(room) {
   if (players.length === 0) return;
   clearCombat(room);
   clearDamage(room);
+  clearMana(room);
+  expireEndOfTurnEffects(room);
   const currentIndex = players.findIndex((player) => player.id === room.turn.activePlayerId);
   const next = players[(currentIndex + 1 + players.length) % players.length];
   room.turn.activePlayerId = next.id;
   room.turn.phaseIndex = 0;
   room.turn.number += 1;
-  next.game.battlefield.forEach((card) => { card.tapped = false; });
+  next.game.battlefield.forEach((card) => { card.tapped = false; card.summoningSick = false; });
+  resetPriority(room, next.id);
   addLog(room, `Turn ${room.turn.number}: ${next.name} is active. Clockwise play continues.`, "turn");
 }
 
@@ -1076,228 +1516,124 @@ function performStartingRoll(room, player, forcedRoll = null) {
   rollOff.currentRolls = {};
   room.status = "started";
   room.turn = { number: 1, phaseIndex: 0, activePlayerId: winnerId, order };
+  resetPriority(room, winnerId);
   addLog(room, `${winner?.name || "The winner"} won the d20 roll with ${highest} and takes the first turn. Play proceeds clockwise.`, "turn");
   return { success: true, roll, completed: true, winnerPlayerId: winnerId };
 }
 
-function requireOwnedBattlefieldCard(actor, cardId) {
+function requireOwnedBattlefieldCard(actor, cardId, room = null) {
+  if (room) return controlledBattlefieldCard(room, actor, cardId);
   const located = getCardFromZone(actor.game, "battlefield", String(cardId || ""));
   return located || null;
 }
 
 function processGameAction(room, actor, action) {
   if (room.status !== "started" || !actor.game) return { success: false, error: "The game has not started." };
-  const type = normalizeText(action?.type, 40);
+  const type = normalizeText(action?.type, 60);
   const targetPlayer = findPlayer(room, String(action?.targetPlayerId || "")) || actor;
   const amount = clamp(Math.floor(Number(action?.amount) || 0), -9999, 9999);
+  const noUndo = new Set(["pass-priority", "undo-last"]);
+  const before = noUndo.has(type) ? null : snapshotCoreRoom(room);
+  let detail = type;
 
   switch (type) {
-    case "life":
-      targetPlayer.game.life = clamp(targetPlayer.game.life + amount, -999, 9999);
-      addLog(room, `${actor.name} changed ${targetPlayer.name}'s life to ${targetPlayer.game.life}.`, "life");
-      break;
-    case "poison":
-      targetPlayer.game.poison = clamp(targetPlayer.game.poison + amount, 0, 99);
-      addLog(room, `${targetPlayer.name} now has ${targetPlayer.game.poison} poison.`, "counter");
-      break;
-    case "commander-tax":
-      targetPlayer.game.commanderTax = clamp(targetPlayer.game.commanderTax + amount, 0, 99);
-      addLog(room, `${targetPlayer.name}'s commander tax is ${targetPlayer.game.commanderTax}.`, "counter");
-      break;
-    case "commander-damage": { 
-      const sourceId = String(action?.sourcePlayerId || "");
-      const source = findPlayer(room, sourceId);
+    case "life": targetPlayer.game.life = clamp(targetPlayer.game.life + amount, -999, 9999); addLog(room, `${actor.name} changed ${targetPlayer.name}'s life to ${targetPlayer.game.life}.`, "life"); break;
+    case "poison": targetPlayer.game.poison = clamp(targetPlayer.game.poison + amount, 0, 99); addLog(room, `${targetPlayer.name} now has ${targetPlayer.game.poison} poison.`, "counter"); break;
+    case "commander-tax": targetPlayer.game.commanderTax = clamp(targetPlayer.game.commanderTax + amount, 0, 99); addLog(room, `${targetPlayer.name}'s commander tax is ${targetPlayer.game.commanderTax}.`, "counter"); break;
+    case "commander-damage": {
+      const sourceId = String(action?.sourcePlayerId || ""); const source = findPlayer(room, sourceId);
       if (!source || sourceId === targetPlayer.id) return { success: false, error: "Choose a valid opposing commander." };
-      const current = Number(targetPlayer.game.commanderDamage[sourceId]) || 0;
-      targetPlayer.game.commanderDamage[sourceId] = clamp(current + amount, 0, 99);
-      addLog(room, `${targetPlayer.name} has ${targetPlayer.game.commanderDamage[sourceId]} commander damage from ${source.name}.`, "counter");
-      break;
+      targetPlayer.game.commanderDamage[sourceId] = clamp((Number(targetPlayer.game.commanderDamage[sourceId]) || 0) + amount, 0, 99);
+      addLog(room, `${targetPlayer.name} has ${targetPlayer.game.commanderDamage[sourceId]} commander damage from ${source.name}.`, "counter"); break;
     }
-    case "draw": { 
-      const count = clamp(amount || 1, 1, 20);
-      let drawn = 0;
-      while (drawn < count && actor.game.library.length) {
-        actor.game.hand.push(actor.game.library.shift());
-        drawn += 1;
-      }
-      addLog(room, `${actor.name} drew ${drawn} card${drawn === 1 ? "" : "s"}.`, "card");
-      break;
-    }
-    case "mill": {
-      const count = clamp(amount || 1, 1, 50);
-      let milled = 0;
-      while (milled < count && actor.game.library.length) {
-        actor.game.graveyard.unshift(actor.game.library.shift());
-        milled += 1;
-      }
-      addLog(room, `${actor.name} milled ${milled} card${milled === 1 ? "" : "s"}.`, "card");
-      break;
-    }
-    case "shuffle":
-      actor.game.library = shuffle(actor.game.library);
-      addLog(room, `${actor.name} shuffled their library.`, "card");
-      break;
-    case "mulligan":
-      actor.game.library.push(...actor.game.hand);
-      actor.game.hand = [];
-      actor.game.library = shuffle(actor.game.library);
-      actor.game.hand = actor.game.library.splice(0, Math.min(7, actor.game.library.length));
-      addLog(room, `${actor.name} took a sandbox mulligan to seven.`, "card");
-      break;
+    case "draw": { let drawn = 0; const count = clamp(amount || 1, 1, 20); while (drawn < count && actor.game.library.length) { actor.game.hand.push(actor.game.library.shift()); drawn += 1; } addLog(room, `${actor.name} drew ${drawn} card${drawn === 1 ? "" : "s"}.`, "card"); break; }
+    case "mill": { let milled = 0; const count = clamp(amount || 1, 1, 50); while (milled < count && actor.game.library.length) { actor.game.graveyard.unshift(actor.game.library.shift()); milled += 1; } addLog(room, `${actor.name} milled ${milled} card${milled === 1 ? "" : "s"}.`, "card"); break; }
+    case "shuffle": actor.game.library = shuffle(actor.game.library); addLog(room, `${actor.name} shuffled their library.`, "card"); break;
+    case "mulligan": actor.game.library.push(...actor.game.hand); actor.game.hand = []; actor.game.library = shuffle(actor.game.library); actor.game.hand = actor.game.library.splice(0, Math.min(7, actor.game.library.length)); addLog(room, `${actor.name} took a sandbox mulligan to seven.`, "card"); break;
     case "move-card": {
       const result = moveCard(actor, String(action?.fromZone || ""), String(action?.toZone || ""), String(action?.cardId || ""), action?.position);
       if (!result) return { success: false, error: "That card could not be moved." };
-      addLog(room, result.removedToken
-        ? `${actor.name}'s ${result.card.name} token left the battlefield.`
-        : `${actor.name} moved ${result.card.name} to ${action.toZone === "commandZone" ? "the command zone" : action.toZone}.`, "card");
-      break;
+      if (action.toZone === "battlefield") queueSuggestedTriggers(room, "PERMANENT_ENTERED", { card: result.card, controllerId: actor.id });
+      addLog(room, result.removedToken ? `${actor.name}'s ${result.card.name} token left the battlefield.` : `${actor.name} moved ${result.card.name} to ${action.toZone === "commandZone" ? "the command zone" : action.toZone}.`, "card"); break;
     }
-    case "tap-card": {
-      const located = requireOwnedBattlefieldCard(actor, action?.cardId);
-      if (!located) return { success: false, error: "That permanent is no longer on your battlefield." };
-      located.card.tapped = !located.card.tapped;
-      addLog(room, `${actor.name} ${located.card.tapped ? "tapped" : "untapped"} ${located.card.name}.`, "card");
-      break;
-    }
-    case "card-counter": {
-      const located = requireOwnedBattlefieldCard(actor, action?.cardId);
-      if (!located) return { success: false, error: "That permanent is no longer on your battlefield." };
-      const counterName = normalizeText(action?.counterName, 30) || "counter";
-      const next = clamp((Number(located.card.counters[counterName]) || 0) + amount, -99, 999);
-      if (next === 0) delete located.card.counters[counterName];
-      else located.card.counters[counterName] = next;
-      addLog(room, `${located.card.name} now has ${next} ${counterName} counter${Math.abs(next) === 1 ? "" : "s"}.`, "counter");
-      break;
-    }
-    case "set-card-stats": {
-      const located = requireOwnedBattlefieldCard(actor, action?.cardId);
-      if (!located) return { success: false, error: "That permanent is no longer on your battlefield." };
-      located.card.power = normalizeText(action?.power, 12);
-      located.card.toughness = normalizeText(action?.toughness, 12);
-      located.card.notes = normalizeText(action?.notes, 300);
-      addLog(room, `${actor.name} set ${located.card.name}'s stats to ${located.card.power || "?"}/${located.card.toughness || "?"}.`, "card");
-      break;
-    }
-    case "mark-damage": {
-      const located = requireOwnedBattlefieldCard(actor, action?.cardId);
-      if (!located) return { success: false, error: "That permanent is no longer on your battlefield." };
-      located.card.damageMarked = clamp(located.card.damageMarked + amount, 0, 999);
-      addLog(room, `${located.card.name} has ${located.card.damageMarked} damage marked${isLethal(located.card) ? " and is marked lethal" : ""}.`, "damage");
-      break;
-    }
-    case "clear-card-damage": {
-      const located = requireOwnedBattlefieldCard(actor, action?.cardId);
-      if (!located) return { success: false, error: "That permanent is no longer on your battlefield." };
-      located.card.damageMarked = 0;
-      addLog(room, `${actor.name} cleared damage from ${located.card.name}.`, "damage");
-      break;
-    }
+    case "tap-card": { const located = controlledBattlefieldCard(room, actor, action?.cardId); if (!located) return { success: false, error: "You no longer control that permanent." }; located.card.tapped = !located.card.tapped; addLog(room, `${actor.name} ${located.card.tapped ? "tapped" : "untapped"} ${located.card.name}.`, "card"); break; }
+    case "card-counter": { const located = controlledBattlefieldCard(room, actor, action?.cardId); if (!located) return { success: false, error: "You no longer control that permanent." }; const name = normalizeText(action?.counterName, 30) || "counter"; const next = clamp((Number(located.card.counters[name]) || 0) + amount, -99, 999); if (!next) delete located.card.counters[name]; else located.card.counters[name] = next; addLog(room, `${located.card.name} now has ${next} ${name} counter${Math.abs(next) === 1 ? "" : "s"}.`, "counter"); break; }
+    case "set-card-stats": { const located = controlledBattlefieldCard(room, actor, action?.cardId); if (!located) return { success: false, error: "You no longer control that permanent." }; located.card.power = normalizeText(action?.power, 12); located.card.toughness = normalizeText(action?.toughness, 12); located.card.notes = normalizeText(action?.notes, 500); addLog(room, `${actor.name} set ${located.card.name}'s stats to ${located.card.power || "?"}/${located.card.toughness || "?"}.`, "card"); break; }
+    case "mark-damage": { const located = controlledBattlefieldCard(room, actor, action?.cardId); if (!located) return { success: false, error: "You no longer control that permanent." }; located.card.damageMarked = clamp(located.card.damageMarked + amount, 0, 999); addLog(room, `${located.card.name} has ${located.card.damageMarked} damage marked${isLethal(located.card) ? " and is marked lethal" : ""}.`, "damage"); break; }
+    case "clear-card-damage": { const located = controlledBattlefieldCard(room, actor, action?.cardId); if (!located) return { success: false, error: "You no longer control that permanent." }; located.card.damageMarked = 0; located.card.deathtouchMarked = false; addLog(room, `${actor.name} cleared damage from ${located.card.name}.`, "damage"); break; }
     case "fight-card": {
-      const sourceLocated = requireOwnedBattlefieldCard(actor, action?.sourceCardId);
-      const targetLocated = findBattlefieldCard(room, String(action?.targetCardId || ""));
-      if (!sourceLocated || !targetLocated) return { success: false, error: "One of those creatures is no longer on the battlefield." };
-      if (sourceLocated.card.id === targetLocated.card.id) return { success: false, error: "A creature cannot fight itself." };
-      const sourceStats = effectiveStats(sourceLocated.card);
-      const targetStats = effectiveStats(targetLocated.card);
-      if (!sourceStats || !targetStats) return { success: false, error: "Set numeric power and toughness on both creatures before fighting." };
-      sourceLocated.card.damageMarked = clamp(sourceLocated.card.damageMarked + Math.max(0, targetStats.power), 0, 999);
-      targetLocated.card.damageMarked = clamp(targetLocated.card.damageMarked + Math.max(0, sourceStats.power), 0, 999);
-      addLog(room, `${actor.name}'s ${sourceLocated.card.name} fought ${targetLocated.player.name}'s ${targetLocated.card.name}.`, "fight");
-      break;
+      const source = controlledBattlefieldCard(room, actor, action?.sourceCardId); const target = findBattlefieldCard(room, String(action?.targetCardId || ""));
+      if (!source || !target || source.card.id === target.card.id) return { success: false, error: "Choose two different creatures on the battlefield." };
+      const a = effectiveStats(source.card); const b = effectiveStats(target.card); if (!a || !b) return { success: false, error: "Set numeric power and toughness on both creatures first." };
+      dealCreatureDamage(room, target.card, source.card, b.power); dealCreatureDamage(room, source.card, target.card, a.power);
+      addLog(room, `${actor.name}'s ${source.card.name} fought ${target.player.name}'s ${target.card.name}.`, "fight"); break;
     }
-    case "toggle-attacking": {
-      const located = requireOwnedBattlefieldCard(actor, action?.cardId);
-      if (!located) return { success: false, error: "That permanent is no longer on your battlefield." };
-      located.card.attacking = !located.card.attacking;
-      if (!located.card.attacking) {
-        for (const player of room.players) {
-          for (const card of player.game?.battlefield || []) {
-            if (card.blockingCardId === located.card.id) card.blockingCardId = null;
-          }
-        }
-      }
-      addLog(room, `${located.card.name} is ${located.card.attacking ? "attacking" : "no longer attacking"}.`, "combat");
-      break;
+    case "declare-attacker": {
+      if (room.turn.activePlayerId !== actor.id) return { success: false, error: "Only the active player can declare attackers." };
+      const located = controlledBattlefieldCard(room, actor, action?.cardId); const defender = findPlayer(room, String(action?.defenderPlayerId || ""));
+      if (!located || !defender || defender.id === actor.id) return { success: false, error: "Choose your creature and an opposing player." };
+      if (!isCreatureCard(located.card) || located.card.phasedOut) return { success: false, error: "Only an available creature can attack." };
+      if (located.card.summoningSick && !hasKeyword(located.card, "haste")) return { success: false, error: "That creature has summoning sickness." };
+      if (hasKeyword(located.card, "defender")) return { success: false, error: "That creature has defender." };
+      located.card.attacking = true; located.card.defendingPlayerId = defender.id; located.card.blockingCardId = null; if (!hasKeyword(located.card, "vigilance")) located.card.tapped = true;
+      queueSuggestedTriggers(room, "ATTACKS", { card: located.card, defenderId: defender.id }); addLog(room, `${actor.name} declared ${located.card.name} attacking ${defender.name}.`, "combat"); break;
     }
-    case "block-card": {
-      const blocker = requireOwnedBattlefieldCard(actor, action?.sourceCardId);
-      const attacker = findBattlefieldCard(room, String(action?.targetCardId || ""));
-      if (!blocker || !attacker?.card.attacking) return { success: false, error: "Choose one of your permanents and a marked attacking creature." };
-      blocker.card.blockingCardId = attacker.card.id;
-      addLog(room, `${actor.name}'s ${blocker.card.name} is blocking ${attacker.player.name}'s ${attacker.card.name}.`, "combat");
-      break;
+    case "clear-attacker": { const located = controlledBattlefieldCard(room, actor, action?.cardId); if (!located) return { success: false, error: "You no longer control that permanent." }; located.card.attacking = false; located.card.defendingPlayerId = null; for (const player of room.players) for (const card of player.game?.battlefield || []) if (card.blockingCardId === located.card.id) card.blockingCardId = null; addLog(room, `${located.card.name} is no longer attacking.`, "combat"); break; }
+    case "toggle-attacking": { const defender = room.players.find((player) => player.id !== actor.id && !player.game?.conceded); return processGameAction(room, actor, { type: "declare-attacker", cardId: action.cardId, defenderPlayerId: defender?.id }); }
+    case "block-card": { const blocker = controlledBattlefieldCard(room, actor, action?.sourceCardId); const attacker = findBattlefieldCard(room, String(action?.targetCardId || "")); if (!blocker || !attacker?.card.attacking || attacker.card.defendingPlayerId !== actor.id) return { success: false, error: "Choose one of your creatures and an attacker coming at you." }; blocker.card.blockingCardId = attacker.card.id; addLog(room, `${actor.name}'s ${blocker.card.name} is blocking ${attacker.player.name}'s ${attacker.card.name}.`, "combat"); break; }
+    case "clear-block": { const located = controlledBattlefieldCard(room, actor, action?.cardId); if (!located) return { success: false, error: "You no longer control that permanent." }; located.card.blockingCardId = null; addLog(room, `${located.card.name} is no longer blocking.`, "combat"); break; }
+    case "resolve-combat-damage": if (room.turn.activePlayerId !== actor.id && room.hostId !== actor.id) return { success: false, error: "Only the active player or host can resolve combat damage." }; resolveCombatDamage(room, action?.pass === "first" ? "first" : "normal"); break;
+    case "resolve-lethal": { const located = controlledBattlefieldCard(room, actor, action?.cardId); if (!located || !isLethal(located.card)) return { success: false, error: "That permanent is not currently marked lethal." }; const [card] = located.player.game.battlefield.splice(located.index, 1); card.damageMarked = 0; card.deathtouchMarked = false; card.attacking = false; card.blockingCardId = null; if (!card.token) { const owner = findPlayer(room, card.ownerId) || located.player; owner.game.graveyard.unshift(card); } queueSuggestedTriggers(room, "CREATURE_DIED", { card }); addLog(room, card.token ? `${card.name} token was removed.` : `${card.name} moved to its owner's graveyard.`, "damage"); break; }
+    case "create-token": actor.game.battlefield.unshift(createCard(normalizeText(action?.name, 80) || "Token", actor.id, { token: true, power: normalizeText(action?.power, 12), toughness: normalizeText(action?.toughness, 12), summoningSick: true })); addLog(room, `${actor.name} created a token.`, "card"); break;
+    case "mana": { const symbol = String(action?.symbol || "C").toUpperCase(); if (!Object.prototype.hasOwnProperty.call(actor.game.manaPool, symbol)) return { success: false, error: "Choose W, U, B, R, G or C mana." }; actor.game.manaPool[symbol] = clamp(actor.game.manaPool[symbol] + amount, 0, 999); addLog(room, `${actor.name}'s ${symbol} mana is now ${actor.game.manaPool[symbol]}.`, "mana"); break; }
+    case "clear-mana": actor.game.manaPool = normalizeManaPool(null); addLog(room, `${actor.name} emptied their mana pool.`, "mana"); break;
+    case "cast-card": {
+      const fromZone = ["hand", "commandZone"].includes(action?.fromZone) ? action.fromZone : "hand"; const located = getCardFromZone(actor.game, fromZone, String(action?.cardId || "")); if (!located) return { success: false, error: "That card is no longer in the selected zone." };
+      const [card] = actor.game[fromZone].splice(located.index, 1); const item = pushStack(room, { kind: "spell", name: card.name, controllerId: actor.id, sourceCardId: card.id, sourceZone: fromZone, card, text: currentOracleText(card), targets: validateTargets(room, action?.targets), createdAt: nowIso() }, actor.id);
+      queueSuggestedTriggers(room, "SPELL_CAST", { card, controllerId: actor.id }); addLog(room, `${actor.name} cast ${item.name} onto the stack.`, "stack"); break;
     }
-    case "clear-block": {
-      const located = requireOwnedBattlefieldCard(actor, action?.cardId);
-      if (!located) return { success: false, error: "That permanent is no longer on your battlefield." };
-      located.card.blockingCardId = null;
-      addLog(room, `${located.card.name} is no longer blocking.`, "combat");
-      break;
+    case "activate-card": { const located = controlledBattlefieldCard(room, actor, action?.cardId); if (!located) return { success: false, error: "You no longer control that permanent." }; if (action?.tapCost) located.card.tapped = true; const item = pushStack(room, { kind: "ability", name: `${located.card.name} ability`, controllerId: actor.id, sourceCardId: located.card.id, text: normalizeText(action?.text, 2500) || currentOracleText(located.card), targets: validateTargets(room, action?.targets), effect: action?.effect, createdAt: nowIso() }, actor.id); addLog(room, `${actor.name} activated ${item.name}.`, "stack"); break; }
+    case "push-stack-item": { const item = pushStack(room, { kind: action?.kind, name: action?.name, controllerId: actor.id, sourceCardId: action?.sourceCardId, text: action?.text, targets: validateTargets(room, action?.targets), effect: action?.effect, createdAt: nowIso() }, actor.id); if (!item) return { success: false, error: "Unable to create that stack item." }; addLog(room, `${actor.name} added ${item.name} to the stack.`, "stack"); break; }
+    case "pass-priority": {
+      const ids = activePlayerIds(room); if (!ids.length) break; if (room.priority?.playerId && room.priority.playerId !== actor.id) return { success: false, error: `Priority belongs to ${findPlayer(room, room.priority.playerId)?.name || "another player"}.` };
+      const passed = new Set(room.priority?.passedPlayerIds || []); passed.add(actor.id);
+      if (passed.size >= ids.length) { if (room.stack.length) resolveStackTop(room, "All players"); else resetPriority(room, room.turn?.activePlayerId); }
+      else { room.priority.passedPlayerIds = [...passed]; let next = nextPlayerId(room, actor.id); while (next && passed.has(next) && next !== actor.id) next = nextPlayerId(room, next); room.priority.playerId = next; }
+      addLog(room, `${actor.name} passed priority.`, "priority"); break;
     }
-    case "resolve-lethal": {
-      const located = requireOwnedBattlefieldCard(actor, action?.cardId);
-      if (!located) return { success: false, error: "That permanent is no longer on your battlefield." };
-      if (!isLethal(located.card)) return { success: false, error: "That permanent is not currently marked lethal." };
-      const [card] = actor.game.battlefield.splice(located.index, 1);
-      card.damageMarked = 0;
-      card.attacking = false;
-      card.blockingCardId = null;
-      if (!card.token) actor.game.graveyard.unshift(card);
-      addLog(room, card.token ? `${card.name} token was removed after lethal damage.` : `${card.name} was moved to the graveyard after lethal damage.`, "damage");
-      break;
-    }
-    case "create-token": {
-      const tokenName = normalizeText(action?.name, 80) || "Token";
-      actor.game.battlefield.unshift(createCard(tokenName, actor.id, {
-        token: true,
-        power: normalizeText(action?.power, 12),
-        toughness: normalizeText(action?.toughness, 12)
-      }));
-      addLog(room, `${actor.name} created a ${tokenName} token.`, "card");
-      break;
-    }
-    case "untap-all":
-      actor.game.battlefield.forEach((card) => { card.tapped = false; });
-      addLog(room, `${actor.name} untapped all permanents.`, "card");
-      break;
-    case "clear-combat":
-      clearCombat(room);
-      addLog(room, `${actor.name} cleared all attack and block markers.`, "combat");
-      break;
-    case "clear-all-damage":
-      clearDamage(room);
-      addLog(room, `${actor.name} cleared all marked damage.`, "damage");
-      break;
-    case "next-phase":
+    case "resolve-stack-top": if (room.hostId !== actor.id && room.turn.activePlayerId !== actor.id) return { success: false, error: "Only the active player or host can force a resolution." }; if (!resolveStackTop(room, actor.name)) return { success: false, error: "The stack is empty." }; break;
+    case "counter-stack-item": if (!counterStackItem(room, String(action?.stackItemId || ""), actor)) return { success: false, error: "That stack item no longer exists." }; break;
+    case "create-trigger": { const located = locateCard(room, String(action?.cardId || "")); if (!located || located.card.controllerId !== actor.id) return { success: false, error: "You no longer control that card." }; const trigger = queueTrigger(room, { controllerId: actor.id, sourceCardId: located.card.id, sourceName: located.card.name, event: normalizeText(action?.event, 80) || "Manual trigger", text: normalizeText(action?.text, 2500) || currentOracleText(located.card), targets: validateTargets(room, action?.targets), createdAt: nowIso() }); addLog(room, `${actor.name} queued a trigger from ${trigger.sourceName}.`, "trigger"); break; }
+    case "trigger-to-stack": { const index = room.triggerQueue.findIndex((item) => item.id === action?.triggerId); if (index < 0) return { success: false, error: "That trigger no longer exists." }; const trigger = room.triggerQueue[index]; if (trigger.controllerId !== actor.id && room.hostId !== actor.id) return { success: false, error: "Only its controller or host can move that trigger." }; room.triggerQueue.splice(index, 1); pushStack(room, { kind: "trigger", name: `${trigger.sourceName} trigger`, controllerId: trigger.controllerId, sourceCardId: trigger.sourceCardId, text: trigger.text, targets: trigger.targets }, trigger.controllerId); addLog(room, `${trigger.sourceName}'s trigger moved to the stack.`, "trigger"); break; }
+    case "dismiss-trigger": { const index = room.triggerQueue.findIndex((item) => item.id === action?.triggerId); if (index < 0) return { success: false, error: "That trigger no longer exists." }; if (room.triggerQueue[index].controllerId !== actor.id && room.hostId !== actor.id) return { success: false, error: "Only its controller or host can dismiss it." }; room.triggerQueue.splice(index, 1); break; }
+    case "attach-card": { const source = controlledBattlefieldCard(room, actor, action?.cardId); const target = findBattlefieldCard(room, String(action?.targetCardId || "")); if (!source || !target || source.card.id === target.card.id) return { success: false, error: "Choose an attachment you control and another permanent." }; source.card.attachedToId = target.card.id; addLog(room, `${actor.name} attached ${source.card.name} to ${target.card.name}.`, "attachment"); break; }
+    case "detach-card": { const source = controlledBattlefieldCard(room, actor, action?.cardId); if (!source) return { success: false, error: "You no longer control that permanent." }; source.card.attachedToId = null; addLog(room, `${actor.name} detached ${source.card.name}.`, "attachment"); break; }
+    case "change-controller": { const source = controlledBattlefieldCard(room, actor, action?.cardId); const nextController = findPlayer(room, String(action?.newControllerId || "")); if (!source || !nextController?.game) return { success: false, error: "Choose a permanent you control and a valid player." }; const [card] = source.player.game.battlefield.splice(source.index, 1); card.controllerId = nextController.id; card.attacking = false; card.blockingCardId = null; card.defendingPlayerId = null; card.summoningSick = isCreatureCard(card); nextController.game.battlefield.unshift(card); addLog(room, `${nextController.name} now controls ${card.name}.`, "control"); break; }
+    case "return-control": { const located = controlledBattlefieldCard(room, actor, action?.cardId); if (!located) return { success: false, error: "You no longer control that permanent." }; const owner = findPlayer(room, located.card.ownerId); if (!owner?.game) return { success: false, error: "The owner is unavailable." }; const [card] = located.player.game.battlefield.splice(located.index, 1); card.controllerId = owner.id; owner.game.battlefield.unshift(card); addLog(room, `${card.name} returned to ${owner.name}'s control.`, "control"); break; }
+    case "add-temp-effect": { const located = controlledBattlefieldCard(room, actor, action?.cardId); if (!located) return { success: false, error: "You no longer control that permanent." }; located.card.temporaryEffects.push({ id: createId(), label: normalizeText(action?.label, 100) || "Temporary effect", power: clamp(Math.floor(Number(action?.power) || 0), -99, 99), toughness: clamp(Math.floor(Number(action?.toughness) || 0), -99, 99), keyword: normalizeText(action?.keyword, 60), expires: action?.expires === "until-removed" ? "until-removed" : "end-of-turn" }); addLog(room, `${actor.name} added a temporary effect to ${located.card.name}.`, "effect"); break; }
+    case "remove-temp-effect": { const located = controlledBattlefieldCard(room, actor, action?.cardId); if (!located) return { success: false, error: "You no longer control that permanent." }; located.card.temporaryEffects = located.card.temporaryEffects.filter((effect) => effect.id !== action?.effectId); break; }
+    case "transform-card": { const located = controlledBattlefieldCard(room, actor, action?.cardId); if (!located || (located.card.cardData?.faces?.length || 0) < 2) return { success: false, error: "That card has no additional face loaded." }; located.card.activeFaceIndex = (located.card.activeFaceIndex + 1) % located.card.cardData.faces.length; addLog(room, `${actor.name} transformed ${located.card.name}.`, "card"); break; }
+    case "toggle-face-down": { const located = controlledBattlefieldCard(room, actor, action?.cardId); if (!located) return { success: false, error: "You no longer control that permanent." }; located.card.faceDown = !located.card.faceDown; addLog(room, `${actor.name} turned a card ${located.card.faceDown ? "face down" : "face up"}.`, "card"); break; }
+    case "toggle-phased": { const located = controlledBattlefieldCard(room, actor, action?.cardId); if (!located) return { success: false, error: "You no longer control that permanent." }; located.card.phasedOut = !located.card.phasedOut; addLog(room, `${located.card.name} ${located.card.phasedOut ? "phased out" : "phased in"}.`, "card"); break; }
+    case "copy-card": { const source = findBattlefieldCard(room, String(action?.targetCardId || action?.cardId || "")); if (!source) return { success: false, error: "Choose a permanent to copy." }; const copy = migrateCard({ ...JSON.parse(JSON.stringify(source.card)), id: createId(), ownerId: actor.id, controllerId: actor.id, token: true, commander: false, copiedFromCardId: source.card.id, attachedToId: null, attacking: false, blockingCardId: null, damageMarked: 0, deathtouchMarked: false }, actor.id); actor.game.battlefield.unshift(copy); addLog(room, `${actor.name} created a copy of ${source.card.name}.`, "card"); break; }
+    case "set-chosen-value": { const located = controlledBattlefieldCard(room, actor, action?.cardId); if (!located) return { success: false, error: "You no longer control that permanent." }; const key = normalizeText(action?.key, 60) || "Choice"; located.card.chosenValues[key] = normalizeText(action?.value, 180); addLog(room, `${actor.name} set ${located.card.name}'s ${key}.`, "choice"); break; }
+    case "untap-all": actor.game.battlefield.forEach((card) => { card.tapped = false; }); addLog(room, `${actor.name} untapped all permanents.`, "card"); break;
+    case "clear-combat": clearCombat(room); addLog(room, `${actor.name} cleared all attack and block markers.`, "combat"); break;
+    case "clear-all-damage": clearDamage(room); addLog(room, `${actor.name} cleared all marked damage.`, "damage"); break;
+    case "next-phase": {
       if (room.turn.activePlayerId !== actor.id && room.hostId !== actor.id) return { success: false, error: "Only the active player or host can advance the phase." };
-      if (room.turn.phaseIndex >= PHASES.length - 1) advanceTurn(room);
-      else {
-        room.turn.phaseIndex += 1;
-        addLog(room, `${PHASES[room.turn.phaseIndex]} phase.`, "turn");
-      }
+      if (room.turn.phaseIndex >= PHASES.length - 1) advanceTurn(room); else { room.turn.phaseIndex += 1; const phase = PHASES[room.turn.phaseIndex]; if (phase === "Upkeep") queueSuggestedTriggers(room, "UPKEEP_START"); if (phase === "End") queueSuggestedTriggers(room, "END_STEP_START"); if (phase === "First-Strike Damage") resolveCombatDamage(room, "first"); addLog(room, `${phase} phase.`, "turn"); resetPriority(room, room.turn.activePlayerId); }
       break;
-    case "end-turn":
-      if (room.turn.activePlayerId !== actor.id && room.hostId !== actor.id) return { success: false, error: "Only the active player or host can end the turn." };
-      advanceTurn(room);
-      break;
-    case "set-active-player":
-      if (room.hostId !== actor.id) return { success: false, error: "Only the host can change the active player." };
-      if (!targetPlayer.game || targetPlayer.game.conceded) return { success: false, error: "That player is not active in this game." };
-      clearCombat(room);
-      clearDamage(room);
-      room.turn.activePlayerId = targetPlayer.id;
-      room.turn.phaseIndex = 0;
-      targetPlayer.game.battlefield.forEach((card) => { card.tapped = false; });
-      addLog(room, `${actor.name} made ${targetPlayer.name} the active player.`, "turn");
-      break;
-    case "concede":
-      actor.game.conceded = true;
-      addLog(room, `${actor.name} conceded the game.`, "warning");
-      if (room.turn.activePlayerId === actor.id) advanceTurn(room);
-      break;
-    default:
-      return { success: false, error: "That game action is not supported." };
+    }
+    case "end-turn": if (room.turn.activePlayerId !== actor.id && room.hostId !== actor.id) return { success: false, error: "Only the active player or host can end the turn." }; advanceTurn(room); break;
+    case "set-active-player": if (room.hostId !== actor.id) return { success: false, error: "Only the host can change the active player." }; if (!targetPlayer.game || targetPlayer.game.conceded) return { success: false, error: "That player is not active." }; clearCombat(room); clearDamage(room); room.turn.activePlayerId = targetPlayer.id; room.turn.phaseIndex = 0; targetPlayer.game.battlefield.forEach((card) => { card.tapped = false; card.summoningSick = false; }); resetPriority(room, targetPlayer.id); addLog(room, `${actor.name} made ${targetPlayer.name} the active player.`, "turn"); break;
+    case "undo-last": { if (room.hostId !== actor.id) return { success: false, error: "Only the host can undo a shared game action." }; const entry = room.undoStack.pop(); if (!entry || !restoreSnapshot(room, entry)) return { success: false, error: "There is no action available to undo." }; addLog(room, `${actor.name} undid: ${entry.label}.`, "undo"); recordAction(room, actor, "undo", entry.label); return { success: true }; }
+    case "concede": actor.game.conceded = true; addLog(room, `${actor.name} conceded the game.`, "warning"); if (room.turn.activePlayerId === actor.id) advanceTurn(room); break;
+    default: return { success: false, error: "That game action is not supported." };
   }
+
+  if (before) pushUndo(room, actor, type, before);
+  recordAction(room, actor, type, detail);
   return { success: true };
 }
 
@@ -1322,7 +1658,7 @@ app.get("/api/health", (request, response) => {
     success: true,
     status: "online",
     app: "Torn Commander Sandbox",
-    version: "9.0.0",
+    version: "15.0.0",
     connectedSockets: io.engine.clientsCount,
     activeRooms: rooms.size,
     persistence: persistenceSummary(),
@@ -1331,7 +1667,7 @@ app.get("/api/health", (request, response) => {
 });
 
 app.get("/api", (request, response) => {
-  response.status(200).json({ success: true, name: "Torn Commander Sandbox API", version: "9.0.0", persistence: persistenceSummary() });
+  response.status(200).json({ success: true, name: "Torn Commander Sandbox API", version: "15.0.0", persistence: persistenceSummary() });
 });
 
 io.on("connection", (socket) => {
@@ -1346,7 +1682,7 @@ io.on("connection", (socket) => {
       const player = { id: createId(), name, ready: false, connected: true, socketId: socket.id, sessionToken: createSessionToken(), deck: null, game: null, joinedAt: timestamp, lastSeenAt: timestamp };
       const maxPlayers = ALLOWED_MAX_PLAYERS.has(Number(payload?.maxPlayers)) ? Number(payload.maxPlayers) : 6;
       const startingLife = ALLOWED_STARTING_LIFE.has(Number(payload?.startingLife)) ? Number(payload.startingLife) : 40;
-      const room = { code: createRoomCode(), hostId: player.id, privateRoom: true, maxPlayers, startingLife, status: "waiting", createdAt: timestamp, updatedAt: timestamp, startedAt: null, turn: null, rollOff: null, players: [player], chat: [], log: [] };
+      const room = { code: createRoomCode(), hostId: player.id, privateRoom: true, maxPlayers, startingLife, status: "waiting", createdAt: timestamp, updatedAt: timestamp, startedAt: null, turn: null, rollOff: null, stack: [], triggerQueue: [], priority: { playerId: null, passedPlayerIds: [] }, actionHistory: [], undoStack: [], players: [player], chat: [], log: [] };
       rooms.set(room.code, room);
       attachSocket(socket, room, player);
       addLog(room, `${name} created the room.`, "room");
@@ -1450,6 +1786,11 @@ io.on("connection", (socket) => {
     auth.room.startedAt = nowIso();
     auth.room.rollOff = createStartingRollOff(ids);
     auth.room.turn = { number: 0, phaseIndex: 0, activePlayerId: null, order: [] };
+    auth.room.stack = [];
+    auth.room.triggerQueue = [];
+    auth.room.priority = { playerId: null, passedPlayerIds: [] };
+    auth.room.actionHistory = [];
+    auth.room.undoStack = [];
     addLog(auth.room, "Starting-player d20 roll-off began. Every player must roll once; tied high rolls reroll.", "roll");
     acknowledge(callback, { success: true, room: createPublicRoom(auth.room, auth.player.id) });
     emitRoomUpdate(auth.room);
@@ -1521,6 +1862,11 @@ io.on("connection", (socket) => {
     auth.room.startedAt = null;
     auth.room.turn = null;
     auth.room.rollOff = null;
+    auth.room.stack = [];
+    auth.room.triggerQueue = [];
+    auth.room.priority = { playerId: null, passedPlayerIds: [] };
+    auth.room.actionHistory = [];
+    auth.room.undoStack = [];
     auth.room.players.forEach((player) => { player.game = null; player.ready = false; });
     auth.room.chat = [];
     auth.room.log = [];
@@ -1581,7 +1927,7 @@ async function start() {
     console.error("PostgreSQL initialization failed. Continuing with memory:", error);
   }
   server.listen(PORT, "0.0.0.0", () => {
-    console.log(`Torn Commander Sandbox v9 running on port ${PORT}`);
+    console.log(`Torn Commander Sandbox v15 running on port ${PORT}`);
   });
 }
 
