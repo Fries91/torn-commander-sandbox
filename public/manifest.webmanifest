@@ -1,15 +1,22 @@
 {
-  "name": "Arena Commander Table",
-  "short_name": "Commander",
-  "description": "A persistent Arena-style 2–6 player MTG Commander table.",
+  "name": "Arena Commander Final Rules",
+  "short_name": "Commander v30",
+  "description": "Arena-style multiplayer Commander table with final assisted rules engine and universal Judge Mode.",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
-  "display_override": ["fullscreen", "standalone", "minimal-ui"],
+  "display_override": [
+    "fullscreen",
+    "standalone",
+    "minimal-ui"
+  ],
   "background_color": "#07100e",
   "theme_color": "#07100e",
   "orientation": "any",
-  "categories": ["games", "entertainment"],
+  "categories": [
+    "games",
+    "entertainment"
+  ],
   "icons": [
     {
       "src": "/icon.svg",
