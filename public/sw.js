@@ -1,6 +1,6 @@
 "use strict";
 
-const CACHE_NAME = "torn-commander-v15-card-actions";
+const CACHE_NAME = "arena-commander-v20.0.0";
 const APP_SHELL = ["/", "/index.html", "/styles.css", "/app.js", "/manifest.webmanifest", "/icon.svg"];
 
 self.addEventListener("install", (event) => {
@@ -12,11 +12,13 @@ self.addEventListener("activate", (event) => {
 });
 
 self.addEventListener("fetch", (event) => {
-  if (event.request.method !== "GET" || new URL(event.request.url).origin !== self.location.origin) return;
-  if (event.request.url.includes("/socket.io/") || event.request.url.includes("/api/")) return;
-  event.respondWith(fetch(event.request).then((response) => {
-    const copy = response.clone();
-    caches.open(CACHE_NAME).then((cache) => cache.put(event.request, copy));
+  const request = event.request;
+  if (request.method !== "GET") return;
+  const url = new URL(request.url);
+  if (url.origin !== self.location.origin || url.pathname.startsWith("/socket.io/") || url.pathname.startsWith("/api/")) return;
+  event.respondWith(fetch(request).then((response) => {
+    const clone = response.clone();
+    caches.open(CACHE_NAME).then((cache) => cache.put(request, clone)).catch(() => undefined);
     return response;
-  }).catch(() => caches.match(event.request).then((cached) => cached || caches.match("/index.html"))));
+  }).catch(() => caches.match(request).then((cached) => cached || caches.match("/index.html"))));
 });
