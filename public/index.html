@@ -5,10 +5,11 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1">
   <meta name="theme-color" content="#08110f">
   <meta name="description" content="Arena-style MTG Commander for 2–6 players with Solo AI Test Lab, optional expert bot seats, stack, priority, combat and persistent games.">
-  <title>Arena Commander AI Test Lab</title>
+  <title>Arena Commander</title>
   <link rel="manifest" href="/manifest.webmanifest">
   <link rel="icon" href="/icon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="/styles.css">
+  <link rel="stylesheet" href="/clean-home.css?v=36.0.0">
 </head>
 <body>
   <header class="app-header">
@@ -29,7 +30,7 @@
   <nav id="bottomNav" class="bottom-nav" aria-label="Main navigation">
     <button type="button" data-nav="home"><span>⌂</span>Home</button>
     <button type="button" data-nav="decks"><span>▤</span>Decks</button>
-    <button type="button" data-nav="game"><span>♛</span>Game</button>
+    <button type="button" data-nav="game"><span>♛</span>Play</button>
     <button type="button" data-nav="help"><span>?</span>Help</button>
   </nav>
 
@@ -48,5 +49,6 @@
 
   <script src="/socket.io/socket.io.js"></script>
   <script src="/app.js" defer></script>
+  <script src="/clean-home.js?v=36.0.0" defer></script>
 </body>
 </html>
