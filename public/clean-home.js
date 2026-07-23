@@ -3,235 +3,162 @@
 
   const app = document.getElementById("app");
   const bottomNav = document.getElementById("bottomNav");
-  const fullscreenButton = document.getElementById("fullscreenButton");
   if (!app) return;
-
-  const actionDetails = [
-    { id: "host", icon: "✦", title: "Host Game", text: "Create a private 2–6 player table." },
-    { id: "join", icon: "↗", title: "Join Game", text: "Enter a room code and take your seat." },
-    { id: "test", icon: "⚔", title: "Test Lab", text: "Play your deck against an AI opponent." },
-    { id: "watch", icon: "◉", title: "Watch", text: "Spectate a live Commander table." }
-  ];
 
   let syncQueued = false;
 
   function queueSync() {
     if (syncQueued) return;
     syncQueued = true;
-    window.requestAnimationFrame(() => {
+    requestAnimationFrame(() => {
       syncQueued = false;
       syncInterface();
     });
   }
 
-  function isHomeScreen() {
-    return Boolean(
-      document.getElementById("createRoomForm") &&
-      document.getElementById("joinRoomForm") &&
-      document.getElementById("spectatorForm") &&
-      !app.querySelector(".lobby-top, .arena-shell, .rolloff-hero")
-    );
-  }
-
-  function updatePersistentNavigation() {
+  function setPlayLabel() {
     const gameButton = bottomNav?.querySelector('[data-nav="game"]');
-    if (gameButton) gameButton.innerHTML = "<span>♛</span>Play";
-  }
-
-  function createActionButton(action) {
-    const button = document.createElement("button");
-    button.type = "button";
-    button.className = "clean-launch-card";
-    button.dataset.cleanPanel = action.id;
-    button.setAttribute("aria-controls", `clean-pane-${action.id}`);
-    button.setAttribute("aria-expanded", "false");
-    button.innerHTML = `
-      <span class="clean-launch-icon" aria-hidden="true">${action.icon}</span>
-      <span class="clean-launch-copy"><strong>${action.title}</strong><small>${action.text}</small></span>
-      <span class="clean-launch-arrow" aria-hidden="true">›</span>
-    `;
-    return button;
-  }
-
-  function createPane(id, content) {
-    const pane = document.createElement("section");
-    pane.id = `clean-pane-${id}`;
-    pane.className = "clean-action-pane";
-    pane.dataset.cleanPane = id;
-    pane.hidden = true;
-
-    const close = document.createElement("button");
-    close.type = "button";
-    close.className = "clean-pane-close";
-    close.dataset.cleanClose = "1";
-    close.setAttribute("aria-label", "Close section");
-    close.textContent = "×";
-
-    pane.append(close, content);
-    return pane;
-  }
-
-  function simplifyForm(form, eyebrow, title) {
-    form.classList.add("clean-form-panel");
-    const eyebrowNode = form.querySelector(":scope > .eyebrow");
-    const titleNode = form.querySelector(":scope > h2");
-    if (eyebrowNode) eyebrowNode.textContent = eyebrow;
-    if (titleNode) titleNode.textContent = title;
-  }
-
-  function simplifyTestPanel(testPanel) {
-    testPanel.classList.add("clean-test-panel");
-    const heading = testPanel.querySelector(".section-heading");
-    const eyebrow = heading?.querySelector(".eyebrow");
-    const title = heading?.querySelector("h2");
-    const description = heading?.querySelector("p:not(.eyebrow)");
-    if (eyebrow) eyebrow.textContent = "Solo practice";
-    if (title) title.textContent = "Test your deck against AI";
-    if (description) description.textContent = "Choose two decks and start a private practice match.";
-  }
-
-  function enhanceDeckPanel(panel) {
-    if (!panel) return;
-    panel.classList.add("clean-decks-panel");
-    const eyebrow = panel.querySelector(".eyebrow");
-    const title = panel.querySelector("h2");
-    if (eyebrow) eyebrow.textContent = "Deck library";
-    if (title) title.textContent = "Your Commander decks";
-
-    const buttonRow = panel.querySelector(".section-heading .button-row");
-    if (buttonRow && !buttonRow.querySelector("[data-clean-open-decks]")) {
-      const openDecks = document.createElement("button");
-      openDecks.type = "button";
-      openDecks.className = "secondary-button";
-      openDecks.dataset.cleanOpenDecks = "1";
-      openDecks.textContent = "Open decks";
-      buttonRow.prepend(openDecks);
+    if (gameButton && !gameButton.textContent.includes("Play")) {
+      gameButton.innerHTML = "<span>♛</span>Play";
     }
   }
 
-  function enhanceHero(hero) {
-    if (!hero) return;
-    hero.classList.add("clean-hero");
-    hero.innerHTML = `
-      <div class="clean-hero-copy">
-        <p class="eyebrow">Arena Commander • 2–6 players</p>
-        <h1>Choose how you want to play.</h1>
-        <p>Host, join, practise against AI, or watch a table.</p>
-      </div>
-      <div class="clean-hero-badge" aria-hidden="true"><span>♛</span><small>v35</small></div>
-    `;
+  function homePanels() {
+    return [...app.querySelectorAll("[data-home-panel]")];
   }
 
-  function applyHomeCleanup() {
-    if (app.dataset.cleanHomeApplied === "1") return;
-
-    const hostForm = document.getElementById("createRoomForm");
-    const joinForm = document.getElementById("joinRoomForm");
-    const watchForm = document.getElementById("spectatorForm");
-    const homeGrid = hostForm?.closest(".home-grid");
-    const testPanel = app.querySelector(".ai-test-lab-panel");
-    const hero = app.querySelector(".arena-hero");
-
-    if (!hostForm || !joinForm || !watchForm || !homeGrid || !testPanel || !hero) return;
-
-    app.dataset.cleanHomeApplied = "1";
-    document.body.classList.add("clean-home-active");
-    fullscreenButton?.setAttribute("tabindex", "-1");
-
-    enhanceHero(hero);
-    simplifyForm(hostForm, "Private room", "Host a game");
-    simplifyForm(joinForm, "Room code", "Join a game");
-    simplifyForm(watchForm, "Spectator", "Watch a table");
-    simplifyTestPanel(testPanel);
-
-    const launcher = document.createElement("section");
-    launcher.className = "clean-launcher";
-    launcher.innerHTML = `
-      <div class="clean-section-heading">
-        <div><p class="eyebrow">Quick play</p><h2>What would you like to do?</h2></div>
-        <span class="clean-online-pill"><i></i> Ready</span>
-      </div>
-      <div class="clean-launch-grid"></div>
-    `;
-    const launchGrid = launcher.querySelector(".clean-launch-grid");
-    actionDetails.forEach((action) => launchGrid.appendChild(createActionButton(action)));
-
-    const panes = document.createElement("div");
-    panes.className = "clean-panes";
-    panes.append(
-      createPane("host", hostForm),
-      createPane("join", joinForm),
-      createPane("test", testPanel),
-      createPane("watch", watchForm)
-    );
-
-    homeGrid.replaceWith(launcher, panes);
-
-    const directPanels = [...app.children].filter((node) => node.matches?.("section.panel"));
-    const deckPanel = directPanels.find((panel) => panel.querySelector(".deck-grid") || panel.textContent.includes("My decks"));
-    enhanceDeckPanel(deckPanel);
-
-    app.querySelectorAll(".notice-row").forEach((notice) => notice.classList.add("clean-resume-card"));
-    updatePersistentNavigation();
+  function homeLaunchers() {
+    return [...app.querySelectorAll("[data-home-panel-target]")];
   }
 
-  function removeHomeMode() {
-    document.body.classList.remove("clean-home-active");
-    app.removeAttribute("data-clean-home-applied");
-    fullscreenButton?.removeAttribute("tabindex");
-  }
-
-  function syncInterface() {
-    updatePersistentNavigation();
-    if (isHomeScreen()) applyHomeCleanup();
-    else removeHomeMode();
-  }
-
-  function togglePane(id) {
-    const panes = [...app.querySelectorAll("[data-clean-pane]")];
-    const buttons = [...app.querySelectorAll("[data-clean-panel]")];
-    const target = panes.find((pane) => pane.dataset.cleanPane === id);
-    if (!target) return;
-
-    const willOpen = target.hidden;
-    panes.forEach((pane) => { pane.hidden = true; });
-    buttons.forEach((button) => {
+  function closePanels() {
+    homePanels().forEach((panel) => { panel.hidden = true; });
+    homeLaunchers().forEach((button) => {
       button.classList.remove("is-active");
       button.setAttribute("aria-expanded", "false");
     });
+  }
 
-    if (willOpen) {
-      target.hidden = false;
-      const activeButton = buttons.find((button) => button.dataset.cleanPanel === id);
-      activeButton?.classList.add("is-active");
-      activeButton?.setAttribute("aria-expanded", "true");
-      window.setTimeout(() => target.scrollIntoView({ behavior: "smooth", block: "start" }), 40);
-      window.setTimeout(() => target.querySelector("input, select, button[type='submit']")?.focus({ preventScroll: true }), 260);
+  function openPanel(name) {
+    const panel = app.querySelector(`[data-home-panel="${CSS.escape(name)}"]`);
+    if (!panel) return;
+    const wasHidden = panel.hidden;
+    closePanels();
+    if (!wasHidden) return;
+
+    panel.hidden = false;
+    const launcher = app.querySelector(`[data-home-panel-target="${CSS.escape(name)}"]`);
+    launcher?.classList.add("is-active");
+    launcher?.setAttribute("aria-expanded", "true");
+    setTimeout(() => panel.scrollIntoView({ behavior: "smooth", block: "start" }), 30);
+    setTimeout(() => panel.querySelector("input, select, button[type='submit']")?.focus({ preventScroll: true }), 250);
+  }
+
+  function updateTestLabFormat(form) {
+    if (!form) return;
+    const format = form.elements.format?.value || "commander";
+    const life = form.elements.startingLife;
+    if (!life) return;
+
+    const customRules = form.querySelector("[data-test-custom-rules]");
+    if (format === "commander") {
+      life.value = "40";
+      life.disabled = true;
+      life.closest("label")?.classList.add("is-locked-setting");
+      if (customRules) customRules.hidden = true;
+    } else if (format === "brawl") {
+      life.value = "25";
+      life.disabled = true;
+      life.closest("label")?.classList.add("is-locked-setting");
+      if (customRules) customRules.hidden = true;
+    } else {
+      life.disabled = false;
+      life.closest("label")?.classList.remove("is-locked-setting");
+      if (customRules) customRules.hidden = false;
+      updateCustomPlayerRules(form);
     }
   }
 
+  function updateCustomPlayerRules(form) {
+    if (!form) return;
+    const prefix = form.id === "createTestLabForm" ? "test" : "";
+    const style = form.elements[`${prefix}playStyle`]?.value || "free-for-all";
+    const maxPlayers = form.elements.maxPlayers;
+
+    const allowed = style === "duel"
+      ? [2]
+      : style === "teams"
+        ? [4, 6]
+        : ["archenemy", "limited-range"].includes(style)
+          ? [3, 4, 5, 6]
+          : [2, 3, 4, 5, 6];
+
+    if (maxPlayers) {
+      [...maxPlayers.options].forEach((option) => {
+        option.disabled = !allowed.includes(Number(option.value));
+      });
+      if (!allowed.includes(Number(maxPlayers.value))) maxPlayers.value = String(allowed[0]);
+    }
+
+    const commanderDamage = form.elements[`${prefix}commanderDamageEnabled`];
+    const commanderThreshold = form.elements[`${prefix}commanderDamageThreshold`];
+    if (commanderThreshold) commanderThreshold.disabled = Boolean(commanderDamage && !commanderDamage.checked);
+
+    const officialBans = form.elements[`${prefix}useOfficialBannedList`];
+    const allowedBans = form.elements[`${prefix}allowedBannedCards`];
+    if (allowedBans) allowedBans.disabled = Boolean(officialBans && !officialBans.checked);
+
+    const singleton = form.elements[`${prefix}singleton`];
+    const maxCopies = form.elements[`${prefix}maxCopies`];
+    if (maxCopies) maxCopies.disabled = Boolean(singleton?.checked);
+  }
+
+  function syncInterface() {
+    setPlayLabel();
+    document.body.classList.toggle("format-home-active", Boolean(app.querySelector(".format-home-hero")));
+
+    app.querySelectorAll("#createTestLabForm").forEach(updateTestLabFormat);
+    app.querySelectorAll("#createCustomRoomForm, #roomSettingsForm").forEach(updateCustomPlayerRules);
+
+    homeLaunchers().forEach((button) => {
+      button.setAttribute("aria-controls", `format-panel-${button.dataset.homePanelTarget}`);
+      button.setAttribute("aria-expanded", String(button.classList.contains("is-active")));
+    });
+    homePanels().forEach((panel) => {
+      panel.id ||= `format-panel-${panel.dataset.homePanel}`;
+    });
+  }
+
   app.addEventListener("click", (event) => {
-    const launcher = event.target.closest("[data-clean-panel]");
+    const launcher = event.target.closest("[data-home-panel-target]");
     if (launcher) {
       event.preventDefault();
-      togglePane(launcher.dataset.cleanPanel);
+      openPanel(launcher.dataset.homePanelTarget);
       return;
     }
 
-    if (event.target.closest("[data-clean-close]")) {
+    if (event.target.closest("[data-home-panel-close]")) {
       event.preventDefault();
-      const pane = event.target.closest("[data-clean-pane]");
-      if (pane) togglePane(pane.dataset.cleanPane);
+      closePanels();
+      app.querySelector(".format-launch-grid")?.scrollIntoView({ behavior: "smooth", block: "start" });
       return;
     }
 
-    if (event.target.closest("[data-clean-open-decks]")) {
+    const navButton = event.target.closest("button[data-nav]");
+    if (navButton && navButton.closest(".compact-deck-panel")) {
       event.preventDefault();
-      bottomNav?.querySelector('[data-nav="decks"]')?.click();
+      bottomNav?.querySelector(`[data-nav="${CSS.escape(navButton.dataset.nav)}"]`)?.click();
     }
   });
 
+  app.addEventListener("change", (event) => {
+    const form = event.target.closest("form");
+    if (!form) return;
+    if (form.id === "createTestLabForm" && event.target.name === "format") updateTestLabFormat(form);
+    if (["createCustomRoomForm", "roomSettingsForm"].includes(form.id) || (form.id === "createTestLabForm" && form.elements.format?.value === "custom")) updateCustomPlayerRules(form);
+  });
+
   const observer = new MutationObserver(queueSync);
-  observer.observe(app, { childList: true });
+  observer.observe(app, { childList: true, subtree: false });
   queueSync();
 })();
