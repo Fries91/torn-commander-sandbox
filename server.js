@@ -53,17 +53,42 @@ const MAX_REPLAY_FRAMES = 80;
 const MAX_SPECTATORS = 50;
 const MAX_RULE_DECISIONS = 80;
 const MAX_RULE_EFFECTS = 160;
-const RULES_VERSION = "35.0";
+const RULES_VERSION = "37.0";
+const APP_VERSION = "37.0.0";
 const ALLOWED_TURN_TIMERS = new Set([0, 60, 90, 120, 180, 300]);
 const PHASES = ["Untap", "Upkeep", "Draw", "Main 1", "Beginning Combat", "Declare Attackers", "Declare Blockers", "First-Strike Damage", "Combat Damage", "End Combat", "Main 2", "End", "Cleanup"];
 const ZONES = new Set(["hand", "battlefield", "graveyard", "exile", "commandZone", "library"]);
 const ALLOWED_MAX_PLAYERS = new Set([2, 3, 4, 5, 6]);
-const ALLOWED_STARTING_LIFE = new Set([25, 30, 40]);
+const GAME_FORMATS = new Set(["commander", "brawl", "custom"]);
+const CUSTOM_PLAY_STYLES = new Set(["free-for-all", "duel", "teams", "limited-range", "archenemy", "sandbox"]);
+const OFFICIAL_COMMANDER_BANNED = new Set([
+  "Ancestral Recall", "Balance", "Biorhythm", "Black Lotus", "Channel", "Chaos Orb",
+  "Dockside Extortionist", "Emrakul, the Aeons Torn", "Erayo, Soratami Ascendant",
+  "Falling Star", "Fastbond", "Flash", "Golos, Tireless Pilgrim", "Griselbrand",
+  "Hullbreacher", "Iona, Shield of Emeria", "Jeweled Lotus", "Karakas",
+  "Leovold, Emissary of Trest", "Library of Alexandria", "Limited Resources",
+  "Lutri, the Spellchaser", "Mana Crypt", "Mox Emerald", "Mox Jet", "Mox Pearl",
+  "Mox Ruby", "Mox Sapphire", "Nadu, Winged Wisdom", "Paradox Engine",
+  "Primeval Titan", "Prophet of Kruphix", "Recurring Nightmare",
+  "Rofellos, Llanowar Emissary", "Shahrazad", "Sundering Titan",
+  "Sylvan Primordial", "Time Vault", "Time Walk", "Tinker", "Tolarian Academy",
+  "Trade Secrets", "Upheaval", "Yawgmoth's Bargain"
+].map((name) => name.toLocaleLowerCase("en-US")));
+const OFFICIAL_BRAWL_BANNED = new Set([
+  "Agent of Treachery", "Ancient Tomb", "Chalice of the Void", "Channel",
+  "Chrome Mox", "Demonic Tutor", "Drannith Magistrate", "Field of the Dead",
+  "Force of Will", "Gideon's Intervention", "Lutri, the Spellchaser",
+  "Mana Drain", "Meddling Mage", "Natural Order", "Nexus of Fate",
+  "Oko, Thief of Crowns", "Phyrexian Revoker", "Pithing Needle", "Runed Halo",
+  "Sorcerous Spyglass", "Strip Mine", "Subtlety", "Tainted Pact",
+  "Temporal Manipulation", "Time Warp", "Ugin, the Spirit Dragon",
+  "Ugin's Labyrinth", "Wash Away"
+].map((name) => name.toLocaleLowerCase("en-US")));
 const SCRYFALL_COLLECTION_URL = "https://api.scryfall.com/cards/collection";
 const SCRYFALL_BATCH_SIZE = 75;
 const CARD_CACHE_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000;
 const CARD_LOOKUP_MAX_NAMES = 150;
-const CARD_LOOKUP_USER_AGENT = process.env.SCRYFALL_USER_AGENT || "TornCommanderSandbox/35.0 (+https://torn-commander-sandbox.onrender.com)";
+const CARD_LOOKUP_USER_AGENT = process.env.SCRYFALL_USER_AGENT || "TornCommanderSandbox/37.0 (+https://torn-commander-sandbox.onrender.com)";
 
 const rooms = new Map();
 const disconnectTimers = new Map();
@@ -276,6 +301,10 @@ function normalizeCardData(value) {
     setCode: normalizeText(value.setCode ?? value.set, 12),
     collectorNumber: normalizeText(value.collectorNumber ?? value.collector_number, 30),
     rarity: normalizeText(value.rarity, 20),
+    legalities: value.legalities && typeof value.legalities === "object"
+      ? Object.fromEntries(Object.entries(value.legalities).slice(0, 40).map(([key, status]) => [normalizeText(key, 30), normalizeText(status, 30)]))
+      : {},
+    games: normalizeStringArray(value.games, 12, 30),
     faces
   };
   return card.name || card.scryfallId || card.oracleId ? card : null;
@@ -476,6 +505,199 @@ function normalizeRoomSettings(value) {
     autoStateBasedActions: value?.autoStateBasedActions !== false,
     freeCommanderMulligan: value?.freeCommanderMulligan !== false
   };
+}
+
+function normalizeGameFormat(value) {
+  const normalized = String(value || "").toLowerCase();
+  return GAME_FORMATS.has(normalized) ? normalized : "commander";
+}
+
+function normalizeCardNameList(value, maximumItems = 120) {
+  const source = Array.isArray(value) ? value : String(value || "").split(/\r?\n|,/g);
+  return [...new Map(source
+    .map((entry) => normalizeText(entry, 150))
+    .filter(Boolean)
+    .map((entry) => [entry.toLocaleLowerCase("en-US"), entry])).values()]
+    .slice(0, maximumItems);
+}
+
+function defaultFormatRules(format = "commander") {
+  if (format === "brawl") {
+    return {
+      baseFormat: "brawl",
+      playStyle: "duel",
+      deckSize: 100,
+      singleton: true,
+      maxCopies: 1,
+      colorIdentity: true,
+      commanderRequired: true,
+      maxCommanders: 1,
+      allowPlaneswalkerCommander: true,
+      allowAnyCommander: false,
+      useOfficialBannedList: true,
+      allowedBannedCards: [],
+      customBannedCards: [],
+      commanderTaxEnabled: true,
+      commanderTaxIncrement: 2,
+      commanderDamageEnabled: false,
+      commanderDamageThreshold: 21,
+      poisonThreshold: 10,
+      emptyLibraryLoss: true,
+      startingHandSize: 7,
+      freeMulligans: 1,
+      firstPlayerDraw: false,
+      allowInvalidDecks: false,
+      ruleZeroNotes: ""
+    };
+  }
+  const shared = {
+    baseFormat: "commander",
+    playStyle: "free-for-all",
+    deckSize: 100,
+    singleton: true,
+    maxCopies: 1,
+    colorIdentity: true,
+    commanderRequired: true,
+    maxCommanders: 2,
+    allowPlaneswalkerCommander: false,
+    allowAnyCommander: false,
+    useOfficialBannedList: true,
+    allowedBannedCards: [],
+    customBannedCards: [],
+    commanderTaxEnabled: true,
+    commanderTaxIncrement: 2,
+    commanderDamageEnabled: true,
+    commanderDamageThreshold: 21,
+    poisonThreshold: 10,
+    emptyLibraryLoss: true,
+    startingHandSize: 7,
+    freeMulligans: 1,
+    firstPlayerDraw: true,
+    allowInvalidDecks: false,
+    ruleZeroNotes: ""
+  };
+  return { ...shared };
+}
+
+function normalizeFormatRules(value, format = "commander") {
+  const normalizedFormat = normalizeGameFormat(format);
+  if (normalizedFormat !== "custom") return defaultFormatRules(normalizedFormat);
+  const base = defaultFormatRules("custom");
+  return {
+    baseFormat: value?.baseFormat === "brawl" ? "brawl" : "commander",
+    playStyle: CUSTOM_PLAY_STYLES.has(value?.playStyle) ? value.playStyle : base.playStyle,
+    deckSize: clamp(Math.floor(Number(value?.deckSize) || base.deckSize), 10, 250),
+    singleton: value?.singleton !== false,
+    maxCopies: clamp(Math.floor(Number(value?.maxCopies) || base.maxCopies), 1, 20),
+    colorIdentity: value?.colorIdentity !== false,
+    commanderRequired: value?.commanderRequired !== false,
+    maxCommanders: clamp(Math.floor(Number(value?.maxCommanders) || base.maxCommanders), 0, 6),
+    allowPlaneswalkerCommander: Boolean(value?.allowPlaneswalkerCommander),
+    allowAnyCommander: Boolean(value?.allowAnyCommander),
+    useOfficialBannedList: value?.useOfficialBannedList !== false,
+    allowedBannedCards: normalizeCardNameList(value?.allowedBannedCards),
+    customBannedCards: normalizeCardNameList(value?.customBannedCards),
+    commanderTaxEnabled: value?.commanderTaxEnabled !== false,
+    commanderTaxIncrement: clamp(Math.floor(Number(value?.commanderTaxIncrement) || base.commanderTaxIncrement), 0, 20),
+    commanderDamageEnabled: value?.commanderDamageEnabled !== false,
+    commanderDamageThreshold: clamp(Math.floor(Number(value?.commanderDamageThreshold) || base.commanderDamageThreshold), 1, 200),
+    poisonThreshold: clamp(Math.floor(Number(value?.poisonThreshold) || base.poisonThreshold), 1, 200),
+    emptyLibraryLoss: value?.emptyLibraryLoss !== false,
+    startingHandSize: clamp(Math.floor(Number(value?.startingHandSize) || base.startingHandSize), 0, 30),
+    freeMulligans: clamp(Math.floor(Number(value?.freeMulligans) || 0), 0, 10),
+    firstPlayerDraw: value?.firstPlayerDraw !== false,
+    allowInvalidDecks: Boolean(value?.allowInvalidDecks),
+    ruleZeroNotes: normalizeText(value?.ruleZeroNotes, 1000)
+  };
+}
+
+function formatLabel(format) {
+  if (format === "brawl") return "Official Brawl";
+  if (format === "custom") return "Custom Rules";
+  return "Official Commander";
+}
+
+function applyFormatPreset(room) {
+  room.format = normalizeGameFormat(room.format);
+  room.formatRules = normalizeFormatRules(room.formatRules, room.format);
+  if (room.format === "commander") {
+    room.startingLife = 40;
+    room.maxPlayers = ALLOWED_MAX_PLAYERS.has(Number(room.maxPlayers)) ? Number(room.maxPlayers) : 4;
+  } else if (room.format === "brawl") {
+    room.startingLife = 25;
+    room.maxPlayers = 2;
+  } else {
+    room.startingLife = clamp(Math.floor(Number(room.startingLife) || 40), 1, 200);
+    room.maxPlayers = ALLOWED_MAX_PLAYERS.has(Number(room.maxPlayers)) ? Number(room.maxPlayers) : 4;
+    if (room.formatRules.playStyle === "duel") room.maxPlayers = 2;
+    if (room.formatRules.playStyle === "teams" && ![4, 6].includes(room.maxPlayers)) room.maxPlayers = 4;
+    if (["archenemy", "limited-range"].includes(room.formatRules.playStyle) && room.maxPlayers < 3) room.maxPlayers = 3;
+  }
+  room.settings = normalizeRoomSettings({
+    ...room.settings,
+    enforceDeckRules: true,
+    allowInvalidDecks: room.format === "custom" && room.formatRules.allowInvalidDecks,
+    freeCommanderMulligan: room.formatRules.freeMulligans > 0
+  });
+  return room;
+}
+
+function roomRuleZeroSummary(room) {
+  const rules = room.formatRules || defaultFormatRules(room.format);
+  if (room.format === "commander") {
+    return ["40 starting life", "100-card singleton decks", "Official Commander banned list", "Commander tax +2", "21 commander-damage loss"];
+  }
+  if (room.format === "brawl") {
+    return ["1v1", "25 starting life", "100-card singleton decks", "Legendary creature or planeswalker commander", "Official Brawl legality", "One free mulligan", "No commander-damage loss"];
+  }
+  const summary = [
+    `${room.startingLife} starting life`,
+    `${room.maxPlayers} player maximum`,
+    `${rules.deckSize}-card decks`,
+    rules.singleton ? "Singleton deck construction" : `Up to ${rules.maxCopies} copies per card`,
+    rules.colorIdentity ? "Color identity enforced" : "Color identity ignored",
+    rules.useOfficialBannedList ? `${formatLabel(rules.baseFormat)} banned list used` : "Official banned list ignored",
+    rules.commanderDamageEnabled ? `${rules.commanderDamageThreshold} commander-damage loss` : "Commander damage disabled",
+    `Play style: ${rules.playStyle.replace(/-/g, " ")}`
+  ];
+  if (rules.allowedBannedCards.length) summary.push(`${rules.allowedBannedCards.length} banned-card exception(s) allowed`);
+  if (rules.customBannedCards.length) summary.push(`${rules.customBannedCards.length} custom ban(s)`);
+  if (rules.ruleZeroNotes) summary.push(`Host note: ${rules.ruleZeroNotes}`);
+  return summary;
+}
+
+function playerTeamId(room, playerId) {
+  const style = room.format === "custom" ? room.formatRules?.playStyle : null;
+  if (style === "teams") {
+    const index = room.players.findIndex((player) => player.id === playerId);
+    return index >= 0 ? (index % 2 === 0 ? "Team A" : "Team B") : null;
+  }
+  if (style === "archenemy") return playerId === room.hostId ? "Archenemy" : "Heroes";
+  return null;
+}
+
+function playersAreAllies(room, firstId, secondId) {
+  if (!firstId || !secondId || firstId === secondId) return firstId === secondId;
+  const firstTeam = playerTeamId(room, firstId);
+  const secondTeam = playerTeamId(room, secondId);
+  return Boolean(firstTeam && secondTeam && firstTeam === secondTeam);
+}
+
+function legalDefenderIds(room, attackerId) {
+  const active = room.players.filter((player) => player.id !== attackerId && playerIsActiveInGame(player));
+  let defenders = active.filter((player) => !playersAreAllies(room, attackerId, player.id));
+  if (room.format === "custom" && room.formatRules?.playStyle === "limited-range") {
+    const seats = room.players.filter(playerIsActiveInGame);
+    const index = seats.findIndex((player) => player.id === attackerId);
+    if (index >= 0 && seats.length > 2) {
+      const adjacent = new Set([
+        seats[(index - 1 + seats.length) % seats.length]?.id,
+        seats[(index + 1) % seats.length]?.id
+      ]);
+      defenders = defenders.filter((player) => adjacent.has(player.id));
+    }
+  }
+  return defenders.map((player) => player.id);
 }
 
 function normalizeAiState(value) {
@@ -759,8 +981,12 @@ function migrateRoom(room) {
   if (!room || typeof room !== "object" || !Array.isArray(room.players)) return null;
   room.code = normalizeRoomCode(room.code);
   if (room.code.length !== ROOM_CODE_LENGTH) return null;
-  room.maxPlayers = ALLOWED_MAX_PLAYERS.has(Number(room.maxPlayers)) ? Number(room.maxPlayers) : 6;
-  room.startingLife = ALLOWED_STARTING_LIFE.has(Number(room.startingLife)) ? Number(room.startingLife) : 40;
+  room.maxPlayers = ALLOWED_MAX_PLAYERS.has(Number(room.maxPlayers)) ? Number(room.maxPlayers) : 4;
+  room.startingLife = clamp(Math.floor(Number(room.startingLife) || 40), 1, 200);
+  room.format = GAME_FORMATS.has(room.format)
+    ? room.format
+    : (room.startingLife === 25 && room.maxPlayers === 2 ? "brawl" : room.startingLife === 40 ? "commander" : "custom");
+  room.formatRules = normalizeFormatRules(room.formatRules, room.format);
   room.status = ["waiting", "rolloff", "started"].includes(room.status) ? room.status : "waiting";
   room.chat = Array.isArray(room.chat) ? room.chat.slice(-MAX_CHAT_MESSAGES) : [];
   room.log = Array.isArray(room.log) ? room.log.slice(-MAX_LOG_ENTRIES) : [];
@@ -811,6 +1037,7 @@ function migrateRoom(room) {
     room.turn = null;
   }
   room.settings = normalizeRoomSettings(room.settings);
+  applyFormatPreset(room);
   room.ai = normalizeAiState({ ...room.ai, enabled: room.players.some((player) => player.isBot) || room.mode !== "multiplayer", mode: room.mode });
   room.emotes = normalizeEmotes(room.emotes);
   room.replayFrames = normalizeReplayFrames(room.replayFrames);
@@ -824,7 +1051,7 @@ function migrateRoom(room) {
   room.actionHistory = Array.isArray(room.actionHistory) ? room.actionHistory.slice(-MAX_ACTION_HISTORY) : [];
   room.undoStack = [];
   room.rules = normalizeRulesState(room.rules, allPlayerIds);
-  room.players.forEach((player) => { if (player.deck) player.deckValidation = validateCommanderDeck(player.deck); });
+  room.players.forEach((player) => { if (player.deck) player.deckValidation = validateDeckForRoom(room, player.deck); });
   room.updatedAt = room.updatedAt || nowIso();
   return room;
 }
@@ -981,31 +1208,116 @@ function normalizeDeck(value) {
   };
 }
 
-function validateCommanderDeck(deck) {
+function cardAllowsUnlimitedCopies(entry) {
+  const typeLine = entry?.cardData?.typeLine || "";
+  const oracle = entry?.cardData?.oracleText || "";
+  return /basic land/i.test(typeLine)
+    || /a deck can have any number of cards named/i.test(oracle)
+    || /up to nine cards named/i.test(oracle);
+}
+
+function commanderCardData(deck, commanderName) {
+  const key = String(commanderName || "").toLocaleLowerCase("en-US");
+  return (deck.commanderData || []).find((entry) => String(entry?.name || "").toLocaleLowerCase("en-US") === key)
+    || deck.cards.find((entry) => entry.name.toLocaleLowerCase("en-US") === key)?.cardData
+    || null;
+}
+
+function commanderEligibilityError(data, rules) {
+  if (rules.allowAnyCommander || !data) return "";
+  const typeLine = data.typeLine || "";
+  const oracle = data.oracleText || "";
+  const legendaryCreature = /\blegendary\b/i.test(typeLine) && /\bcreature\b/i.test(typeLine);
+  const planeswalker = /\bplaneswalker\b/i.test(typeLine);
+  const explicit = /can be your commander/i.test(oracle);
+  if (legendaryCreature || explicit || (rules.allowPlaneswalkerCommander && planeswalker)) return "";
+  return `${data.name || "The selected card"} is not an eligible commander for this format.`;
+}
+
+function officialBanSet(baseFormat) {
+  return baseFormat === "brawl" ? OFFICIAL_BRAWL_BANNED : OFFICIAL_COMMANDER_BANNED;
+}
+
+function validateDeckForFormat(deck, format = "commander", formatRules = null) {
   const normalized = normalizeDeck(deck);
-  if (!normalized) return { valid: false, errors: ["Deck data is incomplete."], warnings: [], colorIdentity: [] };
+  const normalizedFormat = normalizeGameFormat(format);
+  const rules = normalizeFormatRules(formatRules, normalizedFormat);
+  if (!normalized) return { valid: false, errors: ["Deck data is incomplete."], warnings: [], colorIdentity: [], format: normalizedFormat };
   const errors = [];
   const warnings = [];
-  if (normalized.totalCards !== 100) errors.push(`Commander decks need exactly 100 cards including commander(s); this deck has ${normalized.totalCards}.`);
-  if (normalized.commanders.length < 1 || normalized.commanders.length > 2) errors.push("Choose one commander, or two commanders when their card rules allow it.");
+  if (normalized.totalCards !== rules.deckSize) errors.push(`${formatLabel(normalizedFormat)} decks need exactly ${rules.deckSize} cards including commander(s); this deck has ${normalized.totalCards}.`);
+  if (rules.commanderRequired && normalized.commanders.length < 1) errors.push("Choose a commander.");
+  if (normalized.commanders.length > rules.maxCommanders) errors.push(`This format allows at most ${rules.maxCommanders} commander${rules.maxCommanders === 1 ? "" : "s"}.`);
+  if (normalizedFormat === "brawl" && normalized.commanders.length !== 1) errors.push("Official Brawl requires exactly one commander.");
+
   const commanderColors = new Set();
-  for (const data of normalized.commanderData || []) for (const color of data.colorIdentity || []) commanderColors.add(color);
-  if (!(normalized.commanderData || []).length) warnings.push("Commander color identity could not be fully verified because commander data is missing.");
+  for (const commander of normalized.commanders) {
+    const data = commanderCardData(normalized, commander);
+    if (data) for (const color of data.colorIdentity || []) commanderColors.add(color);
+    const eligibility = commanderEligibilityError(data, rules);
+    if (eligibility) errors.push(eligibility);
+  }
+  if (rules.colorIdentity && normalized.commanders.length && !(normalized.commanderData || []).length) warnings.push("Commander color identity could not be fully verified because commander data is missing.");
+
+  const allowedBanned = new Set((rules.allowedBannedCards || []).map((name) => name.toLocaleLowerCase("en-US")));
+  const customBanned = new Set((rules.customBannedCards || []).map((name) => name.toLocaleLowerCase("en-US")));
+  const officialBanned = officialBanSet(rules.baseFormat || normalizedFormat);
   const counts = new Map();
+  let legalityUnknown = 0;
+
   for (const entry of normalized.cards) {
     const key = entry.name.toLocaleLowerCase("en-US");
     counts.set(key, (counts.get(key) || 0) + entry.quantity);
+    const maxCopies = rules.singleton ? 1 : rules.maxCopies;
+    if (entry.quantity > maxCopies && !cardAllowsUnlimitedCopies(entry) && !normalized.commanders.some((name) => name.toLocaleLowerCase("en-US") === key)) {
+      errors.push(`${entry.name} appears ${entry.quantity} times; this format allows ${maxCopies}.`);
+    }
+    if (rules.colorIdentity) {
+      for (const color of entry.cardData?.colorIdentity || []) {
+        if (commanderColors.size && !commanderColors.has(color)) errors.push(`${entry.name} is outside the commander's color identity.`);
+      }
+    }
+    if ((rules.useOfficialBannedList && officialBanned.has(key) && !allowedBanned.has(key)) || customBanned.has(key)) errors.push(`${entry.name} is banned in this room.`);
     const typeLine = entry.cardData?.typeLine || "";
     const oracle = entry.cardData?.oracleText || "";
-    const unlimited = /basic land/i.test(typeLine) || /a deck can have any number of cards named/i.test(oracle) || /up to nine cards named/i.test(oracle);
-    if (entry.quantity > 1 && !unlimited && !normalized.commanders.some((name) => name.toLocaleLowerCase("en-US") === key)) errors.push(`${entry.name} appears ${entry.quantity} times.`);
-    for (const color of entry.cardData?.colorIdentity || []) if (commanderColors.size && !commanderColors.has(color)) errors.push(`${entry.name} is outside the commander's color identity.`);
+    if (rules.baseFormat === "commander" && (/\bconspiracy\b/i.test(typeLine) || /\bante\b/i.test(oracle)) && !allowedBanned.has(key)) errors.push(`${entry.name} is not legal in official Commander.`);
+    if (normalizedFormat === "brawl") {
+      const legality = entry.cardData?.legalities?.brawl;
+      const games = entry.cardData?.games || [];
+      if (legality && legality !== "legal") errors.push(`${entry.name} is not currently Brawl legal.`);
+      else if (!legality) legalityUnknown += 1;
+      if (games.length && !games.includes("arena")) errors.push(`${entry.name} is not available on MTG Arena.`);
+    }
   }
-  for (const commander of normalized.commanders) if (!counts.has(commander.toLocaleLowerCase("en-US"))) warnings.push(`${commander} is not present in the submitted deck list; it will still be created in the command zone.`);
+
+  for (const commander of normalized.commanders) {
+    const key = commander.toLocaleLowerCase("en-US");
+    if (rules.useOfficialBannedList && officialBanned.has(key) && !allowedBanned.has(key)) errors.push(`${commander} is banned as a commander in this room.`);
+    if (customBanned.has(key)) errors.push(`${commander} is banned in this room.`);
+    if (!counts.has(key)) warnings.push(`${commander} is not present in the submitted deck list; it will still be created in the command zone.`);
+  }
+
   const unrecognized = normalized.cards.filter((entry) => !entry.cardData?.scryfallId).length;
-  if (unrecognized) warnings.push(`${unrecognized} unique card name(s) could not be rules-validated and remain manually playable.`);
-  warnings.push("The current Commander banned list is not hard-coded; hosts can reject or allow cards using Judge Mode so rule updates never lock the app.");
-  return { valid: errors.length === 0, errors: [...new Set(errors)], warnings: [...new Set(warnings)], colorIdentity: [...commanderColors], checkedAt: nowIso() };
+  if (unrecognized) warnings.push(`${unrecognized} unique card name(s) could not be fully rules-validated and remain manually playable.`);
+  if (normalizedFormat === "brawl" && legalityUnknown) warnings.push(`${legalityUnknown} card(s) need refreshed card data before Arena/Brawl legality can be fully confirmed.`);
+  if (normalized.commanders.length === 2) warnings.push("Partner/background pairing text may still need Judge Mode confirmation.");
+  return {
+    valid: errors.length === 0,
+    errors: [...new Set(errors)],
+    warnings: [...new Set(warnings)],
+    colorIdentity: [...commanderColors],
+    checkedAt: nowIso(),
+    format: normalizedFormat,
+    rules
+  };
+}
+
+function validateCommanderDeck(deck) {
+  return validateDeckForFormat(deck, "commander", defaultFormatRules("commander"));
+}
+
+function validateDeckForRoom(room, deck) {
+  return validateDeckForFormat(deck, room?.format || "commander", room?.formatRules);
 }
 
 function createCard(name, ownerId, options = {}) {
@@ -1063,7 +1375,8 @@ function buildGameState(player, startingLife, allPlayerIds) {
     }
   }
   const library = shuffle(expandedDeck);
-  const hand = library.splice(0, Math.min(7, library.length));
+  const openingHandSize = clamp(Math.floor(Number(player._startingHandSize) || 7), 0, 30);
+  const hand = library.splice(0, Math.min(openingHandSize, library.length));
   const commanderDamage = {};
   allPlayerIds.forEach((id) => { if (id !== player.id) commanderDamage[id] = 0; });
   return {
@@ -1187,7 +1500,7 @@ function addChat(room, player, message) {
   if (room.chat.length > MAX_CHAT_MESSAGES) room.chat.splice(0, room.chat.length - MAX_CHAT_MESSAGES);
 }
 
-function publicDeck(deck) {
+function publicDeck(deck, room = null) {
   return deck ? {
     id: deck.id,
     name: deck.name,
@@ -1196,7 +1509,7 @@ function publicDeck(deck) {
     uniqueCards: deck.uniqueCards,
     intelligenceCount: deck.intelligenceCount || 0,
     validation: deck.validation,
-    validationDetails: validateCommanderDeck(deck)
+    validationDetails: room ? validateDeckForRoom(room, deck) : validateCommanderDeck(deck)
   } : null;
 }
 
@@ -1298,6 +1611,10 @@ function createPublicRoom(room, viewerId = null) {
     hostId: room.hostId,
     privateRoom: room.privateRoom,
     mode: room.mode || "multiplayer",
+    format: room.format || "commander",
+    formatLabel: formatLabel(room.format || "commander"),
+    formatRules: normalizeFormatRules(room.formatRules, room.format || "commander"),
+    ruleZeroSummary: roomRuleZeroSummary(room),
     ai: normalizeAiState(room.ai),
     maxPlayers: room.maxPlayers,
     startingLife: room.startingLife,
@@ -1329,8 +1646,10 @@ function createPublicRoom(room, viewerId = null) {
       connected: player.connected,
       joinedAt: player.joinedAt,
       isBot: Boolean(player.isBot),
+      teamId: playerTeamId(room, player.id),
       botState: player.isBot ? normalizeBotState(player.botState, player.deck) : null,
-      deck: publicDeck(player.deck),
+      deckValidation: player.deckValidation || null,
+      deck: publicDeck(player.deck, room),
       game: publicGame(player.game, player.id === viewerId || Boolean(room.ai?.revealBotHands && player.isBot && viewerId === room.hostId))
     }))
   };
@@ -1704,9 +2023,9 @@ function dealCreatureDamage(room, source, target, amount) {
 function dealPlayerDamage(room, source, player, amount) {
   const dealt = Math.max(0, amount);
   player.game.life = clamp(player.game.life - dealt, -999, 9999);
-  if (source.commander) {
+  if (source.commander && room.formatRules?.commanderDamageEnabled !== false) {
     const sourceId = source.ownerId;
-    if (sourceId !== player.id) player.game.commanderDamage[sourceId] = clamp((Number(player.game.commanderDamage[sourceId]) || 0) + dealt, 0, 99);
+    if (sourceId !== player.id) player.game.commanderDamage[sourceId] = clamp((Number(player.game.commanderDamage[sourceId]) || 0) + dealt, 0, 999);
   }
   if (dealt > 0 && hasKeyword(source, "lifelink")) {
     const controller = findPlayer(room, source.controllerId);
@@ -1904,10 +2223,11 @@ function runStateBasedActions(room, reason = "priority") {
     for (const player of room.players) {
       if (!player.game || player.game.lost || player.game.conceded) continue;
       let loss = "";
+      const activeFormatRules = room.formatRules || defaultFormatRules(room.format);
       if (player.game.life <= 0) loss = "life total reached zero";
-      else if (player.game.poison >= 10) loss = "received ten poison counters";
-      else if (Object.values(player.game.commanderDamage || {}).some((value) => Number(value) >= 21)) loss = "received 21 commander combat damage from one commander";
-      else if (player.game.drawFailed) loss = "attempted to draw from an empty library";
+      else if (player.game.poison >= Number(activeFormatRules.poisonThreshold || 10)) loss = `received ${activeFormatRules.poisonThreshold || 10} poison counters`;
+      else if (activeFormatRules.commanderDamageEnabled !== false && Object.values(player.game.commanderDamage || {}).some((value) => Number(value) >= Number(activeFormatRules.commanderDamageThreshold || 21))) loss = `received ${activeFormatRules.commanderDamageThreshold || 21} commander combat damage from one commander`;
+      else if (activeFormatRules.emptyLibraryLoss !== false && player.game.drawFailed) loss = "attempted to draw from an empty library";
       if (loss) { player.game.lost = true; player.game.lossReason = loss; results.push(`${player.name} lost: ${loss}.`); changed = true; }
 
       const battlefield = player.game.battlefield || [];
@@ -1944,7 +2264,15 @@ function runStateBasedActions(room, reason = "priority") {
     }
   }
   const active = room.players.filter(playerIsActiveInGame);
-  if (room.status === "started" && active.length <= 1 && room.players.length > 1) {
+  const teamStyle = room.format === "custom" && ["teams", "archenemy"].includes(room.formatRules?.playStyle);
+  if (room.status === "started" && teamStyle) {
+    const activeTeams = [...new Set(active.map((player) => playerTeamId(room, player.id)).filter(Boolean))];
+    if (activeTeams.length <= 1 && room.players.length > 1) {
+      room.rules.gameOver = true;
+      room.rules.winnerPlayerIds = active.map((player) => player.id);
+      room.rules.loserPlayerIds = room.players.filter((player) => !active.includes(player)).map((player) => player.id);
+    }
+  } else if (room.status === "started" && active.length <= 1 && room.players.length > 1) {
     room.rules.gameOver = true;
     room.rules.winnerPlayerIds = active.map((player) => player.id);
     room.rules.loserPlayerIds = room.players.filter((player) => !active.includes(player)).map((player) => player.id);
@@ -2029,7 +2357,7 @@ function processGameAction(room, actor, action) {
 
   switch (type) {
     case "take-mulligan": {
-      actor.game.library.push(...actor.game.hand); actor.game.hand=[]; actor.game.library=shuffle(actor.game.library); actor.game.hand=actor.game.library.splice(0,Math.min(7,actor.game.library.length)); actor.game.mulliganCount+=1; actor.game.mulliganBottomRequired=Math.max(0,actor.game.mulliganCount-(room.settings?.freeCommanderMulligan!==false?1:0)); actor.game.pregameComplete=actor.game.mulliganBottomRequired===0; addLog(room,`${actor.name} took mulligan ${actor.game.mulliganCount}${actor.game.mulliganBottomRequired?` and must put ${actor.game.mulliganBottomRequired} card(s) on the bottom`:" (free multiplayer mulligan)"}.`,"setup"); break;
+      actor.game.library.push(...actor.game.hand); actor.game.hand=[]; actor.game.library=shuffle(actor.game.library); actor.game.hand=actor.game.library.splice(0,Math.min(Number(room.formatRules?.startingHandSize || 7),actor.game.library.length)); actor.game.mulliganCount+=1; actor.game.mulliganBottomRequired=Math.max(0,actor.game.mulliganCount-Number(room.formatRules?.freeMulligans ?? (room.settings?.freeCommanderMulligan!==false?1:0))); actor.game.pregameComplete=actor.game.mulliganBottomRequired===0; addLog(room,`${actor.name} took mulligan ${actor.game.mulliganCount}${actor.game.mulliganBottomRequired?` and must put ${actor.game.mulliganBottomRequired} card(s) on the bottom`:` (free mulligan ${actor.game.mulliganCount}/${room.formatRules?.freeMulligans ?? 1})`}.`,"setup"); break;
     }
     case "finish-mulligan": { const ids=normalizeStringArray(action?.cardIds,99,100); if(ids.length!==actor.game.mulliganBottomRequired) return {success:false,error:`Choose exactly ${actor.game.mulliganBottomRequired} card(s) to put on the bottom.`}; for(const id of ids){ const located=getCardFromZone(actor.game,"hand",id); if(!located) return {success:false,error:"A selected card is no longer in hand."}; const [card]=actor.game.hand.splice(located.index,1); actor.game.library.push(card); } actor.game.mulliganBottomRequired=0; actor.game.pregameComplete=true; addLog(room,`${actor.name} completed their mulligan.`,"setup"); break; }
     case "resolve-decision": { const result=resolveRuleDecision(room,actor,action); if(!result.success)return result; break; }
@@ -2048,7 +2376,7 @@ function processGameAction(room, actor, action) {
     case "draw": { let drawn = 0; const count = clamp(amount || 1, 1, 20); while (drawn < count && actor.game.library.length) { actor.game.hand.push(actor.game.library.shift()); drawn += 1; } if (drawn < count) actor.game.drawFailed = true; addLog(room, `${actor.name} drew ${drawn} card${drawn === 1 ? "" : "s"}.`, "card"); break; }
     case "mill": { let milled = 0; const count = clamp(amount || 1, 1, 50); while (milled < count && actor.game.library.length) { actor.game.graveyard.unshift(actor.game.library.shift()); milled += 1; } addLog(room, `${actor.name} milled ${milled} card${milled === 1 ? "" : "s"}.`, "card"); break; }
     case "shuffle": actor.game.library = shuffle(actor.game.library); addLog(room, `${actor.name} shuffled their library.`, "card"); break;
-    case "mulligan": actor.game.library.push(...actor.game.hand); actor.game.hand = []; actor.game.library = shuffle(actor.game.library); actor.game.hand = actor.game.library.splice(0, Math.min(7, actor.game.library.length)); addLog(room, `${actor.name} took a sandbox mulligan to seven.`, "card"); break;
+    case "mulligan": actor.game.library.push(...actor.game.hand); actor.game.hand = []; actor.game.library = shuffle(actor.game.library); actor.game.hand = actor.game.library.splice(0, Math.min(Number(room.formatRules?.startingHandSize || 7), actor.game.library.length)); addLog(room, `${actor.name} took a sandbox mulligan to seven.`, "card"); break;
     case "move-card": {
       const result = moveCard(actor, String(action?.fromZone || ""), String(action?.toZone || ""), String(action?.cardId || ""), action?.position);
       if (!result) return { success: false, error: "That card could not be moved." };
@@ -2071,6 +2399,7 @@ function processGameAction(room, actor, action) {
       if (room.turn.activePlayerId !== actor.id) return { success: false, error: "Only the active player can declare attackers." };
       const located = controlledBattlefieldCard(room, actor, action?.cardId); const defender = findPlayer(room, String(action?.defenderPlayerId || ""));
       if (!located || !defender || defender.id === actor.id) return { success: false, error: "Choose your creature and an opposing player." };
+      if (!legalDefenderIds(room, actor.id).includes(defender.id)) return { success: false, error: "That player is not a legal defender under this room's play style." };
       if (!isCreatureCard(located.card) || located.card.phasedOut) return { success: false, error: "Only an available creature can attack." };
       if (located.card.summoningSick && !hasKeyword(located.card, "haste")) return { success: false, error: "That creature has summoning sickness." };
       if (hasKeyword(located.card, "defender")) return { success: false, error: "That creature has defender." };
@@ -2078,7 +2407,7 @@ function processGameAction(room, actor, action) {
       queueSuggestedTriggers(room, "ATTACKS", { card: located.card, defenderId: defender.id }); addLog(room, `${actor.name} declared ${located.card.name} attacking ${defender.name}.`, "combat"); break;
     }
     case "clear-attacker": { const located = controlledBattlefieldCard(room, actor, action?.cardId); if (!located) return { success: false, error: "You no longer control that permanent." }; located.card.attacking = false; located.card.defendingPlayerId = null; for (const player of room.players) for (const card of player.game?.battlefield || []) if (card.blockingCardId === located.card.id) card.blockingCardId = null; addLog(room, `${located.card.name} is no longer attacking.`, "combat"); break; }
-    case "toggle-attacking": { const defender = room.players.find((player) => player.id !== actor.id && !player.game?.conceded); return processGameAction(room, actor, { type: "declare-attacker", cardId: action.cardId, defenderPlayerId: defender?.id }); }
+    case "toggle-attacking": { const legal = new Set(legalDefenderIds(room, actor.id)); const defender = room.players.find((player) => legal.has(player.id)); return processGameAction(room, actor, { type: "declare-attacker", cardId: action.cardId, defenderPlayerId: defender?.id }); }
     case "block-card": { const blocker = controlledBattlefieldCard(room, actor, action?.sourceCardId); const attacker = findBattlefieldCard(room, String(action?.targetCardId || "")); if (!blocker || !attacker?.card.attacking || attacker.card.defendingPlayerId !== actor.id) return { success: false, error: "Choose one of your creatures and an attacker coming at you." }; blocker.card.blockingCardId = attacker.card.id; addLog(room, `${actor.name}'s ${blocker.card.name} is blocking ${attacker.player.name}'s ${attacker.card.name}.`, "combat"); break; }
     case "clear-block": { const located = controlledBattlefieldCard(room, actor, action?.cardId); if (!located) return { success: false, error: "You no longer control that permanent." }; located.card.blockingCardId = null; addLog(room, `${located.card.name} is no longer blocking.`, "combat"); break; }
     case "resolve-combat-damage": if (room.turn.activePlayerId !== actor.id && room.hostId !== actor.id) return { success: false, error: "Only the active player or host can resolve combat damage." }; resolveCombatDamage(room, action?.pass === "first" ? "first" : "normal"); break;
@@ -2088,9 +2417,9 @@ function processGameAction(room, actor, action) {
     case "clear-mana": actor.game.manaPool = normalizeManaPool(null); addLog(room, `${actor.name} emptied their mana pool.`, "mana"); break;
     case "cast-card": {
       const fromZone = ["hand", "commandZone", "exile", "graveyard"].includes(action?.fromZone) ? action.fromZone : "hand"; const located = getCardFromZone(actor.game, fromZone, String(action?.cardId || "")); if (!located) return { success: false, error: "That card is no longer in the selected zone." };
-      const commanderTax = fromZone === "commandZone" && located.card.commander ? actor.game.commanderTax : 0;
+      const commanderTax = fromZone === "commandZone" && located.card.commander && room.formatRules?.commanderTaxEnabled !== false ? actor.game.commanderTax : 0;
       if (action?.enforcePayment) { const paid=payManaCost(actor,located.card,action?.manaPayment,action?.xValue,commanderTax); if(!paid.success)return paid; }
-      const [card] = actor.game[fromZone].splice(located.index, 1); if(fromZone==="commandZone"&&card.commander) actor.game.commanderTax=clamp(actor.game.commanderTax+2,0,99);
+      const [card] = actor.game[fromZone].splice(located.index, 1); if(fromZone==="commandZone"&&card.commander&&room.formatRules?.commanderTaxEnabled!==false) actor.game.commanderTax=clamp(actor.game.commanderTax+Number(room.formatRules?.commanderTaxIncrement||2),0,999);
       const item = pushStack(room, { kind: "spell", name: card.name, controllerId: actor.id, sourceCardId: card.id, sourceZone: fromZone, card, text: currentOracleText(card), targets: validateTargets(room, action?.targets), effect: action?.effect, createdAt: nowIso(), choices:{modes:normalizeStringArray(action?.modes,10,120),xValue:clamp(Math.floor(Number(action?.xValue)||0),0,999),additionalCosts:normalizeStringArray(action?.additionalCosts,20,180)} }, actor.id);
       queueSuggestedTriggers(room, "SPELL_CAST", { card, controllerId: actor.id }); addLog(room, `${actor.name} cast ${item.name} onto the stack.`, "stack"); break;
     }
@@ -2161,15 +2490,17 @@ function createRoomPlayer({ name, socket = null, deck = null, isBot = false, dif
   };
 }
 
-function createBaseRoom({ hostPlayer, maxPlayers = 6, startingLife = 40, mode = "multiplayer", ai = null }) {
+function createBaseRoom({ hostPlayer, maxPlayers = 4, startingLife = 40, mode = "multiplayer", format = "commander", formatRules = null, ai = null }) {
   const timestamp = nowIso();
   const room = {
     code: createRoomCode(),
     hostId: hostPlayer.id,
     privateRoom: true,
     mode,
-    maxPlayers: ALLOWED_MAX_PLAYERS.has(Number(maxPlayers)) ? Number(maxPlayers) : 6,
-    startingLife: ALLOWED_STARTING_LIFE.has(Number(startingLife)) ? Number(startingLife) : 40,
+    format: normalizeGameFormat(format),
+    formatRules: normalizeFormatRules(formatRules, normalizeGameFormat(format)),
+    maxPlayers: ALLOWED_MAX_PLAYERS.has(Number(maxPlayers)) ? Number(maxPlayers) : 4,
+    startingLife: clamp(Math.floor(Number(startingLife) || 40), 1, 200),
     status: "waiting",
     createdAt: timestamp,
     updatedAt: timestamp,
@@ -2191,13 +2522,17 @@ function createBaseRoom({ hostPlayer, maxPlayers = 6, startingLife = 40, mode = 
     chat: [],
     log: []
   };
+  applyFormatPreset(room);
+  hostPlayer.deckValidation = hostPlayer.deck ? validateDeckForRoom(room, hostPlayer.deck) : null;
   return room;
 }
 
 function startImmediateGame(room, startingPreference = "random") {
   const ids = room.players.map((player) => player.id);
   room.players.forEach((player) => {
+    player._startingHandSize = room.formatRules?.startingHandSize || 7;
     player.game = buildGameState(player, room.startingLife, ids);
+    delete player._startingHandSize;
     player.game.pregameComplete = true;
     player.game.mulliganBottomRequired = 0;
   });
@@ -2323,7 +2658,8 @@ function botEligibleCreatures(bot) {
 }
 
 function botTargetOpponents(room, bot) {
-  return room.players.filter((player) => player.id !== bot.id && playerIsActiveInGame(player));
+  const legal = new Set(legalDefenderIds(room, bot.id));
+  return room.players.filter((player) => legal.has(player.id) && player.game && !player.game.lost && !player.game.conceded);
 }
 
 function chooseBotCast(room, bot, instantOnly = false) {
@@ -2337,7 +2673,7 @@ function chooseBotCast(room, bot, instantOnly = false) {
   const candidates = sources.filter(({ card, fromZone }) => {
     if (aiIsLand(card)) return false;
     if (instantOnly && !isInstantSpeed(card)) return false;
-    const tax = fromZone === "commandZone" && card.commander ? Number(bot.game.commanderTax || 0) : 0;
+    const tax = fromZone === "commandZone" && card.commander && room.formatRules?.commanderTaxEnabled !== false ? Number(bot.game.commanderTax || 0) : 0;
     return aiManaValue(card) + tax <= mana;
   }).map((entry) => ({ ...entry, score: scoreCastCard(entry.card, profile, difficulty) }));
   candidates.sort((a, b) => b.score - a.score);
@@ -2411,7 +2747,7 @@ function performBotStartedAction(room, bot) {
       if (choice) {
         bot.botState.lastResponseStackId = top.id;
         const inferred = inferSimpleEffect(choice.card, bot, opponents);
-        const cost = aiManaValue(choice.card) + (choice.fromZone === "commandZone" && choice.card.commander ? Number(bot.game.commanderTax || 0) : 0);
+        const cost = aiManaValue(choice.card) + (choice.fromZone === "commandZone" && choice.card.commander && room.formatRules?.commanderTaxEnabled !== false ? Number(bot.game.commanderTax || 0) : 0);
         tapBotMana(bot, cost);
         return executeBotAction(room, bot, { type: "cast-card", cardId: choice.card.id, fromZone: choice.fromZone, targets: inferred.targets, effect: inferred.effect }, { card: choice.card, score: choice.score, explanation: `Responded to ${top.name}; ${inferred.reason}.` });
       }
@@ -2445,6 +2781,8 @@ function performBotStartedAction(room, bot) {
   if (phase === "Draw") {
     if (bot.botState.drawnTurn !== room.turn.number) {
       bot.botState.drawnTurn = room.turn.number;
+      const firstPlayerSkipsDraw = room.turn.number === 1 && room.formatRules?.firstPlayerDraw === false;
+      if (firstPlayerSkipsDraw) return executeBotAction(room, bot, { type: "next-phase" }, { explanation: "Skipped the first draw step under this format's duel rules." });
       const drawResult = processGameAction(room, bot, { type: "draw", amount: 1 });
       if (drawResult.success) recordBotDecision(room, bot, { type: "draw" }, { explanation: "Drew the normal card for the turn." });
       recordReplayFrame(room, bot.name, "AI: draw");
@@ -2467,7 +2805,7 @@ function performBotStartedAction(room, bot) {
       const choice = chooseBotCast(room, bot, false);
       if (choice) {
         const inferred = inferSimpleEffect(choice.card, bot, opponents);
-        const cost = aiManaValue(choice.card) + (choice.fromZone === "commandZone" && choice.card.commander ? Number(bot.game.commanderTax || 0) : 0);
+        const cost = aiManaValue(choice.card) + (choice.fromZone === "commandZone" && choice.card.commander && room.formatRules?.commanderTaxEnabled !== false ? Number(bot.game.commanderTax || 0) : 0);
         tapBotMana(bot, cost);
         bot.botState.castsThisTurn += 1;
         return executeBotAction(room, bot, { type: "cast-card", cardId: choice.card.id, fromZone: choice.fromZone, targets: inferred.targets, effect: inferred.effect }, { card: choice.card, score: choice.score, explanation: `${choice.card.name} was the best affordable play; ${inferred.reason}.` });
@@ -2581,15 +2919,16 @@ function restartTestLab(room) {
 }
 
 app.post("/api/decks/validate", (request, response) => {
-  const result = validateCommanderDeck(request.body?.deck);
+  const format = normalizeGameFormat(request.body?.format);
+  const result = validateDeckForFormat(request.body?.deck, format, request.body?.formatRules);
   return response.status(result.valid ? 200 : 422).json({ success: result.valid, validation: result });
 });
 
-app.get("/api/rules/coverage", (request, response) => response.json({ success:true, version:RULES_VERSION, automatic:["Commander setup validation","AI legal-action generation","AI mana and phase sequencing","AI combat attacks and blocks","AI deck profiling and threat scoring","multiplayer London mulligans","mana-payment checking for standard symbols","stack and clockwise priority","combat damage and common keywords","state-based losses","lethal and zero-toughness creatures","planeswalker loyalty and battle defense","legend-rule decisions","tokens leaving valid zones"], assisted:["targets and modes","replacement and prevention effects","continuous effects and layers","trigger ordering","special card layouts","votes and secret choices","loops and shortcuts"], universalFallback:"Judge Mode can move objects, change players/cards, create objects, add effects, assign roles and record loop results." }));
+app.get("/api/rules/coverage", (request, response) => response.json({ success:true, version:RULES_VERSION, automatic:["Commander, Brawl and Custom setup validation","AI legal-action generation","AI mana and phase sequencing","AI combat attacks and blocks","AI deck profiling and threat scoring","multiplayer London mulligans","mana-payment checking for standard symbols","stack and clockwise priority","combat damage and common keywords","state-based losses","lethal and zero-toughness creatures","planeswalker loyalty and battle defense","legend-rule decisions","tokens leaving valid zones"], assisted:["targets and modes","replacement and prevention effects","continuous effects and layers","trigger ordering","special card layouts","votes and secret choices","loops and shortcuts"], universalFallback:"Judge Mode can move objects, change players/cards, create objects, add effects, assign roles and record loop results." }));
 
 app.get("/api/ai/coverage", (request, response) => response.json({
   success: true,
-  version: "35.0.0",
+  version: APP_VERSION,
   modes: ["Solo Test Lab", "optional AI seats in 2–6 player rooms"],
   difficulties: ["beginner", "skilled", "competitive", "expert"],
   automatic: ["opening-hand land checks", "d20 roll-off", "priority passing", "land development", "mana approximation", "spell selection", "simple targets and effects", "attacks", "blocks", "turn sequencing", "decision explanations"],
@@ -2617,7 +2956,7 @@ app.get("/api/health", (request, response) => {
     success: true,
     status: "online",
     app: "Arena Commander Table",
-    version: "35.0.0",
+    version: APP_VERSION,
     connectedSockets: io.engine.clientsCount,
     activeRooms: rooms.size,
     persistence: persistenceSummary(),
@@ -2626,7 +2965,7 @@ app.get("/api/health", (request, response) => {
 });
 
 app.get("/api", (request, response) => {
-  response.status(200).json({ success: true, name: "Arena Commander Table API", version: "35.0.0", modes: ["2–6 player Commander", "Solo Test Lab", "Human + bot mixed tables"], persistence: persistenceSummary() });
+  response.status(200).json({ success: true, name: "Arena Commander Table API", version: APP_VERSION, modes: ["Official Commander", "Official Brawl", "Custom Rule Zero rooms", "Solo Test Lab", "Human + bot mixed tables"], persistence: persistenceSummary() });
 });
 
 io.on("connection", (socket) => {
@@ -2637,14 +2976,25 @@ io.on("connection", (socket) => {
       if (socket.data.roomCode) return fail(callback, "Leave your current room first.");
       const name = normalizePlayerName(payload?.playerName);
       if (name.length < 2) return fail(callback, "Enter a player name with at least two characters.");
-      const timestamp = nowIso();
-      const player = { id: createId(), name, ready: false, connected: true, socketId: socket.id, sessionToken: createSessionToken(), deck: null, game: null, isBot: false, botState: null, joinedAt: timestamp, lastSeenAt: timestamp };
-      const maxPlayers = ALLOWED_MAX_PLAYERS.has(Number(payload?.maxPlayers)) ? Number(payload.maxPlayers) : 6;
-      const startingLife = ALLOWED_STARTING_LIFE.has(Number(payload?.startingLife)) ? Number(payload.startingLife) : 40;
-      const room = { code: createRoomCode(), hostId: player.id, privateRoom: true, mode: "multiplayer", maxPlayers, startingLife, status: "waiting", createdAt: timestamp, updatedAt: timestamp, startedAt: null, turn: null, rollOff: null, settings: normalizeRoomSettings(null), ai: normalizeAiState({ enabled:false, mode:"multiplayer" }), spectators: [], emotes: [], replayFrames: [], stack: [], triggerQueue: [], priority: { playerId: null, passedPlayerIds: [] }, rules: normalizeRulesState(null,[player.id]), actionHistory: [], undoStack: [], players: [player], chat: [], log: [] };
+      const format = normalizeGameFormat(payload?.format);
+      const player = createRoomPlayer({ name, socket, deck: null, isBot: false });
+      const formatRules = normalizeFormatRules(payload?.formatRules, format);
+      let maxPlayers = ALLOWED_MAX_PLAYERS.has(Number(payload?.maxPlayers)) ? Number(payload.maxPlayers) : 4;
+      let startingLife = clamp(Math.floor(Number(payload?.startingLife) || 40), 1, 200);
+      if (format === "commander") startingLife = 40;
+      if (format === "brawl") { startingLife = 25; maxPlayers = 2; }
+      const room = createBaseRoom({
+        hostPlayer: player,
+        maxPlayers,
+        startingLife,
+        mode: "multiplayer",
+        format,
+        formatRules,
+        ai: { enabled: false, mode: "multiplayer" }
+      });
       rooms.set(room.code, room);
       attachSocket(socket, room, player);
-      addLog(room, `${name} created the room.`, "room");
+      addLog(room, `${name} created a ${formatLabel(format)} room.`, "room");
       acknowledge(callback, { success: true, playerId: player.id, sessionToken: player.sessionToken, room: createPublicRoom(room, player.id) });
       queueRoomSave(room, true);
     } catch (error) {
@@ -2660,15 +3010,22 @@ io.on("connection", (socket) => {
       if (name.length < 2) return fail(callback, "Enter a player name with at least two characters.");
       const playerDeck = normalizeDeck(payload?.playerDeck);
       const botDeck = normalizeDeck(payload?.botDeck);
-      if (!playerDeck || !botDeck) return fail(callback, "Choose two complete Commander decks first.");
+      if (!playerDeck || !botDeck) return fail(callback, "Choose two complete decks first.");
+      const format = normalizeGameFormat(payload?.format);
+      const formatRules = normalizeFormatRules(payload?.formatRules, format);
       const difficulty = normalizeDifficulty(payload?.difficulty);
       const human = createRoomPlayer({ name, socket, deck: playerDeck, isBot: false });
       human.ready = true;
       const bot = createRoomPlayer({ name: normalizePlayerName(payload?.botName) || `${difficulty[0].toUpperCase()}${difficulty.slice(1)} Bot`, deck: botDeck, isBot: true, difficulty });
       const speedMs = BOT_SPEEDS.has(Number(payload?.speedMs)) ? Number(payload.speedMs) : 900;
-      const room = createBaseRoom({ hostPlayer: human, maxPlayers: 2, startingLife: payload?.startingLife, mode: "test-lab", ai: { enabled: true, mode: "test-lab", speedMs, paused: false } });
+      const room = createBaseRoom({ hostPlayer: human, maxPlayers: 2, startingLife: payload?.startingLife, mode: "test-lab", format, formatRules, ai: { enabled: true, mode: "test-lab", speedMs, paused: false } });
       room.players.push(bot);
-      room.settings = normalizeRoomSettings({ ...room.settings, enforceDeckRules: false, allowInvalidDecks: true, allowSpectators: false, turnTimerSeconds: 0 });
+      human.deckValidation = validateDeckForRoom(room, human.deck);
+      bot.deckValidation = validateDeckForRoom(room, bot.deck);
+      if (!room.formatRules.allowInvalidDecks && (!human.deckValidation.valid || !bot.deckValidation.valid)) {
+        return fail(callback, human.deckValidation.errors[0] || bot.deckValidation.errors[0] || "A deck is not legal for the selected format.");
+      }
+      room.settings = normalizeRoomSettings({ ...room.settings, enforceDeckRules: true, allowInvalidDecks: room.formatRules.allowInvalidDecks, allowSpectators: false, turnTimerSeconds: 0 });
       room.rules = normalizeRulesState(null, room.players.map((player) => player.id));
       rooms.set(room.code, room);
       attachSocket(socket, room, human);
@@ -2731,7 +3088,7 @@ io.on("connection", (socket) => {
       const deck = normalizeDeck(payload.deck);
       if (!deck) return fail(callback, "The selected deck is incomplete or invalid.");
       auth.player.deck = deck;
-      auth.player.deckValidation = validateCommanderDeck(deck);
+      auth.player.deckValidation = validateDeckForRoom(auth.room, deck);
       auth.player.ready = false;
     }
     acknowledge(callback, { success: true, room: createPublicRoom(auth.room, auth.player.id) });
@@ -2742,8 +3099,8 @@ io.on("connection", (socket) => {
     const auth = authenticationFrom(payload);
     if (!auth.success) return acknowledge(callback, auth);
     if (auth.room.status !== "waiting") return fail(callback, "The game has already started.");
-    if (!auth.player.deck && !auth.player.ready) return fail(callback, "Select a Commander deck first.");
-    auth.player.deckValidation = auth.player.deck ? validateCommanderDeck(auth.player.deck) : null;
+    if (!auth.player.deck && !auth.player.ready) return fail(callback, "Select a deck first.");
+    auth.player.deckValidation = auth.player.deck ? validateDeckForRoom(auth.room, auth.player.deck) : null;
     if (!auth.player.ready && auth.room.settings?.enforceDeckRules !== false && !auth.room.settings?.allowInvalidDecks && !auth.player.deckValidation?.valid) return fail(callback, auth.player.deckValidation?.errors?.[0] || "That deck did not pass Commander validation.");
     auth.player.ready = !auth.player.ready;
     addLog(auth.room, `${auth.player.name} is ${auth.player.ready ? "ready" : "not ready"}.`, "room");
@@ -2756,21 +3113,37 @@ io.on("connection", (socket) => {
     if (!auth.success) return acknowledge(callback, auth);
     if (auth.room.hostId !== auth.player.id) return fail(callback, "Only the room host can do that.");
     if (auth.room.status !== "waiting") return fail(callback, "Room settings cannot change after the game starts.");
-    const maxPlayers = ALLOWED_MAX_PLAYERS.has(Number(payload?.maxPlayers)) ? Number(payload.maxPlayers) : auth.room.maxPlayers;
+
+    if (auth.room.format === "custom" && payload?.formatRules) {
+      auth.room.formatRules = normalizeFormatRules(payload.formatRules, "custom");
+    }
+    let maxPlayers = ALLOWED_MAX_PLAYERS.has(Number(payload?.maxPlayers)) ? Number(payload.maxPlayers) : auth.room.maxPlayers;
+    if (auth.room.format === "brawl" || auth.room.formatRules?.playStyle === "duel") maxPlayers = 2;
+    if (auth.room.format === "custom" && auth.room.formatRules?.playStyle === "teams" && ![4, 6].includes(maxPlayers)) maxPlayers = 4;
+    if (auth.room.format === "custom" && ["limited-range", "archenemy"].includes(auth.room.formatRules?.playStyle) && maxPlayers < 3) maxPlayers = 3;
     if (maxPlayers < auth.room.players.length) return fail(callback, "The maximum cannot be lower than the number of players already present.");
     auth.room.maxPlayers = maxPlayers;
-    if (ALLOWED_STARTING_LIFE.has(Number(payload?.startingLife))) auth.room.startingLife = Number(payload.startingLife);
+    if (auth.room.format === "custom") auth.room.startingLife = clamp(Math.floor(Number(payload?.startingLife) || auth.room.startingLife), 1, 200);
+
     const timer = Number(payload?.turnTimerSeconds);
     auth.room.settings = normalizeRoomSettings({
       ...auth.room.settings,
       turnTimerSeconds: ALLOWED_TURN_TIMERS.has(timer) ? timer : auth.room.settings?.turnTimerSeconds,
       allowSpectators: payload?.allowSpectators == null ? auth.room.settings?.allowSpectators : Boolean(payload.allowSpectators),
       showCombatPreview: payload?.showCombatPreview == null ? auth.room.settings?.showCombatPreview : Boolean(payload.showCombatPreview),
-      enforceDeckRules: payload?.enforceDeckRules == null ? auth.room.settings?.enforceDeckRules : Boolean(payload.enforceDeckRules),
-      allowInvalidDecks: payload?.allowInvalidDecks == null ? auth.room.settings?.allowInvalidDecks : Boolean(payload.allowInvalidDecks),
+      enforceDeckRules: true,
+      allowInvalidDecks: auth.room.format === "custom" && auth.room.formatRules.allowInvalidDecks,
       autoStateBasedActions: payload?.autoStateBasedActions == null ? auth.room.settings?.autoStateBasedActions : Boolean(payload.autoStateBasedActions),
-      freeCommanderMulligan: payload?.freeCommanderMulligan == null ? auth.room.settings?.freeCommanderMulligan : Boolean(payload.freeCommanderMulligan)
+      freeCommanderMulligan: auth.room.formatRules.freeMulligans > 0
     });
+    applyFormatPreset(auth.room);
+    for (const player of auth.room.players) {
+      if (player.deck) {
+        player.deckValidation = validateDeckForRoom(auth.room, player.deck);
+        player.ready = player.isBot ? Boolean(player.deck) : false;
+      }
+    }
+    addLog(auth.room, `${auth.player.name} updated the room rules.`, "room");
     acknowledge(callback, { success: true, room: createPublicRoom(auth.room, auth.player.id) });
     emitRoomUpdate(auth.room);
   });
@@ -2782,12 +3155,15 @@ io.on("connection", (socket) => {
     if (auth.room.status !== "waiting") return fail(callback, "Bots can only be added in the lobby.");
     if (auth.room.players.length >= auth.room.maxPlayers) return fail(callback, "The room is already full.");
     const deck = normalizeDeck(payload?.deck);
-    if (!deck) return fail(callback, "Choose a complete Commander deck for the bot.");
+    if (!deck) return fail(callback, "Choose a complete deck for the bot.");
+    const deckValidation = validateDeckForRoom(auth.room, deck);
+    if (!auth.room.formatRules?.allowInvalidDecks && !deckValidation.valid) return fail(callback, deckValidation.errors[0] || "That bot deck is not legal for this room.");
     const difficulty = normalizeDifficulty(payload?.difficulty);
     let name = normalizePlayerName(payload?.name) || `${difficulty[0].toUpperCase()}${difficulty.slice(1)} Bot`;
     let suffix = 2;
     while (auth.room.players.some((entry) => entry.name.toLowerCase() === name.toLowerCase())) name = `${normalizePlayerName(payload?.name) || "Commander Bot"} ${suffix++}`;
     const bot = createRoomPlayer({ name, deck, isBot: true, difficulty });
+    bot.deckValidation = deckValidation;
     auth.room.players.push(bot);
     auth.room.ai = normalizeAiState({ ...auth.room.ai, enabled: true, mode: auth.room.mode || "multiplayer" });
     auth.room.rules = normalizeRulesState(auth.room.rules, auth.room.players.map((player) => player.id));
@@ -2843,10 +3219,17 @@ io.on("connection", (socket) => {
     if (auth.room.hostId !== auth.player.id) return fail(callback, "Only the room host can start the game.");
     if (auth.room.status !== "waiting") return fail(callback, "The game has already started.");
     if (auth.room.players.length < 2) return fail(callback, "At least two players are required.");
+    if (auth.room.format === "brawl" && auth.room.players.length !== 2) return fail(callback, "Official Brawl requires exactly two players.");
+    if (auth.room.format === "custom" && auth.room.formatRules?.playStyle === "teams" && ![4, 6].includes(auth.room.players.length)) return fail(callback, "Two-team play requires exactly four or six players.");
+    if (auth.room.format === "custom" && auth.room.formatRules?.playStyle === "archenemy" && auth.room.players.length < 3) return fail(callback, "Archenemy requires at least three players.");
     const unavailable = auth.room.players.find((player) => !player.connected || !player.ready || !player.deck);
     if (unavailable) return fail(callback, `${unavailable.name} must be connected, choose a deck and mark ready.`);
+    for (const player of auth.room.players) {
+      player.deckValidation = validateDeckForRoom(auth.room, player.deck);
+      if (!auth.room.formatRules?.allowInvalidDecks && !player.deckValidation.valid) return fail(callback, `${player.name}: ${player.deckValidation.errors[0] || "Deck is not legal."}`);
+    }
     const ids = auth.room.players.map((player) => player.id);
-    auth.room.players.forEach((player) => { player.game = buildGameState(player, auth.room.startingLife, ids); });
+    auth.room.players.forEach((player) => { player._startingHandSize = auth.room.formatRules?.startingHandSize || 7; player.game = buildGameState(player, auth.room.startingLife, ids); delete player._startingHandSize; });
     auth.room.status = "rolloff";
     auth.room.startedAt = nowIso();
     auth.room.rollOff = createStartingRollOff(ids);
@@ -3053,7 +3436,7 @@ async function start() {
   }
   for (const room of rooms.values()) if (room.players.some((player) => player.isBot)) scheduleBots(room, true);
   server.listen(PORT, "0.0.0.0", () => {
-    console.log(`Arena Commander AI Test Lab v35 running on port ${PORT}`);
+    console.log(`Arena Commander Formats v37 running on port ${PORT}`);
   });
 }
 
@@ -3094,6 +3477,12 @@ module.exports = {
   recordReplayFrame,
   createPublicRoom,
   validateCommanderDeck,
+  validateDeckForFormat,
+  validateDeckForRoom,
+  normalizeFormatRules,
+  applyFormatPreset,
+  roomRuleZeroSummary,
+  legalDefenderIds,
   runStateBasedActions,
   normalizeRulesState,
   parseManaRequirement,
