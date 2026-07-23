@@ -1,0 +1,9 @@
+[data-card-id]{position:relative}
+.card-automation-badge{position:absolute;z-index:8;top:3px;left:3px;display:inline-flex;align-items:center;justify-content:center;min-width:34px;height:16px;padding:0 4px;border:1px solid rgba(255,255,255,.24);border-radius:4px;box-shadow:0 2px 7px rgba(0,0,0,.5);font:800 8px/1 Arial,sans-serif;letter-spacing:.35px;color:#fff;pointer-events:none}
+.card-automation-badge.automation-full{background:rgba(16,122,76,.94);border-color:#62f0ac}
+.card-automation-badge.automation-assisted{background:rgba(142,94,12,.95);border-color:#ffd36d}
+.card-automation-badge.automation-manual{background:rgba(101,49,119,.95);border-color:#dda5ff}
+.card-automation-summary{border-color:rgba(100,236,169,.35)!important;background:linear-gradient(145deg,rgba(22,62,48,.45),rgba(17,23,28,.65))!important}
+.automation-summary-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:7px;margin:9px 0}
+.automation-summary-grid span{display:flex;flex-direction:column;align-items:center;gap:2px;padding:8px 5px;border:1px solid rgba(255,255,255,.1);border-radius:8px;background:rgba(0,0,0,.22);font-size:11px}
+.automation-summary-grid b{font-size:17px;color:#e8fff5}
