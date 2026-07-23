@@ -1,6 +1,3 @@
-automation-register.js — v40.0.1 startup fix
-Replace the complete contents of automation-register.js with the code below.
-
 "use strict";
 
 const fs = require("fs");
