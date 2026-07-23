@@ -1,13 +1,15 @@
 "use strict";
 
-const CACHE_NAME = "arena-commander-formats-v37.0.0";
+const CACHE_NAME = "arena-commander-meta-v38.0.0";
 const APP_SHELL = [
   "/",
   "/index.html",
   "/styles.css",
-  "/clean-home.css?v=37.0.0",
+  "/clean-home.css?v=38.0.0",
+  "/meta-library.css?v=38.0.0",
   "/app.js",
-  "/clean-home.js?v=37.0.0",
+  "/clean-home.js?v=38.0.0",
+  "/meta-library.js?v=38.0.0",
   "/manifest.webmanifest",
   "/icon.svg"
 ];
@@ -31,10 +33,8 @@ self.addEventListener("activate", (event) => {
 self.addEventListener("fetch", (event) => {
   const request = event.request;
   if (request.method !== "GET") return;
-
   const url = new URL(request.url);
   if (url.origin !== self.location.origin || url.pathname.startsWith("/socket.io/") || url.pathname.startsWith("/api/")) return;
-
   event.respondWith(
     fetch(request)
       .then((response) => {
