@@ -13,12 +13,13 @@
   <link rel="stylesheet" href="/meta-library.css?v=39.0.0">
   <link rel="stylesheet" href="/commander-theme.css?v=39.0.0">
   <link rel="stylesheet" href="/card-automation.css?v=40.0.0">
+  <link rel="stylesheet" href="/gameplay-hotfix.css?v=40.1.0">
 </head>
 <body>
   <header class="app-header">
     <button id="brandButton" class="brand-button" type="button" aria-label="Home">
       <span class="brand-mark">♛</span>
-      <span><strong>Arena Commander</strong><small>Card Mechanics v40</small></span>
+      <span><strong>Arena Commander</strong><small>Gameplay v40.1</small></span>
     </button>
     <div class="header-actions">
       <div id="connectionStatus" class="connection-status offline"><span></span><span id="connectionText">Connecting…</span></div>
@@ -53,7 +54,9 @@
 
   <script src="/socket.io/socket.io.js"></script>
   <script src="/app.js" defer></script>
+  <script src="/deck-import-fix.js?v=39.2.0" defer></script>
   <script src="/card-automation-ui.js?v=40.0.0" defer></script>
+  <script src="/gameplay-hotfix.js?v=40.1.0" defer></script>
   <script src="/clean-home.js?v=39.0.0" defer></script>
   <script src="/meta-library.js?v=39.0.0" defer></script>
   <script src="/lobby-notifier-ui.js?v=39.1.0" defer></script>
