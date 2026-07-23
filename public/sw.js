@@ -1,6 +1,6 @@
 "use strict";
 
-const CACHE_NAME = "arena-commander-v30.0.0";
+const CACHE_NAME = "arena-commander-v35.0.0";
 const APP_SHELL = ["/", "/index.html", "/styles.css", "/app.js", "/manifest.webmanifest", "/icon.svg"];
 
 self.addEventListener("install", (event) => {
