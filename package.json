@@ -1,13 +1,13 @@
 {
   "name": "torn-commander-sandbox",
-  "version": "38.0.0",
+  "version": "39.0.0",
   "private": true,
-  "description": "Arena-style MTG Commander and Brawl table with Custom Rule Zero, AI Test Lab, automatically refreshed Meta Deck Library and persistent games.",
+  "description": "Arena Commander with official formats, Custom Rule Zero, AI Test Lab, Meta Deck Library, lightweight Torn open-game notifier and Commander-style mobile UI.",
   "main": "server.js",
   "scripts": {
     "start": "node -r ./meta-register.js server.js",
     "dev": "node --watch -r ./meta-register.js server.js",
-    "check": "node --check server.js && node --check ai-engine.js && node --check meta-register.js && node --check meta-library-server.js && node --check meta-sync.js && node --check meta-sources/common.js && node --check meta-sources/archidekt.js && node --check meta-sources/moxfield.js && node --check meta-sources/catalog.js && node --check meta-sources/edhrec.js && node --check meta-sources/cedh-ddb.js && node --check scripts/sync-meta-decks.js && node --check public/app.js && node --check public/clean-home.js && node --check public/meta-library.js && node --check public/sw.js",
+    "check": "node --check server.js && node --check ai-engine.js && node --check meta-register.js && node --check meta-library-server.js && node --check meta-sync.js && node --check meta-sources/common.js && node --check meta-sources/archidekt.js && node --check meta-sources/moxfield.js && node --check meta-sources/catalog.js && node --check meta-sources/edhrec.js && node --check meta-sources/cedh-ddb.js && node --check scripts/sync-meta-decks.js && node --check public/app.js && node --check public/clean-home.js && node --check public/meta-library.js && node --check public/lobby-notifier-ui.js && node --check public/arena-commander-notifier.user.js && node --check public/sw.js",
     "sync:meta": "node scripts/sync-meta-decks.js"
   },
   "engines": {
