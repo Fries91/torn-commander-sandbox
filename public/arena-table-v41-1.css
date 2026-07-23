@@ -1,0 +1,207 @@
+/* Arena Commander v41.1 — complete card faces and TornPDA touch dragging */
+
+/* Once the complete Scryfall card face is loaded, remove the imitation frame
+   and show the actual printed card from edge to edge. */
+.arena-v41 .arena-card.v411-full-card .arena-card-frame {
+  display: block !important;
+  position: absolute;
+  inset: 0;
+  overflow: visible;
+  border: 0;
+  border-radius: 7%;
+  background: #080b09;
+  box-shadow:
+    0 7px 18px rgba(0,0,0,.68),
+    0 0 0 1px rgba(255,255,255,.16);
+}
+
+.arena-v41 .arena-card.v411-full-card .arena-card-frame > header,
+.arena-v41 .arena-card.v411-full-card .arena-card-type,
+.arena-v41 .arena-card.v411-full-card .arena-card-frame > footer {
+  display: none !important;
+}
+
+.arena-v41 .arena-card.v411-full-card .arena-card-image {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  min-height: 100%;
+  overflow: hidden;
+  border-radius: 7%;
+  background: #080b09;
+}
+
+.arena-v41 .arena-card.v411-full-card .arena-card-image img {
+  display: block !important;
+  width: 100% !important;
+  height: 100% !important;
+  object-fit: contain !important;
+  object-position: center !important;
+  opacity: 1 !important;
+  visibility: visible !important;
+  border-radius: 7%;
+  background: #080b09;
+}
+
+.arena-v41 .arena-card.v411-full-card .arena-card-badges {
+  position: absolute;
+  z-index: 12;
+  inset: auto 3px 3px;
+  min-height: 0;
+  padding: 0;
+  overflow: visible;
+  display: flex;
+  justify-content: flex-end;
+  align-items: flex-end;
+  gap: 2px;
+  background: transparent;
+  pointer-events: none;
+}
+
+.arena-v41 .arena-card.v411-full-card .arena-card-badges > span {
+  min-height: 15px;
+  padding: 1px 4px;
+  border: 1px solid rgba(255,255,255,.5);
+  box-shadow: 0 2px 5px rgba(0,0,0,.72);
+  font-size: 7px;
+}
+
+/* Keep automation classification as a tiny status light rather than a label. */
+.arena-v41 .arena-card.v411-full-card .card-automation-badge {
+  z-index: 15 !important;
+  right: 4px !important;
+  bottom: 4px !important;
+}
+
+/* Touch dragging is handled by pointer events instead of desktop HTML drag. */
+.arena-v41 .arena-hand-tray .arena-card,
+.arena-v41 .arena-hand-tray .hand-card-wrap {
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+}
+
+.v411-dragging-card,
+.v411-dragging-card body {
+  overscroll-behavior: none;
+  touch-action: none;
+}
+
+.arena-card.v411-drag-source {
+  opacity: .36 !important;
+  filter: saturate(.35) !important;
+}
+
+.v411-card-drag-ghost {
+  position: fixed;
+  z-index: 10000000;
+  top: 0;
+  left: 0;
+  width: 140px;
+  aspect-ratio: 488 / 680;
+  pointer-events: none;
+  transform-origin: center;
+  will-change: transform;
+  filter: drop-shadow(0 18px 24px rgba(0,0,0,.78));
+}
+
+.v411-card-drag-ghost img,
+.v411-card-drag-ghost > div {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  border: 2px solid #f2d686;
+  border-radius: 10px;
+  background: #07110c;
+}
+
+.v411-card-drag-ghost > div {
+  display: grid;
+  align-content: center;
+  justify-items: center;
+  padding: 12px;
+  text-align: center;
+}
+
+.v411-card-drag-ghost > div strong {
+  color: white;
+}
+
+.v411-card-drag-ghost > div span {
+  margin-top: 12px;
+  color: #f2d686;
+  font-size: 2.5rem;
+}
+
+.arena-v41 .self-slot .arena-seat-board.v411-drop-active {
+  position: relative;
+  border-radius: 14px;
+  outline: 2px dashed rgba(102, 185, 255, .68);
+  outline-offset: -5px;
+  background:
+    radial-gradient(ellipse at center, rgba(73,145,219,.15), transparent 66%);
+}
+
+.arena-v41 .self-slot .arena-seat-board.v411-drop-active::after {
+  content: "DROP CARD HERE";
+  position: absolute;
+  z-index: 80;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%,-50%);
+  padding: 8px 13px;
+  border: 1px solid rgba(137,202,255,.66);
+  border-radius: 999px;
+  background: rgba(5,25,41,.92);
+  color: #cae8ff;
+  font-size: .68rem;
+  font-weight: 1000;
+  letter-spacing: .08em;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+.arena-v41 .self-slot .arena-seat-board.v411-drop-hover {
+  outline: 3px solid #77c4ff;
+  box-shadow:
+    inset 0 0 42px rgba(73,145,219,.25),
+    0 0 34px rgba(73,145,219,.34);
+}
+
+.arena-v41 .self-slot .arena-seat-board.v411-drop-hover::after {
+  content: "RELEASE TO PLAY";
+  background: rgba(22,90,139,.96);
+  color: white;
+}
+
+/* Full printed cards need slightly more size on phones to remain readable. */
+@media (max-width: 820px) {
+  :root {
+    --v41-card-width: clamp(96px, 25vw, 122px);
+  }
+
+  .v411-card-drag-ghost {
+    width: 126px;
+  }
+
+  .arena-v41 .arena-hand-tray {
+    height: 148px;
+  }
+
+  .arena-v41 .hand-card-wrap {
+    margin-left: calc(var(--v41-card-width) * -.57);
+  }
+}
+
+@media (max-width: 480px) {
+  :root {
+    --v41-card-width: 94px;
+  }
+
+  .v411-card-drag-ghost {
+    width: 118px;
+  }
+}
