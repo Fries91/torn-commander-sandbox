@@ -1,3 +1,6 @@
+automation-register.js — v40.0.1 startup fix
+Replace the complete contents of automation-register.js with the code below.
+
 "use strict";
 
 const fs = require("fs");
@@ -8,17 +11,20 @@ const serverPath = path.resolve(__dirname, "server.js");
 const originalLoader = Module._extensions[".js"];
 
 Module._extensions[".js"] = function arenaAutomationLoader(module, filename) {
-  if (path.resolve(filename) !== serverPath) return originalLoader(module, filename);
+  if (path.resolve(filename) !== serverPath) {
+    return originalLoader(module, filename);
+  }
 
-  // Restore the normal loader before compiling server.js so every other module
-  // continues to use Node's standard loader.
+  // Restore Node's normal loader before compiling server.js so every other
+  // JavaScript module continues to load normally.
   Module._extensions[".js"] = originalLoader;
 
   let source = fs.readFileSync(filename, "utf8");
-  const marker = "\nserver.listen(";
-  const insertAt = source.lastIndexOf(marker);
-  if (insertAt < 0) {
-    throw new Error("Arena Commander automation could not locate server.listen() in server.js.");
+
+  // Do not inject twice if the integration was later added directly to server.js.
+  if (source.includes("Arena Commander v40 card automation integration")) {
+    module._compile(source, filename);
+    return;
   }
 
   const integration = `
@@ -75,6 +81,35 @@ Module._extensions[".js"] = function arenaAutomationLoader(module, filename) {
 })();
 // ---- End Arena Commander v40 card automation integration ----
 `;
+
+  // Install before the SPA catch-all and API 404 middleware so the automation
+  // status/analyze endpoints are reachable. Fall back to the start function,
+  // then to any server.listen call for compatibility with older server files.
+  const insertionPatterns = [
+    /\napp\.get\(\s*["']\*["']\s*,/,
+    /\napp\.use\(\s*["']\/api["']\s*,/,
+    /\nasync\s+function\s+start\s*\(/,
+    /\n\s*server\.listen\s*\(/
+  ];
+
+  let insertAt = -1;
+  for (const pattern of insertionPatterns) {
+    const match = pattern.exec(source);
+    if (match) {
+      insertAt = match.index;
+      break;
+    }
+  }
+
+  // Never take the whole app offline because a future server layout changed.
+  // The server will start normally, with automation disabled, and log the cause.
+  if (insertAt < 0) {
+    console.error(
+      "Arena Commander automation was not injected because no safe insertion point was found. The main server will continue without v40 automation."
+    );
+    module._compile(source, filename);
+    return;
+  }
 
   source = source.slice(0, insertAt) + integration + source.slice(insertAt);
   module._compile(source, filename);
