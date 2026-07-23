@@ -1,8 +1,8 @@
 {
   "name": "torn-commander-sandbox",
-  "version": "35.0.0",
+  "version": "37.0.0",
   "private": true,
-  "description": "Arena-style 2\u20136 player Commander table with Solo AI Test Lab, optional bot seats, deck strategy profiles, tactical bot decisions and Judge Mode.",
+  "description": "Arena-style MTG table with locked Official Commander and Brawl presets, Custom Rule Zero rooms, 2–6 seats, AI Test Lab and persistent games.",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
