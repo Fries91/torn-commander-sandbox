@@ -1,0 +1,29 @@
+services:
+  - type: cron
+    name: arena-commander-meta-sync
+    runtime: node
+    plan: starter
+    schedule: "0 6 * * *"
+    buildCommand: npm install --package-lock=false --registry=https://registry.npmjs.org/
+    startCommand: npm run sync:meta
+    envVars:
+      - key: DATABASE_URL
+        sync: false
+      - key: DATABASE_SSL
+        value: "true"
+      - key: META_EDHREC_ENABLED
+        value: "true"
+      - key: META_EDHREC_LIMIT
+        value: "12"
+      - key: META_CEDH_DDB_ENABLED
+        value: "true"
+      - key: META_CEDH_LIMIT
+        value: "20"
+      - key: META_CATALOG_URLS
+        sync: false
+      - key: META_ARCHIDEKT_DECK_URLS
+        sync: false
+      - key: META_CEDH_DECK_URLS
+        sync: false
+      - key: META_MOXFIELD_DECK_URLS
+        sync: false
