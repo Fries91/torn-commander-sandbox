@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         Arena Commander - Torn Game Notifier
 // @namespace    https://torn-commander-sandbox.onrender.com/
-// @version      1.2.0
-// @description  Adds a lightweight Arena Commander game notifier inside Torn's real header icon row.
+// @version      1.3.0
+// @description  Adds a lightweight Arena Commander notifier and quick host launcher inside Torn's real header icon row.
 // @author       Fries91
 // @homepageURL  https://torn-commander-sandbox.onrender.com/notifier-install.html
 // @supportURL   https://torn-commander-sandbox.onrender.com/notifier-install.html
@@ -26,7 +26,7 @@
 (() => {
   "use strict";
 
-  const SCRIPT_VERSION = "1.2.0";
+  const SCRIPT_VERSION = "1.3.0";
   const API_ROOT = "https://torn-commander-sandbox.onrender.com";
   const OPEN_GAMES_URL = `${API_ROOT}/api/lobbies/open`;
   const INSTALL_URL = `${API_ROOT}/notifier-install.html`;
@@ -340,8 +340,7 @@
     return "Official Commander";
   }
 
-  function openJoin(game) {
-    const url = game?.joinUrl || `${API_ROOT}/?join=${encodeURIComponent(game.roomCode)}`;
+  function openExternal(url) {
     try {
       if (typeof GM_openInTab === "function") {
         GM_openInTab(url, { active: true, insert: true, setParent: true });
@@ -349,6 +348,16 @@
       }
     } catch {}
     window.open(url, "_blank", "noopener,noreferrer");
+  }
+
+  function openJoin(game) {
+    const url = game?.joinUrl || `${API_ROOT}/?join=${encodeURIComponent(game.roomCode)}`;
+    openExternal(url);
+  }
+
+  function openHost(format) {
+    const safeFormat = ["commander", "brawl", "custom"].includes(format) ? format : "commander";
+    openExternal(`${API_ROOT}/?host=${encodeURIComponent(safeFormat)}&source=torn-notifier`);
   }
 
   function playSound() {
@@ -509,6 +518,15 @@
       <button type="button" data-acn-action="close" aria-label="Close">×</button>
     </header>
     <div class="acn-status-row"><span class="${statusClass()}">${state.loading ? "Checking…" : state.error ? "Offline" : state.games.length ? `${state.games.length} ready` : "Watching"}</span><small>${state.lastCheckedAt ? `Checked ${state.lastCheckedAt.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}` : "Not checked yet"}</small><button type="button" data-acn-action="refresh">Refresh</button></div>
+    <section class="acn-host-section">
+      <div class="acn-section-heading"><div><strong>Host a new game</strong><small>Opens the correct setup screen</small></div><span>＋</span></div>
+      <div class="acn-host-grid">
+        <button type="button" class="acn-host-button acn-host-commander" data-acn-action="host" data-format="commander"><b>♛</b><span><strong>Commander</strong><small>40 life • 2–6</small></span></button>
+        <button type="button" class="acn-host-button acn-host-brawl" data-acn-action="host" data-format="brawl"><b>⚔</b><span><strong>Brawl</strong><small>25 life • 1v1</small></span></button>
+        <button type="button" class="acn-host-button acn-host-custom" data-acn-action="host" data-format="custom"><b>⚙</b><span><strong>Custom</strong><small>Rule Zero</small></span></button>
+      </div>
+    </section>
+    <div class="acn-join-heading"><strong>Games ready to join</strong><span>${state.games.length}</span></div>
     <div class="acn-games">${gamesHtml}</div>
     <details class="acn-settings"><summary>Notifier settings</summary>
       <label><input type="checkbox" data-setting="enabled" ${state.settings.enabled ? "checked" : ""}> Enable checking</label>
@@ -549,7 +567,11 @@
     const action = button.dataset.acnAction;
     if (action === "close") return togglePopup(false);
     if (action === "refresh") return refresh({ notify: false });
-    if (action === "install") return window.open(INSTALL_URL, "_blank", "noopener,noreferrer");
+    if (action === "install") return openExternal(INSTALL_URL);
+    if (action === "host") {
+      closePopup();
+      return openHost(button.dataset.format);
+    }
     if (action === "reset-alerts") {
       state.settings.seen = {};
       saveSettings();
@@ -593,10 +615,11 @@
       .acn-popup-header>div{display:flex!important;gap:8px!important;align-items:center!important}.acn-popup-header strong{display:block!important;font-size:15px!important}.acn-popup-header small{color:#96aaa5!important}.acn-popup-header>button{border:0!important;background:transparent!important;color:#e8f5f1!important;font-size:24px!important;cursor:pointer!important}
       .acn-mini-icon{display:block!important;width:30px!important;height:30px!important;padding:5px!important;border-radius:8px!important;background:linear-gradient(135deg,#55e7a7,#57b7ff)!important;color:#06130f!important}.acn-mini-icon svg{width:100%!important;height:100%!important;fill:currentColor!important}
       .acn-status-row{display:grid!important;grid-template-columns:auto 1fr auto!important;align-items:center!important;gap:7px!important;padding:9px 11px!important;color:#9eb5af!important;border-bottom:1px solid rgba(255,255,255,.07)!important}.acn-status-row>span{font-weight:700!important}.acn-status-row>.acn-ready{color:#5ff3a9!important}.acn-status-row>.acn-error{color:#ffca5a!important}.acn-status-row>button{border:0!important;border-radius:7px!important;background:#1e3a35!important;color:#d7fff2!important;padding:6px 8px!important;cursor:pointer!important}
+      .acn-host-section{padding:10px 10px 11px!important;border-bottom:1px solid rgba(255,255,255,.08)!important;background:linear-gradient(180deg,rgba(52,118,94,.12),rgba(8,17,15,0))!important}.acn-section-heading{display:flex!important;align-items:center!important;justify-content:space-between!important;gap:8px!important;margin-bottom:8px!important}.acn-section-heading strong{display:block!important;color:#f1fbf8!important;font-size:14px!important}.acn-section-heading small{display:block!important;color:#8fa7a1!important;font-size:11px!important}.acn-section-heading>span{display:grid!important;place-items:center!important;width:24px!important;height:24px!important;border-radius:8px!important;background:#183b31!important;color:#6ef0ba!important;font-size:18px!important}.acn-host-grid{display:grid!important;grid-template-columns:repeat(3,minmax(0,1fr))!important;gap:7px!important}.acn-host-button{all:unset;box-sizing:border-box!important;min-width:0!important;display:flex!important;flex-direction:column!important;align-items:center!important;justify-content:center!important;gap:4px!important;padding:9px 5px!important;border:1px solid rgba(255,255,255,.14)!important;border-radius:9px!important;background:#10201d!important;color:#eaf7f3!important;text-align:center!important;cursor:pointer!important}.acn-host-button:hover{transform:translateY(-1px)!important;background:#173029!important}.acn-host-button>b{font-size:18px!important;line-height:1!important}.acn-host-button span{min-width:0!important}.acn-host-button strong{display:block!important;font-size:11px!important;white-space:nowrap!important}.acn-host-button small{display:block!important;margin-top:2px!important;color:#91aaa3!important;font-size:9px!important;white-space:nowrap!important}.acn-host-commander{border-color:rgba(96,235,158,.42)!important}.acn-host-commander>b{color:#60eb9e!important}.acn-host-brawl{border-color:rgba(93,184,255,.42)!important}.acn-host-brawl>b{color:#65bfff!important}.acn-host-custom{border-color:rgba(201,140,255,.42)!important}.acn-host-custom>b{color:#ca8cff!important}.acn-join-heading{display:flex!important;align-items:center!important;justify-content:space-between!important;padding:9px 11px 0!important;color:#dcece7!important;font-weight:700!important}.acn-join-heading>span{display:grid!important;place-items:center!important;min-width:20px!important;height:20px!important;padding:0 5px!important;border-radius:999px!important;background:#17332c!important;color:#69efb8!important;font-size:10px!important}
       .acn-games{padding:10px!important;display:grid!important;gap:9px!important}.acn-game{border:1px solid rgba(255,255,255,.12)!important;border-left:3px solid #67e8b6!important;border-radius:11px!important;padding:10px!important;background:rgba(255,255,255,.035)!important}.acn-game.acn-brawl{border-left-color:#61bfff!important}.acn-game.acn-custom{border-left-color:#c98cff!important}.acn-game-top{display:flex!important;justify-content:space-between!important;gap:8px!important}.acn-game-top small{color:#8fa8a2!important;display:block!important}.acn-game-top strong{font-size:14px!important}.acn-game-top>span{white-space:nowrap!important;color:#5ff3a9!important;font-weight:700!important}.acn-game p{margin:6px 0!important;color:#b8cbc6!important}.acn-game-stats{display:flex!important;gap:5px!important;flex-wrap:wrap!important}.acn-game-stats span{padding:3px 6px!important;border-radius:999px!important;background:#172c28!important;color:#bfe0d7!important;font-size:11px!important}.acn-join{width:100%!important;margin-top:9px!important;padding:9px!important;border:1px solid #5ff3a9!important;border-radius:8px!important;background:#176247!important;color:#fff!important;font-weight:800!important;cursor:pointer!important}
       .acn-empty{padding:28px 17px!important;text-align:center!important;color:#a9beb8!important}.acn-empty strong{display:block!important;color:#e4f4ef!important;font-size:15px!important}.acn-settings{border-top:1px solid rgba(255,255,255,.08)!important;padding:10px 12px 13px!important}.acn-settings summary{cursor:pointer!important;font-weight:700!important;color:#d5e8e2!important}.acn-settings label{display:flex!important;align-items:center!important;gap:8px!important;padding:5px 0!important;color:#bad0ca!important}.acn-settings input{width:auto!important}.acn-select{justify-content:space-between!important}.acn-select select{background:#132a25!important;color:#e4f6f1!important;border:1px solid #315148!important;border-radius:6px!important;padding:4px!important}.acn-setting-buttons{display:flex!important;gap:7px!important;margin-top:8px!important}.acn-setting-buttons button{flex:1!important;border:1px solid #315148!important;border-radius:7px!important;background:#172d28!important;color:#d5eee7!important;padding:7px!important;cursor:pointer!important}
       @keyframes acn-header-pulse{0%,100%{transform:scale(1)}50%{transform:scale(1.16)}}
-      @media(max-width:520px){#arena-commander-notifier-slot.acn-header-slot{width:31px!important;margin:0!important}#arena-commander-notifier-button.acn-header-button{width:30px!important}.acn-popup{font-size:12px!important}}
+      @media(max-width:520px){#arena-commander-notifier-slot.acn-header-slot{width:31px!important;margin:0!important}#arena-commander-notifier-button.acn-header-button{width:30px!important}.acn-popup{font-size:12px!important}.acn-host-grid{gap:5px!important}.acn-host-button{padding:8px 3px!important}.acn-host-button strong{font-size:10px!important}.acn-host-button small{font-size:8px!important}}
     `;
     try {
       if (typeof GM_addStyle === "function") GM_addStyle(css);
@@ -612,7 +635,10 @@
     try {
       if (typeof GM_registerMenuCommand !== "function") return;
       GM_registerMenuCommand("Arena Commander: refresh games", () => refresh({ notify: false }));
-      GM_registerMenuCommand("Arena Commander: install/update page", () => window.open(INSTALL_URL, "_blank", "noopener,noreferrer"));
+      GM_registerMenuCommand("Arena Commander: host Commander", () => openHost("commander"));
+      GM_registerMenuCommand("Arena Commander: host Brawl", () => openHost("brawl"));
+      GM_registerMenuCommand("Arena Commander: host Custom", () => openHost("custom"));
+      GM_registerMenuCommand("Arena Commander: install/update page", () => openExternal(INSTALL_URL));
       GM_registerMenuCommand("Arena Commander: reset notified rooms", () => {
         state.settings.seen = {};
         saveSettings();
