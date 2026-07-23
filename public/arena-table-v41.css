@@ -1,0 +1,799 @@
+/* Arena Commander v41 — Arena-style battlefield and visible cards */
+:root {
+  --v41-card-width: clamp(92px, 10vw, 142px);
+  --v41-card-height: calc(var(--v41-card-width) * 1.397);
+  --v41-gold: #f5d887;
+  --v41-orange: #e7772f;
+  --v41-blue: #61aefc;
+  --v41-felt: #09261c;
+  --v41-dark: #020806;
+  --v41-action-height: 72px;
+}
+
+.arena-v41-active {
+  background:
+    radial-gradient(ellipse at 50% 45%, rgba(42, 104, 72, .62), transparent 52%),
+    linear-gradient(180deg, #03110c, #020705);
+}
+
+.arena-v41-active .arena-game-shell {
+  --arena-card-w: var(--v41-card-width);
+  --arena-card-h: var(--v41-card-height);
+  background:
+    radial-gradient(ellipse at 50% 44%, rgba(39, 104, 72, .58), transparent 50%),
+    linear-gradient(180deg, #061e16, #03110c 54%, #020907);
+}
+
+/* The old image observer could leave every image transparent. */
+.arena-v41 .arena-card-image img {
+  display: block !important;
+  opacity: 1 !important;
+  visibility: visible !important;
+  filter: none !important;
+}
+
+.arena-v41 .arena-card-image {
+  min-height: 0;
+  background: #14271f;
+}
+
+/* Keep automation information but stop it from covering the art. */
+.arena-v41 .arena-card .card-automation-badge,
+.arena-v41 .hand-card-wrap .card-automation-badge,
+.arena-v41 .zone-cards .card-automation-badge {
+  top: auto !important;
+  right: 4px !important;
+  bottom: 4px !important;
+  left: auto !important;
+  width: 10px !important;
+  min-width: 10px !important;
+  height: 10px !important;
+  padding: 0 !important;
+  border-radius: 50% !important;
+  overflow: hidden !important;
+  color: transparent !important;
+  font-size: 0 !important;
+  box-shadow: 0 0 0 2px rgba(0,0,0,.55) !important;
+}
+
+.arena-v41 .arena-card-nest,
+.arena-v41 .arena-card-group {
+  min-width: var(--v41-card-width);
+  min-height: var(--v41-card-height);
+}
+
+.arena-v41 .arena-card {
+  display: block !important;
+  width: var(--v41-card-width);
+  height: var(--v41-card-height);
+  min-width: var(--v41-card-width);
+  min-height: var(--v41-card-height);
+  overflow: visible;
+  border-radius: 8px;
+  transform-style: preserve-3d;
+}
+
+.arena-v41 .arena-card-frame {
+  display: grid !important;
+  grid-template-rows: 16% 57% 12% 1fr 14% !important;
+  width: 100%;
+  height: 100%;
+  min-height: var(--v41-card-height);
+  border: 2px solid #78694d;
+  border-radius: 8px;
+  background: #171811;
+  box-shadow:
+    inset 0 0 0 1px rgba(255,255,255,.16),
+    0 7px 18px rgba(0,0,0,.62);
+}
+
+.arena-v41 .arena-card-frame header {
+  min-height: 0;
+}
+
+.arena-v41 .arena-card-frame header strong {
+  font-size: clamp(.62rem, .82vw, .88rem);
+}
+
+.arena-v41 .arena-card-type {
+  font-size: clamp(.53rem, .66vw, .72rem);
+}
+
+.arena-v41 .arena-card-badges {
+  min-height: 16px;
+}
+
+.arena-v41 .arena-card:hover,
+.arena-v41 .arena-card:focus-visible {
+  z-index: 90;
+  transform: translateY(-18px) scale(1.28);
+}
+
+.arena-v41 .arena-card.is-tapped {
+  transform: rotate(90deg) scale(.73);
+}
+
+.arena-v41 .arena-card.is-tapped:hover {
+  transform: rotate(90deg) translateX(-15px) scale(.86);
+}
+
+/* Playmat zones */
+.arena-v41 .arena-stage {
+  background:
+    linear-gradient(90deg, transparent 49.8%, rgba(245,216,135,.09) 50%, transparent 50.2%),
+    linear-gradient(180deg, transparent 49.7%, rgba(245,216,135,.10) 50%, transparent 50.3%);
+}
+
+.arena-v41 .arena-seat {
+  background:
+    radial-gradient(ellipse at center, rgba(25, 72, 50, .58), transparent 72%),
+    rgba(2, 18, 12, .72);
+  border-color: rgba(245,216,135,.30);
+  border-radius: 20px;
+  overflow: visible;
+}
+
+.arena-v41 .arena-seat.is-active {
+  border-color: var(--v41-gold);
+  box-shadow:
+    0 0 0 2px rgba(245,216,135,.18),
+    0 0 34px rgba(245,216,135,.25);
+}
+
+.arena-v41 .arena-seat.has-priority {
+  border-color: var(--v41-blue);
+  box-shadow:
+    0 0 0 2px rgba(97,174,252,.20),
+    0 0 38px rgba(97,174,252,.32);
+}
+
+.arena-v41 .arena-seat-board {
+  min-height: calc(var(--v41-card-height) + 22px);
+  padding: 14px 10px 6px;
+}
+
+.arena-v41 .arena-battlefield-cards {
+  flex-wrap: nowrap;
+  justify-content: center;
+  align-items: center;
+  gap: 8px;
+  min-height: var(--v41-card-height);
+  overflow-x: auto;
+  overflow-y: visible;
+  padding: 20px 18px 8px;
+  scrollbar-width: none;
+}
+
+.arena-v41 .arena-battlefield-cards::-webkit-scrollbar,
+.arena-v41 .arena-hand-fan::-webkit-scrollbar {
+  display: none;
+}
+
+.arena-v41 .arena-empty-board {
+  min-height: calc(var(--v41-card-height) - 10px);
+  background: rgba(0,0,0,.12);
+}
+
+/* Arena life badges */
+.arena-v41 .seat-life {
+  background: radial-gradient(circle at 50% 40%, #5a2a1d, #160806 74%);
+  border-color: #ee9565;
+  box-shadow:
+    0 0 0 2px rgba(0,0,0,.46),
+    0 0 20px rgba(231,119,47,.45);
+}
+
+.arena-v41 .seat-life strong {
+  font-size: 1.55rem;
+}
+
+.arena-v41 .seat-avatar {
+  border-color: rgba(245,216,135,.7);
+  background: radial-gradient(circle, #315b44, #0b1a12);
+}
+
+/* Center stack is small and unobtrusive. */
+.arena-v41 .arena-center-zone {
+  z-index: 26;
+  gap: 4px;
+}
+
+.arena-v41 .combat-empty {
+  display: none;
+}
+
+.arena-v41 .combat-preview {
+  max-height: 64px;
+}
+
+.arena-v41 .arena-center-controls {
+  display: none;
+}
+
+.arena-v41 .center-stack {
+  border-color: rgba(245,216,135,.58);
+  background: rgba(2,12,8,.9);
+  box-shadow:
+    0 0 0 2px rgba(0,0,0,.34),
+    0 0 24px rgba(245,216,135,.17);
+}
+
+/* Visible Arena hand fan */
+.arena-v41 .arena-hand-tray {
+  z-index: 55;
+  left: 50%;
+  right: auto;
+  bottom: calc(var(--v41-action-height) - 2px);
+  width: min(94vw, 980px);
+  height: 166px;
+  transform: translateX(-50%);
+  pointer-events: none;
+}
+
+.arena-v41 .arena-hand-fan {
+  align-items: flex-end;
+  overflow: visible;
+  padding-top: 24px;
+}
+
+.arena-v41 .hand-card-wrap {
+  width: var(--v41-card-width);
+  height: var(--v41-card-height);
+  margin-left: calc(var(--v41-card-width) * -.42);
+  transform:
+    translateY(calc(var(--hand-lift) * .38))
+    rotate(calc(var(--hand-rotate) * .72));
+  pointer-events: auto;
+  transition: transform .16s ease;
+}
+
+.arena-v41 .hand-card-wrap:first-child {
+  margin-left: 0;
+}
+
+.arena-v41 .hand-card-wrap .arena-card-nest {
+  width: var(--v41-card-width);
+  height: var(--v41-card-height);
+  transform: none !important;
+}
+
+.arena-v41 .hand-card-wrap:hover,
+.arena-v41 .hand-card-wrap:focus-within {
+  z-index: 100;
+  transform: translateY(-40px) rotate(0);
+}
+
+.arena-v41 .hand-card-wrap .arena-card:hover {
+  transform: scale(1.20);
+}
+
+/* Bottom controls: simple Arena-style navigation plus one central action. */
+.arena-v41 .arena-action-bar {
+  height: calc(var(--v41-action-height) + var(--safe-bottom));
+  grid-template-columns: repeat(5, minmax(62px, 110px));
+  gap: 5px;
+  background:
+    linear-gradient(180deg, rgba(3,12,8,.76), rgba(1,5,3,.98));
+  border-top-color: rgba(245,216,135,.42);
+}
+
+.arena-v41 .arena-action-bar .priority-button,
+.arena-v41 .arena-action-bar .turn-button,
+.arena-v41 .arena-action-bar .full-control-button,
+.arena-v41 .arena-action-bar button[data-drawer="replay"] {
+  display: none !important;
+}
+
+.arena-v41 .arena-action-bar > button {
+  border-radius: 12px;
+  color: #d7e4db;
+}
+
+.arena-v41 .arena-action-bar > button:hover,
+.arena-v41 .arena-action-bar > button:focus-visible {
+  border-color: rgba(245,216,135,.65);
+  color: white;
+}
+
+/* Context action, similar to Arena's orange action button. */
+.arena-v41-prompt {
+  position: absolute;
+  z-index: 68;
+  right: 16px;
+  bottom: calc(var(--v41-action-height) + 18px);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  pointer-events: none;
+}
+
+.arena-v41-guidance {
+  max-width: min(360px, 44vw);
+  padding: 8px 12px;
+  border: 1px solid rgba(255,255,255,.12);
+  border-radius: 12px;
+  background: rgba(2,10,7,.88);
+  box-shadow: 0 12px 28px rgba(0,0,0,.46);
+}
+
+.arena-v41-guidance span,
+.arena-v41-guidance strong {
+  display: block;
+}
+
+.arena-v41-guidance span {
+  color: var(--v41-gold);
+  font-size: .62rem;
+  font-weight: 900;
+  letter-spacing: .10em;
+}
+
+.arena-v41-guidance strong {
+  margin-top: 2px;
+  color: white;
+  font-size: .78rem;
+}
+
+.arena-v41-primary-action {
+  pointer-events: auto;
+  min-width: 102px;
+  min-height: 66px;
+  display: grid;
+  place-items: center;
+  align-content: center;
+  border: 2px solid #ffad69;
+  border-radius: 50%;
+  background:
+    radial-gradient(circle at 50% 28%, #f59a50, #b94b18 68%, #612006);
+  color: white;
+  box-shadow:
+    0 0 0 3px rgba(0,0,0,.38),
+    0 0 30px rgba(231,119,47,.52);
+}
+
+.arena-v41-primary-action span {
+  font-size: 1rem;
+  font-weight: 1000;
+}
+
+.arena-v41-primary-action small {
+  font-size: .58rem;
+  color: #ffe0c7;
+}
+
+.arena-v41-prompt[data-tone="priority"] .arena-v41-primary-action {
+  border-color: #8bc4ff;
+  background: radial-gradient(circle at 50% 28%, #489aee, #194c8b 68%, #071c3b);
+  box-shadow:
+    0 0 0 3px rgba(0,0,0,.38),
+    0 0 30px rgba(97,174,252,.52);
+}
+
+.arena-v41-prompt[data-tone="waiting"] .arena-v41-primary-action {
+  filter: grayscale(.7);
+  opacity: .56;
+  box-shadow: none;
+}
+
+/* Top buttons are compact instead of covering the phase bar. */
+.arena-v41 .arena-hotfix-control {
+  min-width: 44px;
+  width: 54px;
+  min-height: 38px;
+  border-radius: 9px;
+}
+
+.arena-v41 .arena-hotfix-control small {
+  font-size: 7px;
+}
+
+.arena-v41 .arena-leave-match {
+  width: 62px;
+}
+
+/* Card quick-action sheet */
+.arena-v41-card-sheet {
+  position: fixed;
+  inset: 0;
+  z-index: 1000000;
+  display: grid;
+  align-items: end;
+  padding: 18px max(12px, env(safe-area-inset-right))
+    max(18px, env(safe-area-inset-bottom))
+    max(12px, env(safe-area-inset-left));
+  background: rgba(0,0,0,.72);
+  backdrop-filter: blur(5px);
+}
+
+.arena-v41-card-sheet > section {
+  width: min(680px, 100%);
+  max-height: 88dvh;
+  margin-inline: auto;
+  overflow: auto;
+  padding: 14px;
+  border: 1px solid rgba(245,216,135,.52);
+  border-radius: 18px;
+  background:
+    radial-gradient(circle at 20% 10%, rgba(60,126,90,.24), transparent 34%),
+    #07130e;
+  box-shadow: 0 24px 80px rgba(0,0,0,.8);
+}
+
+.arena-v41-card-sheet header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.arena-v41-card-sheet header small {
+  display: block;
+  color: var(--v41-gold);
+  font-size: .68rem;
+  text-transform: uppercase;
+  letter-spacing: .08em;
+}
+
+.arena-v41-card-sheet header h2 {
+  margin: 2px 0 0;
+}
+
+.arena-v41-card-sheet header > button {
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  border-radius: 50%;
+}
+
+.arena-v41-card-sheet-body {
+  display: grid;
+  grid-template-columns: minmax(150px, 230px) 1fr;
+  gap: 14px;
+}
+
+.arena-v41-card-sheet-body > img,
+.arena-v41-card-back {
+  width: 100%;
+  aspect-ratio: 488 / 680;
+  object-fit: cover;
+  border-radius: 12px;
+  border: 2px solid #8c7954;
+  background: #10261b;
+}
+
+.arena-v41-card-back {
+  display: grid;
+  place-items: center;
+  font-size: 4rem;
+  color: var(--v41-gold);
+}
+
+.arena-v41-card-actions,
+.arena-v41-choice-grid {
+  display: grid;
+  gap: 8px;
+}
+
+.arena-v41-card-actions button,
+.arena-v41-choice-grid button {
+  display: grid;
+  grid-template-columns: 42px 1fr;
+  grid-template-rows: auto auto;
+  column-gap: 10px;
+  text-align: left;
+  align-items: center;
+  padding: 11px;
+  border: 1px solid rgba(255,255,255,.14);
+  background: rgba(255,255,255,.055);
+}
+
+.arena-v41-card-actions button > span,
+.arena-v41-choice-grid button > span {
+  grid-row: 1 / 3;
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  background: rgba(245,216,135,.12);
+  color: var(--v41-gold);
+  font-size: 1.2rem;
+}
+
+.arena-v41-card-actions button strong,
+.arena-v41-choice-grid button strong {
+  color: white;
+}
+
+.arena-v41-card-actions button small {
+  color: #9db2a6;
+}
+
+.arena-v41-card-actions .arena-v41-action-primary {
+  border-color: rgba(255,166,92,.64);
+  background: linear-gradient(135deg, rgba(191,75,24,.82), rgba(96,28,7,.86));
+}
+
+/* Portrait mobile layout */
+@media (max-width: 820px) {
+  :root {
+    --v41-card-width: clamp(92px, 24vw, 118px);
+    --v41-action-height: 66px;
+  }
+
+  body.in-game .app-header {
+    height: 50px;
+  }
+
+  body.in-game .app-main {
+    padding-top: 50px;
+  }
+
+  .arena-v41 .arena-game-shell {
+    height: calc(100dvh - 50px);
+  }
+
+  .arena-v41 .arena-game-topbar {
+    height: 43px;
+    overflow-x: auto;
+    overflow-y: hidden;
+    scrollbar-width: none;
+  }
+
+  .arena-v41 .arena-room-meta {
+    min-width: max-content;
+  }
+
+  .arena-v41 .arena-room-meta > span:not(.format-badge),
+  .arena-v41 .arena-room-meta > strong,
+  .arena-v41 .arena-room-meta .badge {
+    display: none;
+  }
+
+  .arena-v41 .arena-top-actions {
+    margin-left: auto;
+  }
+
+  .arena-v41 .arena-phase-bar {
+    height: 38px;
+  }
+
+  .arena-v41 .arena-phase {
+    min-width: 58px;
+  }
+
+  .arena-v41 .arena-stage {
+    height: calc(100% - 81px - var(--v41-action-height));
+    overflow: hidden !important;
+    padding: 0 !important;
+  }
+
+  .arena-v41 .arena-opponent-ring,
+  .arena-v41 .arena-opponent-ring.count-1 {
+    position: absolute !important;
+    inset: 6px 6px auto !important;
+    height: 34%;
+    display: block !important;
+    padding: 0 !important;
+  }
+
+  .arena-v41 .opponent-slot,
+  .arena-v41 .arena-seat.is-opponent {
+    width: 100%;
+    height: 100%;
+    min-height: 0;
+  }
+
+  .arena-v41 .arena-seat.is-opponent {
+    grid-template-rows: 40px 1fr 28px;
+  }
+
+  .arena-v41 .arena-seat.is-opponent .seat-life {
+    top: 7px;
+    right: 8px;
+    left: auto;
+    transform: none;
+  }
+
+  .arena-v41 .arena-seat.is-opponent .arena-seat-board {
+    min-height: 0;
+    overflow: hidden;
+    padding-top: 8px;
+  }
+
+  .arena-v41 .arena-seat.is-opponent .arena-battlefield-cards {
+    justify-content: flex-start;
+    padding-inline: 12px;
+  }
+
+  .arena-v41 .arena-center-zone {
+    top: 39%;
+    width: min(74vw, 330px);
+  }
+
+  .arena-v41 .self-slot {
+    position: absolute !important;
+    inset: 44% 6px calc(var(--v41-action-height) + 104px) !important;
+    height: auto !important;
+    margin: 0 !important;
+  }
+
+  .arena-v41 .arena-seat.is-self {
+    display: grid;
+    grid-template-columns: 1fr;
+    grid-template-rows: 42px 1fr;
+    width: 100%;
+    height: 100%;
+    min-height: 0;
+  }
+
+  .arena-v41 .arena-seat.is-self .arena-seat-header {
+    border-radius: 18px 18px 0 0;
+    flex-direction: row;
+    align-items: center;
+    padding: 5px 9px;
+  }
+
+  .arena-v41 .arena-seat.is-self .seat-avatar {
+    width: 34px;
+    height: 34px;
+    margin: 0;
+  }
+
+  .arena-v41 .arena-seat.is-self .seat-life {
+    top: 5px;
+    right: 8px;
+    left: auto;
+    transform: none;
+  }
+
+  .arena-v41 .arena-seat.is-self .seat-secondary,
+  .arena-v41 .arena-seat.is-self .arena-zone-piles {
+    display: none;
+  }
+
+  .arena-v41 .arena-seat.is-self .arena-seat-board {
+    grid-column: 1;
+    min-height: 0;
+    overflow: hidden;
+    padding: 4px;
+  }
+
+  .arena-v41 .arena-seat.is-self .arena-battlefield-cards {
+    justify-content: flex-start;
+    padding: 12px 12px 8px;
+  }
+
+  .arena-v41 .arena-hand-tray {
+    position: absolute;
+    bottom: calc(var(--v41-action-height) - 3px);
+    width: 100vw;
+    height: 138px;
+  }
+
+  .arena-v41 .hand-card-wrap {
+    margin-left: calc(var(--v41-card-width) * -.56);
+  }
+
+  .arena-v41 .hand-card-wrap:first-child {
+    margin-left: 0;
+  }
+
+  .arena-v41 .arena-action-bar {
+    grid-template-columns: repeat(3, minmax(58px, 1fr));
+    padding-inline: 4px;
+  }
+
+  .arena-v41 .arena-action-bar button[data-action="open-emotes"],
+  .arena-v41 .arena-action-bar button[data-drawer="rules"] {
+    display: none;
+  }
+
+  .arena-v41-prompt {
+    right: 8px;
+    bottom: calc(var(--v41-action-height) + 4px);
+  }
+
+  .arena-v41-guidance {
+    display: none;
+  }
+
+  .arena-v41-primary-action {
+    min-width: 74px;
+    min-height: 58px;
+    border-radius: 999px;
+  }
+
+  .arena-v41-card-sheet-body {
+    grid-template-columns: 104px 1fr;
+  }
+}
+
+/* Very narrow phones */
+@media (max-width: 480px) {
+  :root {
+    --v41-card-width: 88px;
+  }
+
+  .arena-v41 .arena-card-frame header strong {
+    font-size: .58rem;
+  }
+
+  .arena-v41 .arena-opponent-ring,
+  .arena-v41 .arena-opponent-ring.count-1 {
+    height: 32%;
+  }
+
+  .arena-v41 .self-slot {
+    top: 43% !important;
+  }
+
+  .arena-v41 .arena-hand-tray {
+    height: 124px;
+  }
+
+  .arena-v41 .arena-action-bar {
+    grid-template-columns: repeat(3, 1fr);
+  }
+
+  .arena-v41 .arena-action-bar > button {
+    min-width: 0;
+    font-size: .53rem;
+  }
+}
+
+/* Landscape phone/tablet battlefield */
+@media (orientation: landscape) and (max-height: 700px) {
+  :root {
+    --v41-card-width: clamp(78px, 9vw, 112px);
+    --v41-action-height: 56px;
+  }
+
+  body.in-game .app-header {
+    display: none;
+  }
+
+  body.in-game .app-main {
+    padding-top: 0;
+  }
+
+  .arena-v41 .arena-game-shell {
+    height: 100dvh;
+  }
+
+  .arena-v41 .arena-game-topbar {
+    height: 40px;
+  }
+
+  .arena-v41 .arena-phase-bar {
+    height: 34px;
+  }
+
+  .arena-v41 .arena-stage {
+    height: calc(100% - 74px - var(--v41-action-height));
+  }
+
+  .arena-v41 .arena-opponent-ring,
+  .arena-v41 .arena-opponent-ring.count-1 {
+    top: 4px !important;
+    height: 40%;
+  }
+
+  .arena-v41 .self-slot {
+    inset: 50% 5% calc(var(--v41-action-height) + 70px) !important;
+  }
+
+  .arena-v41 .arena-center-zone {
+    top: 47%;
+  }
+
+  .arena-v41 .arena-hand-tray {
+    height: 105px;
+  }
+
+  .arena-v41 .arena-card:hover,
+  .arena-v41 .arena-card:focus-visible {
+    transform: translateY(-10px) scale(1.15);
+  }
+}
