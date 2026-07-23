@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#08110f">
+  <title>Install Arena Commander Torn Notifier v1.1</title>
+  <style>
+    :root{color-scheme:dark;font-family:Inter,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:#07110f;color:#ebf8f4}
+    *{box-sizing:border-box}body{margin:0;min-height:100vh;background:radial-gradient(circle at 80% 0,rgba(71,199,164,.18),transparent 36%),linear-gradient(180deg,#081512,#040a09);padding:22px}
+    main{width:min(720px,100%);margin:auto}.hero,.card{border:1px solid rgba(94,239,187,.25);background:rgba(13,30,26,.88);border-radius:20px;box-shadow:0 24px 70px rgba(0,0,0,.45)}
+    .hero{padding:26px;text-align:center}.logo{width:74px;height:74px;border-radius:20px}.eyebrow{color:#65eeb9;text-transform:uppercase;letter-spacing:.16em;font-size:.78rem;font-weight:800}h1{font-size:clamp(2rem,8vw,3.4rem);margin:.25em 0}.hero p{color:#adc5be;max-width:560px;margin:0 auto 20px;line-height:1.6}
+    .install{display:inline-flex;align-items:center;justify-content:center;min-height:52px;padding:0 24px;border-radius:13px;background:linear-gradient(135deg,#2ecb8f,#2c8fb8);color:#04110d;text-decoration:none;font-weight:900;font-size:1.05rem;box-shadow:0 10px 30px rgba(46,203,143,.25)}
+    .card{margin-top:16px;padding:21px}.card h2{margin-top:0}.steps{display:grid;gap:12px}.step{display:grid;grid-template-columns:34px 1fr;gap:11px;align-items:start;padding:12px;border-radius:13px;background:#0b1a17}.step b{display:grid;place-items:center;width:31px;height:31px;border-radius:10px;background:#183a31;color:#6df3be}.step p{margin:2px 0;color:#bfd2cd;line-height:1.5}
+    code{background:#07100e;border:1px solid #24473f;border-radius:7px;padding:3px 6px;color:#88ffd0}.notice{border-left:3px solid #65eeb9;padding-left:12px;color:#bcd2cc;line-height:1.55}.links{display:flex;gap:9px;flex-wrap:wrap}.links a{color:#8cfbd1;text-decoration:none;border:1px solid #31564d;border-radius:9px;padding:9px 12px}.small{font-size:.88rem;color:#8da69f}
+  </style>
+</head>
+<body>
+<main>
+  <section class="hero">
+    <img class="logo" src="/notifier-icon.svg" alt="Arena Commander crown icon">
+    <div class="eyebrow">Torn header userscript</div>
+    <h1>Arena Commander Notifier</h1>
+    <p>Adds a small crown to Torn’s header. It glows and shows a badge whenever an Arena Commander host lists a game with an open seat.</p>
+    <a class="install" href="/arena-commander-notifier.user.js">Install or update the notifier</a>
+  </section>
+
+  <section class="card">
+    <h2>Installation</h2>
+    <div class="steps">
+      <div class="step"><b>1</b><p>Open this page inside TornPDA, or in a browser that has Tampermonkey or Violentmonkey installed.</p></div>
+      <div class="step"><b>2</b><p>Press <strong>Install or update the notifier</strong> and approve the userscript.</p></div>
+      <div class="step"><b>3</b><p>Reload Torn. A small crown appears in the header. Tap it to view games and notification settings.</p></div>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>Designed to stay lightweight</h2>
+    <p class="notice">The notifier does not scan Torn's full page or load card images. It makes one small lobby request every 45 seconds while Torn is visible, slows to every 3 minutes when hidden, and uses a low-frequency header check instead of a full-page MutationObserver.</p>
+    <p class="small">If the server cannot be reached, checks back off automatically to reduce repeated work. The popup is only rendered while it is open.</p>
+  </section>
+
+  <section class="card">
+    <h2>Automatic updates</h2>
+    <p class="notice">The script includes a version number plus <code>@updateURL</code> and <code>@downloadURL</code>. Compatible userscript managers check the hosted file and replace older versions automatically. The notifier also checks its version and shows an update button when a newer release is available.</p>
+    <p class="small">Keep the file address unchanged when uploading future versions. Increase the <code>@version</code> number each time.</p>
+  </section>
+
+  <section class="card">
+    <h2>How a room appears</h2>
+    <p>Inside an Arena Commander lobby, the host turns on <strong>List this room in the Torn notifier</strong>. Only waiting rooms with open seats are shown. The listing disappears when the room is full, starts, or the host turns it off.</p>
+    <div class="links"><a href="/">Open Arena Commander</a><a href="/arena-commander-notifier.user.js">View userscript</a></div>
+  </section>
+</main>
+</body>
+</html>
