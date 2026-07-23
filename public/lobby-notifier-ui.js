@@ -8,6 +8,7 @@
   const state = {
     syncQueued: false,
     joinOpened: false,
+    quickHostOpened: false,
     hostCacheKey: "",
     hostAllowed: false,
     directory: null,
@@ -43,6 +44,24 @@
     }
   }
 
+  function requestedHostFormat() {
+    try {
+      const value = String(new URLSearchParams(location.search).get("host") || "").toLowerCase();
+      return ["commander", "brawl", "custom"].includes(value) ? value : "";
+    } catch {
+      return "";
+    }
+  }
+
+  function clearQuickLaunchQuery() {
+    try {
+      const url = new URL(location.href);
+      url.searchParams.delete("host");
+      url.searchParams.delete("source");
+      history.replaceState(history.state, "", `${url.pathname}${url.search}${url.hash}`);
+    } catch {}
+  }
+
   function queueSync() {
     if (state.syncQueued) return;
     state.syncQueued = true;
@@ -63,6 +82,26 @@
     const panel = form.closest("[data-home-panel]");
     if (panel?.hidden) app.querySelector('[data-home-panel-target="join"]')?.click();
     state.joinOpened = true;
+  }
+
+  function syncQuickHost() {
+    if (state.quickHostOpened) return;
+    const format = requestedHostFormat();
+    if (!format) return;
+
+    const launcher = app.querySelector(`[data-home-panel-target="${CSS.escape(format)}"]`);
+    const panel = app.querySelector(`[data-home-panel="${CSS.escape(format)}"]`);
+    if (!launcher || !panel) return;
+
+    if (panel.hidden) launcher.click();
+    state.quickHostOpened = true;
+    clearQuickLaunchQuery();
+
+    window.setTimeout(() => {
+      const input = panel.querySelector('input[name="playerName"]');
+      input?.focus({ preventScroll: true });
+      panel.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 180);
   }
 
   function ensureHomePromo() {
@@ -171,6 +210,7 @@
   }
 
   function syncInterface() {
+    syncQuickHost();
     syncDirectJoin();
     ensureHomePromo();
     syncLobbyNotifier();
@@ -210,6 +250,6 @@
 
   const observer = new MutationObserver(queueSync);
   observer.observe(app, { childList: true, subtree: false });
-  window.addEventListener("popstate", () => { state.joinOpened = false; queueSync(); });
+  window.addEventListener("popstate", () => { state.joinOpened = false; state.quickHostOpened = false; queueSync(); });
   queueSync();
 })();
