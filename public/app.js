@@ -319,41 +319,168 @@
     }
   }
 
+  function roomFormatMeta(room = state.room) {
+    const format = room?.format || "commander";
+    if (format === "brawl") return { key: "brawl", label: "Official Brawl", short: "BRAWL", detail: "1v1 • 25 life", icon: "⚡" };
+    if (format === "custom") return { key: "custom", label: "Custom Rules", short: "CUSTOM RULES", detail: `${room?.maxPlayers || 2} players • ${room?.startingLife || 40} life`, icon: "⚙" };
+    return { key: "commander", label: "Official Commander", short: "OFFICIAL COMMANDER", detail: `${room?.maxPlayers || 4} players • 40 life`, icon: "♛" };
+  }
+
+  function formatBadgeHtml(room = state.room) {
+    const meta = roomFormatMeta(room);
+    return `<span class="format-badge format-${meta.key}"><b>${meta.icon}</b>${escapeHtml(meta.short)}</span>`;
+  }
+
+  function formatRuleSummaryHtml(room = state.room) {
+    const items = room?.ruleZeroSummary || [];
+    return `<section class="rule-zero-card format-${escapeAttribute(room?.format || "commander")}">
+      <div class="section-heading"><div><p class="eyebrow">${room?.format === "custom" ? "Rule Zero" : "Locked preset"}</p><h2>${escapeHtml(room?.formatLabel || roomFormatMeta(room).label)}</h2></div>${formatBadgeHtml(room)}</div>
+      <div class="rule-chip-list">${items.map((item) => `<span>${escapeHtml(item)}</span>`).join("")}</div>
+      ${room?.format === "custom" ? `<p class="rule-zero-note">Everyone sees these exceptions before readying. Host changes reset human ready states.</p>` : `<p class="rule-zero-note">Official settings are locked and cannot be changed by the host.</p>`}
+    </section>`;
+  }
+
+  function customRuleFormFields(rules = {}, prefix = "") {
+    const checked = (key, fallback = true) => (rules[key] ?? fallback) ? "checked" : "";
+    const value = (key, fallback) => escapeAttribute(rules[key] ?? fallback);
+    const listValue = (key) => escapeHtml((rules[key] || []).join("\n"));
+    return `
+      <div class="custom-rule-grid">
+        <label>Base legality<select name="${prefix}baseFormat"><option value="commander" ${(rules.baseFormat || "commander") === "commander" ? "selected" : ""}>Commander list</option><option value="brawl" ${rules.baseFormat === "brawl" ? "selected" : ""}>Brawl list</option></select></label>
+        <label>Play style<select name="${prefix}playStyle">
+          <option value="free-for-all" ${(rules.playStyle || "free-for-all") === "free-for-all" ? "selected" : ""}>Free-for-All</option>
+          <option value="duel" ${rules.playStyle === "duel" ? "selected" : ""}>Duel</option>
+          <option value="teams" ${rules.playStyle === "teams" ? "selected" : ""}>Two Teams</option>
+          <option value="limited-range" ${rules.playStyle === "limited-range" ? "selected" : ""}>Attack Neighbours Only</option>
+          <option value="archenemy" ${rules.playStyle === "archenemy" ? "selected" : ""}>Archenemy</option>
+          <option value="sandbox" ${rules.playStyle === "sandbox" ? "selected" : ""}>Open Sandbox</option>
+        </select></label>
+        <label>Deck size<input name="${prefix}deckSize" type="number" min="10" max="250" value="${value("deckSize",100)}"></label>
+        <label>Maximum copies<input name="${prefix}maxCopies" type="number" min="1" max="20" value="${value("maxCopies",1)}"></label>
+        <label>Maximum commanders<input name="${prefix}maxCommanders" type="number" min="0" max="6" value="${value("maxCommanders",2)}"></label>
+        <label>Starting hand<input name="${prefix}startingHandSize" type="number" min="0" max="30" value="${value("startingHandSize",7)}"></label>
+        <label>Free mulligans<input name="${prefix}freeMulligans" type="number" min="0" max="10" value="${value("freeMulligans",1)}"></label>
+        <label>Poison loss at<input name="${prefix}poisonThreshold" type="number" min="1" max="200" value="${value("poisonThreshold",10)}"></label>
+        <label>Commander tax increase<input name="${prefix}commanderTaxIncrement" type="number" min="0" max="20" value="${value("commanderTaxIncrement",2)}"></label>
+        <label>Commander damage loss<input name="${prefix}commanderDamageThreshold" type="number" min="1" max="200" value="${value("commanderDamageThreshold",21)}"></label>
+      </div>
+      <div class="custom-toggle-grid">
+        <label class="check-row"><input type="checkbox" name="${prefix}singleton" value="1" ${checked("singleton")}> Singleton deck</label>
+        <label class="check-row"><input type="checkbox" name="${prefix}colorIdentity" value="1" ${checked("colorIdentity")}> Enforce color identity</label>
+        <label class="check-row"><input type="checkbox" name="${prefix}commanderRequired" value="1" ${checked("commanderRequired")}> Commander required</label>
+        <label class="check-row"><input type="checkbox" name="${prefix}allowPlaneswalkerCommander" value="1" ${checked("allowPlaneswalkerCommander",false)}> Any planeswalker may command</label>
+        <label class="check-row"><input type="checkbox" name="${prefix}allowAnyCommander" value="1" ${checked("allowAnyCommander",false)}> Any card may command</label>
+        <label class="check-row"><input type="checkbox" name="${prefix}useOfficialBannedList" value="1" ${checked("useOfficialBannedList")}> Use official banned list</label>
+        <label class="check-row"><input type="checkbox" name="${prefix}commanderTaxEnabled" value="1" ${checked("commanderTaxEnabled")}> Commander tax enabled</label>
+        <label class="check-row"><input type="checkbox" name="${prefix}commanderDamageEnabled" value="1" ${checked("commanderDamageEnabled")}> Commander damage enabled</label>
+        <label class="check-row"><input type="checkbox" name="${prefix}emptyLibraryLoss" value="1" ${checked("emptyLibraryLoss")}> Empty-library loss</label>
+        <label class="check-row"><input type="checkbox" name="${prefix}firstPlayerDraw" value="1" ${checked("firstPlayerDraw")}> First player draws</label>
+        <label class="check-row"><input type="checkbox" name="${prefix}allowInvalidDecks" value="1" ${checked("allowInvalidDecks",false)}> Judge override invalid decks</label>
+      </div>
+      <div class="form-grid two custom-ban-grid">
+        <label>Allowed banned-card exceptions<textarea name="${prefix}allowedBannedCards" rows="4" placeholder="One card per line">${listValue("allowedBannedCards")}</textarea></label>
+        <label>Additional custom bans<textarea name="${prefix}customBannedCards" rows="4" placeholder="One card per line">${listValue("customBannedCards")}</textarea></label>
+      </div>
+      <label>Rule Zero notes<textarea name="${prefix}ruleZeroNotes" rows="3" maxlength="1000" placeholder="Explain special rules so every player knows what changed.">${escapeHtml(rules.ruleZeroNotes || "")}</textarea></label>
+    `;
+  }
+
+  function readCustomRules(data, prefix = "") {
+    const bool = (name) => data.get(`${prefix}${name}`) === "1";
+    const names = (name) => String(data.get(`${prefix}${name}`) || "").split(/\r?\n|,/g).map((entry) => entry.trim()).filter(Boolean);
+    return {
+      baseFormat: data.get(`${prefix}baseFormat`) || "commander",
+      playStyle: data.get(`${prefix}playStyle`) || "free-for-all",
+      deckSize: Number(data.get(`${prefix}deckSize`) || 100),
+      singleton: bool("singleton"),
+      maxCopies: Number(data.get(`${prefix}maxCopies`) || 1),
+      colorIdentity: bool("colorIdentity"),
+      commanderRequired: bool("commanderRequired"),
+      maxCommanders: Number(data.get(`${prefix}maxCommanders`) || 2),
+      allowPlaneswalkerCommander: bool("allowPlaneswalkerCommander"),
+      allowAnyCommander: bool("allowAnyCommander"),
+      useOfficialBannedList: bool("useOfficialBannedList"),
+      allowedBannedCards: names("allowedBannedCards"),
+      customBannedCards: names("customBannedCards"),
+      commanderTaxEnabled: bool("commanderTaxEnabled"),
+      commanderTaxIncrement: Number(data.get(`${prefix}commanderTaxIncrement`) || 2),
+      commanderDamageEnabled: bool("commanderDamageEnabled"),
+      commanderDamageThreshold: Number(data.get(`${prefix}commanderDamageThreshold`) || 21),
+      poisonThreshold: Number(data.get(`${prefix}poisonThreshold`) || 10),
+      emptyLibraryLoss: bool("emptyLibraryLoss"),
+      startingHandSize: Number(data.get(`${prefix}startingHandSize`) || 7),
+      freeMulligans: Number(data.get(`${prefix}freeMulligans`) || 0),
+      firstPlayerDraw: bool("firstPlayerDraw"),
+      allowInvalidDecks: bool("allowInvalidDecks"),
+      ruleZeroNotes: data.get(`${prefix}ruleZeroNotes`) || ""
+    };
+  }
+
   function renderHome() {
     const savedRoom = state.session?.roomCode;
     const savedSpectator = state.spectator?.roomCode;
+    const deckOptions = state.decks.map((deck)=>`<option value="${escapeAttribute(deck.id)}">${escapeHtml(deck.name)} — ${escapeHtml(deck.commanders.join(" / "))}</option>`).join("");
     return `
-      <section class="hero-panel arena-hero">
-        <div><p class="eyebrow">Arena Commander v35 • 2–6 Players</p><h1>A full digital Commander table built for phones, tablets and desktop.</h1><p>Real cards, shared stack and priority, assisted combat, clockwise turns, drag-and-drop, spectators, replays and persistent games.</p></div>
-        <div class="hero-orb">♛</div>
+      <section class="format-home-hero">
+        <div><p class="eyebrow">Arena Commander v37</p><h1>Choose your format.</h1><p>Official Commander, official Brawl, or a clearly labelled Rule Zero game.</p></div>
+        <div class="format-home-mark">♛</div>
       </section>
-      ${savedRoom ? `<section class="notice-row"><strong>Saved player room ${escapeHtml(savedRoom)}</strong><div class="button-row"><button class="primary-button" data-action="rejoin">Rejoin</button><button class="ghost-button" data-action="forget-session">Forget</button></div></section>` : ""}
-      ${savedSpectator ? `<section class="notice-row"><strong>Saved spectator room ${escapeHtml(savedSpectator)}</strong><div class="button-row"><button class="primary-button" data-action="rejoin-spectator">Watch again</button><button class="ghost-button" data-action="forget-session">Forget</button></div></section>` : ""}
-      <section class="home-grid three">
-        <form id="createRoomForm" class="panel">
-          <p class="eyebrow">Host</p><h2>Create game</h2>
-          <label>Player name<input name="playerName" maxlength="24" required value="${escapeHtml(playerName())}" placeholder="Fries91"></label>
-          <div class="form-grid two"><label>Players<select name="maxPlayers">${[2,3,4,5,6].map((n) => `<option value="${n}" ${n === 6 ? "selected" : ""}>${n}</option>`).join("")}</select></label><label>Starting life<select name="startingLife">${[25,30,40].map((n) => `<option value="${n}" ${n === 40 ? "selected" : ""}>${n}</option>`).join("")}</select></label></div>
-          <button class="primary-button" type="submit">Create private room</button>
-        </form>
-        <form id="joinRoomForm" class="panel">
-          <p class="eyebrow">Player</p><h2>Join game</h2>
-          <label>Player name<input name="playerName" maxlength="24" required value="${escapeHtml(playerName())}" placeholder="Your Torn name"></label>
-          <label>Room code<input name="roomCode" maxlength="6" required autocomplete="off" autocapitalize="characters" placeholder="ABC234"></label>
-          <button class="secondary-button" type="submit">Join room</button>
-        </form>
-        <form id="spectatorForm" class="panel spectator-panel">
-          <p class="eyebrow">Spectator</p><h2>Watch a table</h2>
-          <label>Display name<input name="name" maxlength="24" required value="${escapeHtml(playerName() || "Spectator")}" placeholder="Spectator"></label>
-          <label>Room code<input name="roomCode" maxlength="6" required autocomplete="off" autocapitalize="characters" placeholder="ABC234"></label>
-          <button class="ghost-button" type="submit">Enter spectator mode</button>
-        </form>
+      ${savedRoom ? `<section class="notice-row clean-resume-card"><strong>Saved player room ${escapeHtml(savedRoom)}</strong><div class="button-row"><button class="primary-button" data-action="rejoin">Rejoin</button><button class="ghost-button" data-action="forget-session">Forget</button></div></section>` : ""}
+      ${savedSpectator ? `<section class="notice-row clean-resume-card"><strong>Saved spectator room ${escapeHtml(savedSpectator)}</strong><div class="button-row"><button class="primary-button" data-action="rejoin-spectator">Watch again</button><button class="ghost-button" data-action="forget-session">Forget</button></div></section>` : ""}
+      <section class="format-launch-grid">
+        <button class="format-launch-card commander" data-home-panel-target="commander" type="button"><span>♛</span><strong>Commander</strong><small>40 life • official rules • 2–6 seats</small><b>Official</b></button>
+        <button class="format-launch-card brawl" data-home-panel-target="brawl" type="button"><span>⚡</span><strong>Brawl</strong><small>25 life • 1v1 • Arena legality</small><b>Official</b></button>
+        <button class="format-launch-card custom" data-home-panel-target="custom" type="button"><span>⚙</span><strong>Custom</strong><small>Host controls life, bans and play style</small><b>Rule Zero</b></button>
+        <button class="format-launch-card neutral" data-home-panel-target="join" type="button"><span>↗</span><strong>Join</strong><small>Enter a six-character room code</small></button>
+        <button class="format-launch-card ai" data-home-panel-target="test" type="button"><span>AI</span><strong>Test Lab</strong><small>Your deck against an expert bot</small></button>
+        <button class="format-launch-card neutral" data-home-panel-target="watch" type="button"><span>◉</span><strong>Watch</strong><small>Spectate without seeing hidden cards</small></button>
       </section>
-      <section class="panel ai-test-lab-panel">
-        <div class="section-heading"><div><p class="eyebrow">Solo Test Lab</p><h2>Your deck vs an AI Commander deck</h2><p>Import two decks, choose a bot level, then test opening hands, sequencing, combat and responses without waiting for another player.</p></div><span class="badge info">v35 AI</span></div>
-        ${state.decks.length >= 2 ? `<form id="createTestLabForm" class="ai-test-form"><div class="form-grid two"><label>Your deck<select name="playerDeckId" required><option value="">Choose your deck…</option>${state.decks.map((deck)=>`<option value="${escapeAttribute(deck.id)}">${escapeHtml(deck.name)} — ${escapeHtml(deck.commanders.join(" / "))}</option>`).join("")}</select></label><label>Bot deck<select name="botDeckId" required><option value="">Choose opponent deck…</option>${state.decks.map((deck)=>`<option value="${escapeAttribute(deck.id)}">${escapeHtml(deck.name)} — ${escapeHtml(deck.commanders.join(" / "))}</option>`).join("")}</select></label><label>Bot difficulty<select name="difficulty"><option value="beginner">Beginner</option><option value="skilled">Skilled</option><option value="competitive">Competitive</option><option value="expert" selected>Expert</option></select></label><label>Starting life<select name="startingLife">${[25,30,40].map((n)=>`<option value="${n}" ${n===40?"selected":""}>${n}</option>`).join("")}</select></label><label>Starting player<select name="startingPlayer"><option value="random">Random</option><option value="human">You</option><option value="bot">Bot</option></select></label><label>Bot action speed<select name="speedMs"><option value="250">Very fast</option><option value="500">Fast</option><option value="900" selected>Normal</option><option value="1400">Slow</option><option value="2200">Study mode</option></select></label></div><input type="hidden" name="playerName" value="${escapeAttribute(playerName() || "Fries91")}"><button class="primary-button" type="submit">Launch Solo Test Lab</button></form>` : `<div class="empty-state"><p>Import at least two Commander decks to launch a test.</p><button class="primary-button" data-action="import-deck">Import a deck</button></div>`}
-      </section>
-      <section class="panel"><div class="section-heading"><div><p class="eyebrow">Saved on this device</p><h2>My decks</h2></div><div class="button-row"><button class="ghost-button" data-action="open-ui-settings">Display settings</button><button class="primary-button" data-action="import-deck">Import deck</button></div></div>${state.decks.length ? `<div class="deck-grid">${state.decks.slice(0, 4).map(renderDeckCard).join("")}</div>` : `<div class="empty-state">No decks imported yet.</div>`}</section>
+
+      <div class="format-home-panels">
+        <section class="format-home-panel" data-home-panel="commander" hidden>
+          <button class="format-panel-close" type="button" data-home-panel-close>×</button>
+          <div class="section-heading"><div><p class="eyebrow">Official Commander</p><h2>Create a Commander table</h2></div><span class="format-badge format-commander"><b>♛</b>40 LIFE</span></div>
+          <div class="rule-chip-list"><span>100 cards</span><span>Singleton</span><span>Official bans</span><span>Commander tax</span><span>21 commander damage</span></div>
+          <form id="createCommanderRoomForm"><label>Player name<input name="playerName" maxlength="24" required value="${escapeHtml(playerName())}" placeholder="Fries91"></label><label>Maximum players<select name="maxPlayers">${[2,3,4,5,6].map((n)=>`<option value="${n}" ${n===4?"selected":""}>${n}</option>`).join("")}</select></label><button class="primary-button wide-button" type="submit">Create Official Commander</button></form>
+        </section>
+
+        <section class="format-home-panel" data-home-panel="brawl" hidden>
+          <button class="format-panel-close" type="button" data-home-panel-close>×</button>
+          <div class="section-heading"><div><p class="eyebrow">Official Brawl</p><h2>Create a Brawl duel</h2></div><span class="format-badge format-brawl"><b>⚡</b>25 LIFE</span></div>
+          <div class="rule-chip-list"><span>Exactly 2 players</span><span>100 cards</span><span>Planeswalker commanders</span><span>One free mulligan</span><span>No commander damage</span></div>
+          <form id="createBrawlRoomForm"><label>Player name<input name="playerName" maxlength="24" required value="${escapeHtml(playerName())}" placeholder="Fries91"></label><button class="primary-button wide-button" type="submit">Create Official Brawl</button></form>
+        </section>
+
+        <section class="format-home-panel" data-home-panel="custom" hidden>
+          <button class="format-panel-close" type="button" data-home-panel-close>×</button>
+          <div class="section-heading"><div><p class="eyebrow">Custom Rule Zero</p><h2>Build your own table</h2><p>Every exception is displayed to all players before they ready up.</p></div><span class="format-badge format-custom"><b>⚙</b>CUSTOM</span></div>
+          <form id="createCustomRoomForm">
+            <div class="form-grid two"><label>Player name<input name="playerName" maxlength="24" required value="${escapeHtml(playerName())}" placeholder="Fries91"></label><label>Maximum players<select name="maxPlayers">${[2,3,4,5,6].map((n)=>`<option value="${n}" ${n===4?"selected":""}>${n}</option>`).join("")}</select></label><label>Starting life<input name="startingLife" type="number" min="1" max="200" value="40"></label></div>
+            <details class="custom-rules-details" open><summary>Deck, banned-card and play-style exceptions</summary>${customRuleFormFields({})}</details>
+            <button class="primary-button wide-button" type="submit">Create Custom Room</button>
+          </form>
+        </section>
+
+        <section class="format-home-panel" data-home-panel="join" hidden>
+          <button class="format-panel-close" type="button" data-home-panel-close>×</button>
+          <div class="section-heading"><div><p class="eyebrow">Join</p><h2>Take your seat</h2></div></div>
+          <form id="joinRoomForm"><label>Player name<input name="playerName" maxlength="24" required value="${escapeHtml(playerName())}" placeholder="Your name"></label><label>Room code<input name="roomCode" maxlength="6" required autocomplete="off" autocapitalize="characters" placeholder="ABC234"></label><button class="secondary-button wide-button" type="submit">Join Room</button></form>
+        </section>
+
+        <section class="format-home-panel" data-home-panel="test" hidden>
+          <button class="format-panel-close" type="button" data-home-panel-close>×</button>
+          <div class="section-heading"><div><p class="eyebrow">Solo Test Lab</p><h2>Play against an AI deck</h2></div><span class="badge ai-badge">Expert bot</span></div>
+          ${state.decks.length >= 2 ? `<form id="createTestLabForm"><div class="form-grid two"><label>Test format<select name="format"><option value="commander">Official Commander — 40 life</option><option value="brawl">Official Brawl — 25 life</option><option value="custom">Custom test — choose life</option></select></label><label>Custom life<input name="startingLife" type="number" min="1" max="200" value="40"></label><label>Your deck<select name="playerDeckId" required><option value="">Choose your deck…</option>${deckOptions}</select></label><label>Bot deck<select name="botDeckId" required><option value="">Choose opponent deck…</option>${deckOptions}</select></label><label>Bot difficulty<select name="difficulty"><option value="beginner">Beginner</option><option value="skilled">Skilled</option><option value="competitive">Competitive</option><option value="expert" selected>Expert</option></select></label><label>Starting player<select name="startingPlayer"><option value="random">Random</option><option value="human">You</option><option value="bot">Bot</option></select></label><label>Bot speed<select name="speedMs"><option value="250">Very fast</option><option value="500">Fast</option><option value="900" selected>Normal</option><option value="1400">Slow</option><option value="2200">Study mode</option></select></label></div><details class="custom-rules-details test-custom-rules" data-test-custom-rules hidden><summary>Custom Test Lab rules</summary>${customRuleFormFields({ playStyle: "duel", allowInvalidDecks: true }, "test")}</details><input type="hidden" name="playerName" value="${escapeAttribute(playerName() || "Fries91")}"><button class="primary-button wide-button" type="submit">Launch Test Lab</button></form>` : `<div class="empty-state"><p>Import at least two decks first.</p><button class="primary-button" data-action="import-deck">Import a deck</button></div>`}
+        </section>
+
+        <section class="format-home-panel" data-home-panel="watch" hidden>
+          <button class="format-panel-close" type="button" data-home-panel-close>×</button>
+          <div class="section-heading"><div><p class="eyebrow">Spectator</p><h2>Watch a table</h2></div></div>
+          <form id="spectatorForm"><label>Display name<input name="name" maxlength="24" required value="${escapeHtml(playerName() || "Spectator")}" placeholder="Spectator"></label><label>Room code<input name="roomCode" maxlength="6" required autocomplete="off" autocapitalize="characters" placeholder="ABC234"></label><button class="ghost-button wide-button" type="submit">Watch Room</button></form>
+        </section>
+      </div>
+
+      <section class="panel clean-decks-panel"><div class="section-heading"><div><p class="eyebrow">Deck library</p><h2>Your decks</h2></div><div class="button-row"><button class="secondary-button" data-nav="decks">Open decks</button><button class="primary-button" data-action="import-deck">Import deck</button></div></div>${state.decks.length ? `<p>${state.decks.length} deck${state.decks.length===1?"":"s"} saved on this device.</p><div class="deck-grid compact">${state.decks.slice(0,2).map(renderDeckCard).join("")}</div>` : `<div class="empty-state">No decks imported yet.</div>`}</section>
     `;
   }
 
@@ -372,13 +499,26 @@
     const selectedDeckId = me?.deck?.id || "";
     const allReady = state.room.players.length >= 2 && state.room.players.every((player) => player.ready && player.connected && player.deck);
     const settings = state.room.settings || {};
+    const rules = state.room.formatRules || {};
+    const timerOptions = [[0,"Off"],[60,"1 minute"],[90,"90 seconds"],[120,"2 minutes"],[180,"3 minutes"],[300,"5 minutes"]];
+    const maxPlayerControl = state.room.format === "brawl"
+      ? `<label>Players<input value="2" disabled></label>`
+      : `<label>Maximum players<select name="maxPlayers">${[2,3,4,5,6].map((n)=>`<option value="${n}" ${n===state.room.maxPlayers?"selected":""}>${n}</option>`).join("")}</select></label>`;
+    const customControls = state.room.format === "custom" ? `
+      <label>Starting life<input name="startingLife" type="number" min="1" max="200" value="${state.room.startingLife}"></label>
+      <details class="custom-rules-details" open><summary>Edit Rule Zero exceptions</summary>${customRuleFormFields(rules)}</details>` : "";
     return `
-      <section class="panel lobby-top"><div><p class="eyebrow">Private Arena Commander lobby</p><h1>Room <span class="room-code">${escapeHtml(state.room.code)}</span></h1><p>${state.room.players.length}/${state.room.maxPlayers} players • ${state.room.startingLife} life • ${state.room.spectatorCount || 0} watching</p><div>${persistenceBadge()}</div></div><div class="button-row"><button class="secondary-button" data-action="copy-room-code">Copy code</button><button class="ghost-button" data-action="leave-room">Leave</button></div></section>
+      <section class="panel lobby-top"><div><div class="lobby-format-line">${formatBadgeHtml()}<span>${escapeHtml(roomFormatMeta().detail)}</span></div><h1>Room <span class="room-code">${escapeHtml(state.room.code)}</span></h1><p>${state.room.players.length}/${state.room.maxPlayers} seats • ${state.room.spectatorCount || 0} watching</p><div>${persistenceBadge()}</div></div><div class="button-row"><button class="secondary-button" data-action="copy-room-code">Copy code</button><button class="ghost-button" data-action="leave-room">Leave</button></div></section>
+      ${formatRuleSummaryHtml()}
       <section class="lobby-grid">
-        <div class="panel"><div class="section-heading"><h2>Clockwise seats</h2><span class="badge ${allReady ? "success" : "warning"}">${allReady ? "Ready" : "Waiting"}</span></div><div class="player-list">${state.room.players.map(renderLobbyPlayer).join("")}</div>${state.room.spectators?.length ? `<div class="spectator-list"><strong>Spectators</strong><span>${state.room.spectators.map((entry) => escapeHtml(entry.name)).join(", ")}</span></div>` : ""}</div>
-        <div class="panel"><h2>Your setup</h2><label>Commander deck<select id="lobbyDeckSelect"><option value="">Choose a deck…</option>${state.decks.map((deck) => `<option value="${escapeHtml(deck.id)}" ${deck.id === selectedDeckId ? "selected" : ""}>${escapeHtml(deck.name)} — ${escapeHtml(deck.commanders.join(" / "))}</option>`).join("")}</select></label><div class="button-row"><button class="secondary-button" data-action="import-deck">Import deck</button><button class="primary-button" data-action="toggle-ready" ${!me?.deck ? "disabled" : ""}>${me?.ready ? "Mark not ready" : "Mark ready"}</button></div>${isHost() ? `<div class="divider"></div><form id="roomSettingsForm"><div class="form-grid two"><label>Maximum players<select name="maxPlayers">${[2,3,4,5,6].map((n) => `<option value="${n}" ${n === state.room.maxPlayers ? "selected" : ""}>${n}</option>`).join("")}</select></label><label>Starting life<select name="startingLife">${[25,30,40].map((n) => `<option value="${n}" ${n === state.room.startingLife ? "selected" : ""}>${n}</option>`).join("")}</select></label><label>Turn timer<select name="turnTimerSeconds">${[[0,"Off"],[60,"1 minute"],[90,"90 seconds"],[120,"2 minutes"],[180,"3 minutes"],[300,"5 minutes"]].map(([value,label]) => `<option value="${value}" ${Number(settings.turnTimerSeconds || 0) === value ? "selected" : ""}>${label}</option>`).join("")}</select></label><label class="check-row"><input type="checkbox" name="allowSpectators" value="1" ${settings.allowSpectators !== false ? "checked" : ""}> Allow spectators</label><label class="check-row"><input type="checkbox" name="enforceDeckRules" value="1" ${settings.enforceDeckRules !== false ? "checked" : ""}> Enforce Commander validation</label><label class="check-row"><input type="checkbox" name="autoStateBasedActions" value="1" ${settings.autoStateBasedActions !== false ? "checked" : ""}> Automatic state-based actions</label><label class="check-row"><input type="checkbox" name="freeCommanderMulligan" value="1" ${settings.freeCommanderMulligan !== false ? "checked" : ""}> Free first multiplayer mulligan</label><label class="check-row"><input type="checkbox" name="allowInvalidDecks" value="1" ${settings.allowInvalidDecks ? "checked" : ""}> Judge override: allow invalid decks</label></div><div class="button-row"><button class="secondary-button" type="submit">Save settings</button><button class="primary-button" type="button" data-action="start-game" ${allReady ? "" : "disabled"}>Start d20 roll-off</button></div></form>` : ""}</div>
+        <div class="panel"><div class="section-heading"><h2>Seats</h2><span class="badge ${allReady ? "success" : "warning"}">${allReady ? "Ready" : "Waiting"}</span></div><div class="player-list">${state.room.players.map(renderLobbyPlayer).join("")}</div>${state.room.spectators?.length ? `<div class="spectator-list"><strong>Spectators</strong><span>${state.room.spectators.map((entry)=>escapeHtml(entry.name)).join(", ")}</span></div>` : ""}</div>
+        <div class="panel"><h2>Your setup</h2><label>Deck<select id="lobbyDeckSelect"><option value="">Choose a deck…</option>${state.decks.map((deck)=>`<option value="${escapeHtml(deck.id)}" ${deck.id===selectedDeckId?"selected":""}>${escapeHtml(deck.name)} — ${escapeHtml(deck.commanders.join(" / "))}</option>`).join("")}</select></label>
+          ${me?.deckValidation && !me.deckValidation.valid ? `<div class="notice warning"><strong>Deck issue:</strong> ${escapeHtml(me.deckValidation.errors?.[0] || "Deck is not legal for this room.")}</div>` : me?.deckValidation?.warnings?.length ? `<div class="notice"><strong>Deck warning:</strong> ${escapeHtml(me.deckValidation.warnings[0])}</div>` : ""}
+          <div class="button-row"><button class="secondary-button" data-action="import-deck">Import deck</button><button class="primary-button" data-action="toggle-ready" ${!me?.deck?"disabled":""}>${me?.ready?"Mark not ready":"Accept rules & ready"}</button></div>
+          ${isHost() ? `<div class="divider"></div><form id="roomSettingsForm"><div class="form-grid two">${maxPlayerControl}${customControls}<label>Turn timer<select name="turnTimerSeconds">${timerOptions.map(([v,l])=>`<option value="${v}" ${Number(settings.turnTimerSeconds||0)===v?"selected":""}>${l}</option>`).join("")}</select></label><label class="check-row"><input type="checkbox" name="allowSpectators" value="1" ${settings.allowSpectators!==false?"checked":""}> Allow spectators</label><label class="check-row"><input type="checkbox" name="autoStateBasedActions" value="1" ${settings.autoStateBasedActions!==false?"checked":""}> Automatic state checks</label></div><div class="button-row"><button class="secondary-button" type="submit">Save room rules</button><button class="primary-button" type="button" data-action="start-game" ${allReady?"":"disabled"}>Start d20 roll-off</button></div></form>` : ""}
+        </div>
       </section>
-      ${isHost() && state.room.players.length < state.room.maxPlayers ? `<section class="panel lobby-bot-panel"><div class="section-heading"><div><p class="eyebrow">Optional AI seats</p><h2>Add a Commander bot</h2><p>Mix human and bot seats in any combination up to the room limit.</p></div><span class="badge info">${state.room.players.filter((player)=>player.isBot).length} bots</span></div>${state.decks.length ? `<form id="addBotForm"><div class="form-grid two"><label>Bot deck<select name="deckId" required><option value="">Choose a deck…</option>${state.decks.map((deck)=>`<option value="${escapeAttribute(deck.id)}">${escapeHtml(deck.name)} — ${escapeHtml(deck.commanders.join(" / "))}</option>`).join("")}</select></label><label>Difficulty<select name="difficulty"><option value="beginner">Beginner</option><option value="skilled">Skilled</option><option value="competitive">Competitive</option><option value="expert" selected>Expert</option></select></label><label>Bot name<input name="name" maxlength="24" placeholder="Commander Bot"></label></div><button class="secondary-button" type="submit">Add AI seat</button></form>` : `<div class="empty-state">Import a deck before adding a bot seat.</div>`}</section>` : ""}
+      ${isHost() && state.room.players.length < state.room.maxPlayers ? `<section class="panel lobby-bot-panel"><div class="section-heading"><div><p class="eyebrow">Optional AI seat</p><h2>Add a ${escapeHtml(state.room.formatLabel || "Commander")} bot</h2><p>The bot deck must pass the same room rules.</p></div><span class="badge info">${state.room.players.filter((player)=>player.isBot).length} bots</span></div>${state.decks.length ? `<form id="addBotForm"><div class="form-grid two"><label>Bot deck<select name="deckId" required><option value="">Choose a deck…</option>${state.decks.map((deck)=>`<option value="${escapeAttribute(deck.id)}">${escapeHtml(deck.name)} — ${escapeHtml(deck.commanders.join(" / "))}</option>`).join("")}</select></label><label>Difficulty<select name="difficulty"><option value="beginner">Beginner</option><option value="skilled">Skilled</option><option value="competitive">Competitive</option><option value="expert" selected>Expert</option></select></label><label>Bot name<input name="name" maxlength="24" placeholder="Arena Bot"></label></div><button class="secondary-button" type="submit">Add AI seat</button></form>` : `<div class="empty-state">Import a deck before adding a bot.</div>`}</section>` : ""}
     `;
   }
 
@@ -388,7 +528,8 @@
 
   function renderLobbyPlayer(player) {
     const self = player.id === state.session?.playerId;
-    return `<article class="lobby-player ${player.isBot ? "is-bot" : ""}"><div><strong>${escapeHtml(player.name)}</strong> ${player.id === state.room.hostId ? `<span class="badge info">Host</span>` : ""} ${self ? `<span class="badge">You</span>` : ""} ${player.isBot ? `<span class="badge ai-badge">AI ${escapeHtml(player.botState?.difficulty || "skilled")}</span>` : ""}<p>${player.deck ? `${escapeHtml(player.deck.name)} • ${escapeHtml(player.deck.commanders.join(" / "))}` : "No deck selected"}</p></div><div><span class="status-dot ${player.connected ? "online" : "offline"}"></span>${player.isBot ? "AI ready" : player.connected ? (player.ready ? "Ready" : "Waiting") : "Offline"}${isHost() && !self ? `<button class="small-button danger-button" data-action="kick-player" data-player-id="${player.id}">Remove</button>` : ""}</div></article>`;
+    const validation = player.deckValidation;
+    return `<article class="lobby-player ${player.isBot ? "is-bot" : ""}"><div><strong>${escapeHtml(player.name)}</strong> ${player.id === state.room.hostId ? `<span class="badge info">Host</span>` : ""} ${self ? `<span class="badge">You</span>` : ""} ${player.teamId ? `<span class="badge">${escapeHtml(player.teamId)}</span>` : ""} ${player.isBot ? `<span class="badge ai-badge">AI ${escapeHtml(player.botState?.difficulty || "skilled")}</span>` : ""}<p>${player.deck ? `${escapeHtml(player.deck.name)} • ${escapeHtml(player.deck.commanders.join(" / "))}` : "No deck selected"}</p>${validation && !validation.valid ? `<small class="deck-invalid">⚠ ${escapeHtml(validation.errors?.[0] || "Deck invalid")}</small>` : validation?.valid ? `<small class="deck-valid">✓ Legal for this room</small>` : ""}</div><div><span class="status-dot ${player.connected ? "online" : "offline"}"></span>${player.isBot ? "AI ready" : player.connected ? (player.ready ? "Ready" : "Waiting") : "Offline"}${isHost() && !self ? `<button class="small-button danger-button" data-action="kick-player" data-player-id="${player.id}">Remove</button>` : ""}</div></article>`;
   }
 
   function orderedPlayers() {
@@ -676,7 +817,7 @@
     const phase = state.room.phases[state.room.turn?.phaseIndex || 0] || "Untap";
     return `<div class="arena-game-shell player-count-${players.length} ${isSpectator() ? "spectator-mode" : ""}">
       ${state.targetMode ? renderTargetBanner() : ""}
-      <header class="arena-game-topbar"><div class="arena-room-meta"><button class="room-pill" data-action="copy-room-code">${escapeHtml(state.room.code)}</button>${state.room.mode === "test-lab" ? `<span class="badge ai-badge">SOLO TEST LAB</span>` : state.room.players.some((player)=>player.isBot) ? `<span class="badge ai-badge">AI TABLE</span>` : ""}<span>Turn ${state.room.turn?.number || 1}</span><strong>${escapeHtml(active?.name || "Player")}</strong><span>${escapeHtml(phase)}</span>${persistenceBadge()}</div><div class="arena-top-actions"><span class="priority-label">Priority: <strong>${escapeHtml(priority?.name || "—")}</strong></span><span id="turnClock" class="turn-clock">${formatClock(turnSecondsRemaining())}</span><button data-action="open-ui-settings">⚙</button><button data-action="toggle-fullscreen">⛶</button></div></header>
+      <header class="arena-game-topbar"><div class="arena-room-meta"><button class="room-pill" data-action="copy-room-code">${escapeHtml(state.room.code)}</button>${formatBadgeHtml()}${state.room.mode === "test-lab" ? `<span class="badge ai-badge">SOLO TEST LAB</span>` : state.room.players.some((player)=>player.isBot) ? `<span class="badge ai-badge">AI TABLE</span>` : ""}<span>Turn ${state.room.turn?.number || 1}</span><strong>${escapeHtml(active?.name || "Player")}</strong><span>${escapeHtml(phase)}</span>${persistenceBadge()}</div><div class="arena-top-actions"><span class="priority-label">Priority: <strong>${escapeHtml(priority?.name || "—")}</strong></span><span id="turnClock" class="turn-clock">${formatClock(turnSecondsRemaining())}</span><button data-action="open-ui-settings">⚙</button><button data-action="toggle-fullscreen">⛶</button></div></header>
       ${renderPhaseBar()}
       <main class="arena-stage">
         <svg id="arenaLines" class="arena-lines" aria-hidden="true"><defs><marker id="arrowAttack" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto"><path d="M0,0 L0,6 L9,3 z"></path></marker><marker id="arrowLink" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto"><path d="M0,0 L0,6 L9,3 z"></path></marker></defs></svg>
@@ -814,7 +955,7 @@
   }
 
   function renderHelp() {
-    return `<section class="panel"><div class="section-heading"><div><p class="eyebrow">Arena Commander v35</p><h1>How the digital table works</h1></div></div><div class="help-grid"><article class="help-card"><h3>Full-screen table</h3><p>Your seat stays at the bottom while opponents are arranged clockwise around the battlefield. Spectators see the whole public table without hidden hands.</p></article><article class="help-card"><h3>Drag or tap</h3><p>Drag cards between your zones, drag creatures to opponents to attack, or use the card action sheet on touch devices.</p></article><article class="help-card"><h3>Stack & priority</h3><p>The priority holder glows. Pass clockwise; when everyone passes, the top stack item resolves.</p></article><article class="help-card"><h3>Combat</h3><p>Attack and block arrows, damage previews and assisted keyword handling make multiplayer combat easier to follow.</p></article><article class="help-card"><h3>Performance</h3><p>Low-data, reduced-animation, high-contrast and large-text options are stored on each device.</p></article><article class="help-card"><h3>AI Test Lab</h3><p>Choose two imported decks to test against Beginner, Skilled, Competitive or Expert AI. Pause, step, reveal the bot hand, restart or swap decks from the Rules drawer.</p></article><article class="help-card"><h3>Optional bot seats</h3><p>Room hosts can mix human and AI seats in normal 2–6 player Commander games. Bots roll, pass priority, develop mana, cast, attack and block through the shared rules engine.</p></article><article class="help-card"><h3>Sandbox fallback</h3><p>Complex replacement effects and difficult layer interactions remain manually adjustable so unusual cards never lock the game.</p></article></div></section>`;
+    return `<section class="panel"><div class="section-heading"><div><p class="eyebrow">Arena Commander v37</p><h1>Formats and digital table guide</h1></div></div><div class="help-grid"><article class="help-card"><h3>Official Commander</h3><p>Locked at 40 life with 100-card singleton construction, color identity, official banned cards, commander tax and the 21 commander-damage rule.</p></article><article class="help-card"><h3>Official Brawl</h3><p>Locked to two players and 25 life, with 100 cards, Arena/Brawl legality, one commander, one free mulligan and no commander-damage loss.</p></article><article class="help-card"><h3>Custom Rule Zero</h3><p>The host may change life, deck size, banned-card exceptions, extra bans, commanders, mulligans, poison, commander damage and play style. Everyone sees a summary before readying.</p></article><article class="help-card"><h3>Stack and priority</h3><p>The priority holder glows. Players pass clockwise; when everyone passes, the top stack item may resolve.</p></article><article class="help-card"><h3>Combat</h3><p>Free-for-All, Duel, Teams, neighbour-only attacks and Archenemy custom modes use server-validated legal defenders.</p></article><article class="help-card"><h3>AI Test Lab</h3><p>Test Commander, Brawl or Custom decks against Beginner, Skilled, Competitive or Expert AI. Complex card-specific exceptions remain assisted or handled through Judge Mode.</p></article><article class="help-card"><h3>Hidden information</h3><p>Opponent hands and libraries remain server-hidden. Spectators only receive public zones unless a Test Lab host deliberately reveals a bot hand.</p></article><article class="help-card"><h3>Reconnect and autosave</h3><p>PostgreSQL-backed rooms save the table, turn, stack, zones, counters and AI state so players can reconnect after closing the app.</p></article></div></section>`;
   }
 
 
@@ -1270,12 +1411,13 @@
       const playerDeck = deckById(data.get("playerDeckId"));
       const botDeck = deckById(data.get("botDeckId"));
       const chosenName = String(data.get("playerName") || playerName() || "Fries91").trim();
+      const format = String(data.get("format") || "commander");
+      const customRules = format === "custom" ? readCustomRules(data, "test") : null;
+      const startingLife = format === "brawl" ? 25 : format === "commander" ? 40 : Number(data.get("startingLife") || 40);
       rememberPlayerName(chosenName);
-      if (!playerDeck || !botDeck) return showToast("Choose both decks first.", "error");
-      if (playerDeck.id === botDeck.id) showToast("Testing a mirror match with the same deck.", "info");
-      const response = await emitAck("create-test-lab", { playerName: chosenName, playerDeck, botDeck, difficulty: data.get("difficulty"), startingLife: Number(data.get("startingLife")), startingPlayer: data.get("startingPlayer"), speedMs: Number(data.get("speedMs")) }, false);
+      const response = await emitAck("create-test-lab", { playerName: chosenName, playerDeck, botDeck, format, formatRules: customRules, difficulty: data.get("difficulty"), startingLife, startingPlayer: data.get("startingPlayer"), speedMs: Number(data.get("speedMs")) }, false);
       if (!response.success) showToast(response.error, "error");
-      else { setSession(response); state.activeDrawer = "rules"; render(); }
+      else { setSession(response); render(); }
       return;
     }
     if (form.id === "addBotForm") {
@@ -1301,11 +1443,21 @@
       return;
     }
 
-    if (form.id === "createRoomForm") {
-      rememberPlayerName(data.get("playerName"));
-      const response = await emitAck("create-room", { playerName: data.get("playerName"), maxPlayers: Number(data.get("maxPlayers")), startingLife: Number(data.get("startingLife")) }, false);
+    if (["createCommanderRoomForm","createBrawlRoomForm","createCustomRoomForm"].includes(form.id)) {
+      const format = form.id === "createBrawlRoomForm" ? "brawl" : form.id === "createCustomRoomForm" ? "custom" : "commander";
+      const chosenName = data.get("playerName");
+      rememberPlayerName(chosenName);
+      const payload = {
+        playerName: chosenName,
+        format,
+        maxPlayers: format === "brawl" ? 2 : Number(data.get("maxPlayers") || 4),
+        startingLife: format === "brawl" ? 25 : format === "commander" ? 40 : Number(data.get("startingLife") || 40),
+        formatRules: format === "custom" ? readCustomRules(data) : null
+      };
+      const response = await emitAck("create-room", payload, false);
       if (!response.success) showToast(response.error, "error");
       else { setSession(response); render(); }
+      return;
     }
     if (form.id === "joinRoomForm") {
       rememberPlayerName(data.get("playerName"));
@@ -1361,9 +1513,18 @@
       }
     }
     if (form.id === "roomSettingsForm") {
-      const response = await emitAck("update-room-settings", { maxPlayers: Number(data.get("maxPlayers")), startingLife: Number(data.get("startingLife")), turnTimerSeconds: Number(data.get("turnTimerSeconds") || 0), allowSpectators: data.get("allowSpectators") === "1", enforceDeckRules: data.get("enforceDeckRules") === "1", allowInvalidDecks: data.get("allowInvalidDecks") === "1", autoStateBasedActions: data.get("autoStateBasedActions") === "1", freeCommanderMulligan: data.get("freeCommanderMulligan") === "1" });
+      const payload = {
+        maxPlayers: Number(data.get("maxPlayers") || state.room.maxPlayers),
+        startingLife: Number(data.get("startingLife") || state.room.startingLife),
+        turnTimerSeconds: Number(data.get("turnTimerSeconds") || 0),
+        allowSpectators: data.get("allowSpectators") === "1",
+        autoStateBasedActions: data.get("autoStateBasedActions") === "1",
+        formatRules: state.room.format === "custom" ? readCustomRules(data) : null
+      };
+      const response = await emitAck("update-room-settings", payload);
       if (!response.success) showToast(response.error, "error");
       else { state.room = response.room; render(); }
+      return;
     }
     if (form.id === "tokenForm") return gameAction({ type: "create-token", name: data.get("name"), power: data.get("power"), toughness: data.get("toughness") });
     if (form.id === "castCardForm") return gameAction({ type: "cast-card", cardId: data.get("cardId"), fromZone: data.get("fromZone"), targets: data.getAll("targets"), xValue:Number(data.get("xValue")||0), modes:String(data.get("modes")||"").split(";").map((v)=>v.trim()).filter(Boolean), additionalCosts:String(data.get("additionalCosts")||"").split(";").map((v)=>v.trim()).filter(Boolean), enforcePayment:data.get("enforcePayment")==="on", manaPayment:Object.fromEntries(["W","U","B","R","G","C"].map((symbol)=>[symbol,Number(data.get(`pay${symbol}`)||0)])) });
