@@ -1,6 +1,6 @@
 "use strict";
 
-const CACHE_NAME = "arena-commander-gameplay-v40.1.0";
+const CACHE_NAME = "arena-commander-table-v41.0.0";
 const APP_SHELL = [
   "/",
   "/index.html",
@@ -10,10 +10,12 @@ const APP_SHELL = [
   "/commander-theme.css?v=39.0.0",
   "/card-automation.css?v=40.0.0",
   "/gameplay-hotfix.css?v=40.1.0",
+  "/arena-table-v41.css?v=41.0.0",
   "/app.js",
   "/deck-import-fix.js?v=39.2.0",
   "/card-automation-ui.js?v=40.0.0",
   "/gameplay-hotfix.js?v=40.1.0",
+  "/arena-table-v41.js?v=41.0.0",
   "/clean-home.js?v=39.0.0",
   "/meta-library.js?v=39.0.0",
   "/lobby-notifier-ui.js?v=39.1.0",
@@ -42,13 +44,20 @@ self.addEventListener("activate", (event) => {
 self.addEventListener("fetch", (event) => {
   const request = event.request;
   if (request.method !== "GET") return;
+
   const url = new URL(request.url);
-  if (url.origin !== self.location.origin || url.pathname.startsWith("/socket.io/") || url.pathname.startsWith("/api/") || url.pathname.endsWith(".user.js")) return;
+  if (
+    url.origin !== self.location.origin ||
+    url.pathname.startsWith("/socket.io/") ||
+    url.pathname.startsWith("/api/") ||
+    url.pathname.endsWith(".user.js")
+  ) return;
+
   event.respondWith(
     fetch(request)
       .then((response) => {
-        const clone = response.clone();
-        caches.open(CACHE_NAME).then((cache) => cache.put(request, clone)).catch(() => undefined);
+        const copy = response.clone();
+        caches.open(CACHE_NAME).then((cache) => cache.put(request, copy)).catch(() => undefined);
         return response;
       })
       .catch(() => caches.match(request).then((cached) => cached || caches.match("/index.html")))
