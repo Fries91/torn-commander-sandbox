@@ -1,7 +1,7 @@
 {
-  "name": "Arena Commander Meta Library",
-  "short_name": "Commander v38",
-  "description": "Official Commander, Official Brawl and Custom Rule Zero tables with AI Test Lab, automatically refreshed Meta Opponents and 2–6 player support.",
+  "name": "Arena Commander Table & Meta Library",
+  "short_name": "Commander v39",
+  "description": "Commander, Brawl and Custom tables with AI Test Lab, Meta Opponents, Torn game alerts and 2\u20136 player support.",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
