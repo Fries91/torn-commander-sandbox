@@ -1,13 +1,13 @@
 "use strict";
 
-const CACHE_NAME = "arena-commander-v35-clean-ui-36.0.0";
+const CACHE_NAME = "arena-commander-formats-v37.0.0";
 const APP_SHELL = [
   "/",
   "/index.html",
   "/styles.css",
-  "/clean-home.css?v=36.0.0",
+  "/clean-home.css?v=37.0.0",
   "/app.js",
-  "/clean-home.js?v=36.0.0",
+  "/clean-home.js?v=37.0.0",
   "/manifest.webmanifest",
   "/icon.svg"
 ];
