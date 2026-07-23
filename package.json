@@ -1,13 +1,14 @@
 {
   "name": "torn-commander-sandbox",
-  "version": "37.0.0",
+  "version": "38.0.0",
   "private": true,
-  "description": "Arena-style MTG table with locked Official Commander and Brawl presets, Custom Rule Zero rooms, 2–6 seats, AI Test Lab and persistent games.",
+  "description": "Arena-style MTG Commander and Brawl table with Custom Rule Zero, AI Test Lab, automatically refreshed Meta Deck Library and persistent games.",
   "main": "server.js",
   "scripts": {
-    "start": "node server.js",
-    "dev": "node --watch server.js",
-    "check": "node --check server.js && node --check ai-engine.js && node --check public/app.js && node --check public/sw.js"
+    "start": "node -r ./meta-register.js server.js",
+    "dev": "node --watch -r ./meta-register.js server.js",
+    "check": "node --check server.js && node --check ai-engine.js && node --check meta-register.js && node --check meta-library-server.js && node --check meta-sync.js && node --check meta-sources/common.js && node --check meta-sources/archidekt.js && node --check meta-sources/moxfield.js && node --check meta-sources/catalog.js && node --check meta-sources/edhrec.js && node --check meta-sources/cedh-ddb.js && node --check scripts/sync-meta-decks.js && node --check public/app.js && node --check public/clean-home.js && node --check public/meta-library.js && node --check public/sw.js",
+    "sync:meta": "node scripts/sync-meta-decks.js"
   },
   "engines": {
     "node": ">=20"
