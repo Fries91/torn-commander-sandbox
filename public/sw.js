@@ -1,6 +1,6 @@
 "use strict";
 
-const CACHE_NAME = "arena-commander-deck-import-fix-v39.2.0";
+const CACHE_NAME = "arena-commander-card-automation-v40.0.0";
 const APP_SHELL = [
   "/",
   "/index.html",
@@ -8,8 +8,9 @@ const APP_SHELL = [
   "/clean-home.css?v=39.0.0",
   "/meta-library.css?v=39.0.0",
   "/commander-theme.css?v=39.0.0",
+  "/card-automation.css?v=40.0.0",
   "/app.js",
-  "/deck-import-fix.js?v=39.2.0",
+  "/card-automation-ui.js?v=40.0.0",
   "/clean-home.js?v=39.0.0",
   "/meta-library.js?v=39.0.0",
   "/lobby-notifier-ui.js?v=39.1.0",
