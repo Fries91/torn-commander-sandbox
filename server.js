@@ -53,8 +53,8 @@ const MAX_REPLAY_FRAMES = 80;
 const MAX_SPECTATORS = 50;
 const MAX_RULE_DECISIONS = 80;
 const MAX_RULE_EFFECTS = 160;
-const RULES_VERSION = "37.0";
-const APP_VERSION = "37.0.0";
+const RULES_VERSION = "39.0";
+const APP_VERSION = "39.0.0";
 const ALLOWED_TURN_TIMERS = new Set([0, 60, 90, 120, 180, 300]);
 const PHASES = ["Untap", "Upkeep", "Draw", "Main 1", "Beginning Combat", "Declare Attackers", "Declare Blockers", "First-Strike Damage", "Combat Damage", "End Combat", "Main 2", "End", "Cleanup"];
 const ZONES = new Set(["hand", "battlefield", "graveyard", "exile", "commandZone", "library"]);
@@ -88,7 +88,7 @@ const SCRYFALL_COLLECTION_URL = "https://api.scryfall.com/cards/collection";
 const SCRYFALL_BATCH_SIZE = 75;
 const CARD_CACHE_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000;
 const CARD_LOOKUP_MAX_NAMES = 150;
-const CARD_LOOKUP_USER_AGENT = process.env.SCRYFALL_USER_AGENT || "TornCommanderSandbox/37.0 (+https://torn-commander-sandbox.onrender.com)";
+const CARD_LOOKUP_USER_AGENT = process.env.SCRYFALL_USER_AGENT || "TornCommanderSandbox/39.0 (+https://torn-commander-sandbox.onrender.com)";
 
 const rooms = new Map();
 const disconnectTimers = new Map();
@@ -97,6 +97,10 @@ const persistenceChains = new Map();
 const cardLookupCache = new Map();
 const botTimers = new Map();
 const BOT_SPEEDS = new Set([250, 500, 900, 1400, 2200]);
+const LOBBY_DIRECTORY_LIMIT = 60;
+const LOBBY_DIRECTORY_RATE_WINDOW_MS = 60 * 1000;
+const LOBBY_DIRECTORY_RATE_MAX = 120;
+const lobbyDirectoryRate = new Map();
 
 const DATABASE_URL = String(process.env.DATABASE_URL || "").trim();
 const databaseState = {
@@ -505,6 +509,72 @@ function normalizeRoomSettings(value) {
     autoStateBasedActions: value?.autoStateBasedActions !== false,
     freeCommanderMulligan: value?.freeCommanderMulligan !== false
   };
+}
+
+function normalizeLobbyDirectory(value) {
+  const source = value && typeof value === "object" ? value : {};
+  return {
+    listed: Boolean(source.listed),
+    visibility: source.visibility === "public" ? "public" : "private",
+    title: normalizeText(source.title, 80),
+    notes: normalizeText(source.notes, 180),
+    updatedAt: source.updatedAt || null
+  };
+}
+
+function lobbyDirectorySummary(room) {
+  const directory = normalizeLobbyDirectory(room?.directory);
+  const host = room?.players?.find((player) => player.id === room.hostId) || room?.players?.[0];
+  const bots = room?.players?.filter((player) => player.isBot).length || 0;
+  const readyPlayers = room?.players?.filter((player) => player.ready).length || 0;
+  const openSeats = Math.max(0, Number(room?.maxPlayers || 0) - Number(room?.players?.length || 0));
+  return {
+    roomCode: room.code,
+    title: directory.title || `${formatLabel(room.format)} game`,
+    notes: directory.notes,
+    format: room.format || "commander",
+    formatLabel: formatLabel(room.format || "commander"),
+    playStyle: room.formatRules?.playStyle || (room.format === "brawl" ? "duel" : "free-for-all"),
+    hostName: host?.name || "Host",
+    players: room.players.length,
+    humanPlayers: Math.max(0, room.players.length - bots),
+    bots,
+    readyPlayers,
+    maxPlayers: room.maxPlayers,
+    openSeats,
+    startingLife: room.startingLife,
+    createdAt: room.createdAt,
+    updatedAt: room.updatedAt,
+    joinUrl: `https://torn-commander-sandbox.onrender.com/?join=${encodeURIComponent(room.code)}`
+  };
+}
+
+function lobbyDirectoryCors(request, response, next) {
+  const origin = String(request.headers.origin || "");
+  if (/^https:\/\/(?:www\.)?torn\.com$/i.test(origin)) {
+    response.setHeader("Access-Control-Allow-Origin", origin);
+    response.setHeader("Vary", "Origin");
+  }
+  response.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+  response.setHeader("Access-Control-Allow-Headers", "Content-Type");
+  response.setHeader("Access-Control-Max-Age", "86400");
+  if (request.method === "OPTIONS") return response.status(204).end();
+  return next();
+}
+
+function lobbyDirectoryRateLimit(request, response, next) {
+  const key = String(request.ip || request.socket?.remoteAddress || "unknown");
+  const now = Date.now();
+  const record = lobbyDirectoryRate.get(key);
+  if (!record || now - record.startedAt >= LOBBY_DIRECTORY_RATE_WINDOW_MS) {
+    lobbyDirectoryRate.set(key, { startedAt: now, count: 1 });
+    return next();
+  }
+  record.count += 1;
+  if (record.count > LOBBY_DIRECTORY_RATE_MAX) {
+    return response.status(429).json({ success: false, error: "Too many lobby checks. Try again shortly." });
+  }
+  return next();
 }
 
 function normalizeGameFormat(value) {
@@ -1037,6 +1107,7 @@ function migrateRoom(room) {
     room.turn = null;
   }
   room.settings = normalizeRoomSettings(room.settings);
+  room.directory = normalizeLobbyDirectory(room.directory);
   applyFormatPreset(room);
   room.ai = normalizeAiState({ ...room.ai, enabled: room.players.some((player) => player.isBot) || room.mode !== "multiplayer", mode: room.mode });
   room.emotes = normalizeEmotes(room.emotes);
@@ -1623,6 +1694,7 @@ function createPublicRoom(room, viewerId = null) {
     updatedAt: room.updatedAt,
     startedAt: room.startedAt,
     settings: { ...normalizeRoomSettings(room.settings) },
+    directory: normalizeLobbyDirectory(room.directory),
     spectatorCount: Array.isArray(room.spectators) ? room.spectators.length : 0,
     spectators: (room.spectators || []).map((spectator) => ({ id: spectator.id, name: spectator.name, connected: spectator.connected })),
     emotes: normalizeEmotes(room.emotes),
@@ -2508,6 +2580,7 @@ function createBaseRoom({ hostPlayer, maxPlayers = 4, startingLife = 40, mode = 
     turn: null,
     rollOff: null,
     settings: normalizeRoomSettings(null),
+    directory: normalizeLobbyDirectory(null),
     ai: normalizeAiState({ enabled: mode !== "multiplayer", mode, ...ai }),
     spectators: [],
     emotes: [],
@@ -2964,8 +3037,75 @@ app.get("/api/health", (request, response) => {
   });
 });
 
+app.use("/api/lobbies", lobbyDirectoryCors, lobbyDirectoryRateLimit);
+
+app.get("/api/lobbies/open", (request, response) => {
+  const requestedFormat = normalizeGameFormat(request.query.format);
+  const useFormatFilter = GAME_FORMATS.has(String(request.query.format || "").toLowerCase());
+  const games = [...rooms.values()]
+    .filter((room) => {
+      const directory = normalizeLobbyDirectory(room.directory);
+      if (!directory.listed || directory.visibility !== "public") return false;
+      if (room.mode !== "multiplayer" || room.status !== "waiting") return false;
+      if (room.players.length >= room.maxPlayers) return false;
+      if (useFormatFilter && room.format !== requestedFormat) return false;
+      return true;
+    })
+    .sort((a, b) => Date.parse(b.updatedAt || b.createdAt) - Date.parse(a.updatedAt || a.createdAt))
+    .slice(0, LOBBY_DIRECTORY_LIMIT)
+    .map(lobbyDirectorySummary);
+  response.setHeader("Cache-Control", "no-store");
+  return response.json({ success: true, version: APP_VERSION, checkedAt: nowIso(), games });
+});
+
+app.get("/api/lobbies/open/:code", (request, response) => {
+  const room = rooms.get(normalizeRoomCode(request.params.code));
+  const directory = normalizeLobbyDirectory(room?.directory);
+  if (!room || !directory.listed || directory.visibility !== "public" || room.mode !== "multiplayer" || room.status !== "waiting" || room.players.length >= room.maxPlayers) {
+    return response.status(404).json({ success: false, error: "That listed game is no longer available." });
+  }
+  response.setHeader("Cache-Control", "no-store");
+  return response.json({ success: true, game: lobbyDirectorySummary(room) });
+});
+
+app.post("/api/lobbies/host-status", (request, response) => {
+  const auth = authenticationFrom(request.body);
+  if (!auth.success) return response.status(401).json(auth);
+  if (auth.room.hostId !== auth.player.id) return response.status(403).json({ success: false, error: "Only the room host can manage the Torn listing." });
+  return response.json({ success: true, directory: normalizeLobbyDirectory(auth.room.directory), game: lobbyDirectorySummary(auth.room) });
+});
+
+app.post("/api/lobbies/settings", (request, response) => {
+  const auth = authenticationFrom(request.body);
+  if (!auth.success) return response.status(401).json(auth);
+  if (auth.room.hostId !== auth.player.id) return response.status(403).json({ success: false, error: "Only the room host can manage the Torn listing." });
+  if (auth.room.status !== "waiting") return response.status(409).json({ success: false, error: "A game can only be listed while it is waiting in the lobby." });
+  auth.room.directory = normalizeLobbyDirectory({
+    ...auth.room.directory,
+    listed: Boolean(request.body?.listed),
+    visibility: request.body?.listed ? "public" : "private",
+    title: request.body?.title,
+    notes: request.body?.notes,
+    updatedAt: nowIso()
+  });
+  addLog(auth.room, `${auth.player.name} ${auth.room.directory.listed ? "listed" : "removed"} the room in the Torn game notifier.`, "room");
+  queueRoomSave(auth.room, true);
+  emitRoomUpdate(auth.room);
+  return response.json({ success: true, directory: auth.room.directory, game: lobbyDirectorySummary(auth.room), room: createPublicRoom(auth.room, auth.player.id) });
+});
+
+app.get("/api/notifier/version", lobbyDirectoryCors, lobbyDirectoryRateLimit, (request, response) => {
+  response.setHeader("Cache-Control", "no-store");
+  return response.json({
+    success: true,
+    appVersion: APP_VERSION,
+    scriptVersion: "1.1.0",
+    installUrl: "https://torn-commander-sandbox.onrender.com/arena-commander-notifier.user.js"
+  });
+});
+
 app.get("/api", (request, response) => {
-  response.status(200).json({ success: true, name: "Arena Commander Table API", version: APP_VERSION, modes: ["Official Commander", "Official Brawl", "Custom Rule Zero rooms", "Solo Test Lab", "Human + bot mixed tables"], persistence: persistenceSummary() });
+  response.status(200).json({ success: true, name: "Arena Commander Table API", version: APP_VERSION, modes: ["Official Commander", "Official Brawl", "Custom Rule Zero rooms", "Solo Test Lab", "Human + bot mixed tables", "Torn open-game notifier"], persistence: persistenceSummary() });
 });
 
 io.on("connection", (socket) => {
@@ -2992,6 +3132,7 @@ io.on("connection", (socket) => {
         formatRules,
         ai: { enabled: false, mode: "multiplayer" }
       });
+      room.directory = normalizeLobbyDirectory(payload?.directory);
       rooms.set(room.code, room);
       attachSocket(socket, room, player);
       addLog(room, `${name} created a ${formatLabel(format)} room.`, "room");
@@ -3113,6 +3254,10 @@ io.on("connection", (socket) => {
     if (!auth.success) return acknowledge(callback, auth);
     if (auth.room.hostId !== auth.player.id) return fail(callback, "Only the room host can do that.");
     if (auth.room.status !== "waiting") return fail(callback, "Room settings cannot change after the game starts.");
+
+    if (payload?.directory) {
+      auth.room.directory = normalizeLobbyDirectory({ ...auth.room.directory, ...payload.directory, updatedAt: nowIso() });
+    }
 
     if (auth.room.format === "custom" && payload?.formatRules) {
       auth.room.formatRules = normalizeFormatRules(payload.formatRules, "custom");
@@ -3436,7 +3581,7 @@ async function start() {
   }
   for (const room of rooms.values()) if (room.players.some((player) => player.isBot)) scheduleBots(room, true);
   server.listen(PORT, "0.0.0.0", () => {
-    console.log(`Arena Commander Formats v37 running on port ${PORT}`);
+    console.log(`Arena Commander v39 Torn Notifier running on port ${PORT}`);
   });
 }
 
@@ -3473,6 +3618,8 @@ module.exports = {
   normalizeCardData,
   resolveCardNames,
   normalizeRoomSettings,
+  normalizeLobbyDirectory,
+  lobbyDirectorySummary,
   resetTurnDeadline,
   recordReplayFrame,
   createPublicRoom,
