@@ -182,9 +182,9 @@ async function getStatus(request, response) {
       FROM meta_decks
     `);
     const run = await db.query(`SELECT * FROM meta_sync_runs ORDER BY started_at DESC LIMIT 1`);
-    return response.json({ success: true, version: "38.0.0", library: stats.rows[0], lastSync: run.rows[0] || null });
+    return response.json({ success: true, version: "39.0.0", library: stats.rows[0], lastSync: run.rows[0] || null });
   } catch (error) {
-    return response.status(503).json({ success: false, version: "38.0.0", error: error.message });
+    return response.status(503).json({ success: false, version: "39.0.0", error: error.message });
   }
 }
 
@@ -295,7 +295,7 @@ function installMetaLibrary({ app }) {
   app.post("/api/meta/admin/sync", requireAdmin, runSync);
   app.post("/api/meta/admin/import", requireAdmin, importDeck);
   app.patch("/api/meta/admin/decks/:id", requireAdmin, updateDeck);
-  ensurePool().then(() => console.log("Meta Deck Library v38 ready.")).catch((error) => console.error("Meta Deck Library database failed:", error));
+  ensurePool().then(() => console.log("Meta Deck Library v39 ready.")).catch((error) => console.error("Meta Deck Library database failed:", error));
 }
 
 module.exports = { installMetaLibrary, adminAuthorized, ensurePool };
