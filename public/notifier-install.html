@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#08110f">
-  <title>Install Arena Commander Torn Notifier v1.1</title>
+  <title>Install Arena Commander Torn Notifier v1.3</title>
   <style>
     :root{color-scheme:dark;font-family:Inter,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:#07110f;color:#ebf8f4}
     *{box-sizing:border-box}body{margin:0;min-height:100vh;background:radial-gradient(circle at 80% 0,rgba(71,199,164,.18),transparent 36%),linear-gradient(180deg,#081512,#040a09);padding:22px}
@@ -21,7 +21,7 @@
     <img class="logo" src="/notifier-icon.svg" alt="Arena Commander crown icon">
     <div class="eyebrow">Torn header userscript</div>
     <h1>Arena Commander Notifier</h1>
-    <p>Adds a small crown to Torn’s header. It glows and shows a badge whenever an Arena Commander host lists a game with an open seat.</p>
+    <p>Adds a small crown to Torn’s header. It glows and shows a badge whenever a game has an open seat, and it includes quick buttons to host Commander, Brawl, or Custom games.</p>
     <a class="install" href="/arena-commander-notifier.user.js">Install or update the notifier</a>
   </section>
 
@@ -30,7 +30,7 @@
     <div class="steps">
       <div class="step"><b>1</b><p>Open this page inside TornPDA, or in a browser that has Tampermonkey or Violentmonkey installed.</p></div>
       <div class="step"><b>2</b><p>Press <strong>Install or update the notifier</strong> and approve the userscript.</p></div>
-      <div class="step"><b>3</b><p>Reload Torn. A small crown appears in the header. Tap it to view games and notification settings.</p></div>
+      <div class="step"><b>3</b><p>Reload Torn. A small crown appears in the header. Tap it to host a new game, view open games, or change notification settings.</p></div>
     </div>
   </section>
 
@@ -47,8 +47,8 @@
   </section>
 
   <section class="card">
-    <h2>How a room appears</h2>
-    <p>Inside an Arena Commander lobby, the host turns on <strong>List this room in the Torn notifier</strong>. Only waiting rooms with open seats are shown. The listing disappears when the room is full, starts, or the host turns it off.</p>
+    <h2>Host or join from Torn</h2>
+    <p>Tap the crown and choose <strong>Commander</strong>, <strong>Brawl</strong>, or <strong>Custom</strong> to open the matching host form. After creating the room, turn on <strong>List this room in the Torn notifier</strong>. Only waiting rooms with open seats are shown.</p>
     <div class="links"><a href="/">Open Arena Commander</a><a href="/arena-commander-notifier.user.js">View userscript</a></div>
   </section>
 </main>
