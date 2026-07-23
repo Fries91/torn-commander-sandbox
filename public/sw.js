@@ -1,6 +1,6 @@
 "use strict";
 
-const CACHE_NAME = "arena-commander-notifier-v39.1.0";
+const CACHE_NAME = "arena-commander-deck-import-fix-v39.2.0";
 const APP_SHELL = [
   "/",
   "/index.html",
@@ -9,6 +9,7 @@ const APP_SHELL = [
   "/meta-library.css?v=39.0.0",
   "/commander-theme.css?v=39.0.0",
   "/app.js",
+  "/deck-import-fix.js?v=39.2.0",
   "/clean-home.js?v=39.0.0",
   "/meta-library.js?v=39.0.0",
   "/lobby-notifier-ui.js?v=39.1.0",
