@@ -1,13 +1,13 @@
 {
   "name": "torn-commander-sandbox",
-  "version": "40.1.0",
+  "version": "41.0.0",
   "private": true,
-  "description": "Arena Commander with automatic card triggers, target-assisted mechanics, auto stack passing, deck-link imports, AI Test Lab and Torn notifier.",
+  "description": "Arena Commander with an Arena-style visible battlefield, guided quick actions, automatic card triggers, AI Test Lab and Torn notifier.",
   "main": "server.js",
   "scripts": {
     "start": "node -r ./meta-register.js -r ./automation-register.js server.js",
     "dev": "node --watch -r ./meta-register.js -r ./automation-register.js server.js",
-    "check": "node --check server.js && node --check ai-engine.js && node --check automation-register.js && node --check card-automation-engine.js && node --check meta-register.js && node --check meta-library-server.js && node --check meta-sync.js && node --check meta-sources/common.js && node --check meta-sources/archidekt.js && node --check meta-sources/moxfield.js && node --check meta-sources/catalog.js && node --check meta-sources/edhrec.js && node --check meta-sources/cedh-ddb.js && node --check scripts/sync-meta-decks.js && node --check public/app.js && node --check public/deck-import-fix.js && node --check public/card-automation-ui.js && node --check public/gameplay-hotfix.js && node --check public/clean-home.js && node --check public/meta-library.js && node --check public/lobby-notifier-ui.js && node --check public/arena-commander-notifier.user.js && node --check public/sw.js && node tests/card-automation-engine.test.js",
+    "check": "node --check server.js && node --check ai-engine.js && node --check automation-register.js && node --check card-automation-engine.js && node --check meta-register.js && node --check meta-library-server.js && node --check meta-sync.js && node --check meta-sources/common.js && node --check meta-sources/archidekt.js && node --check meta-sources/moxfield.js && node --check meta-sources/catalog.js && node --check meta-sources/edhrec.js && node --check meta-sources/cedh-ddb.js && node --check scripts/sync-meta-decks.js && node --check public/app.js && node --check public/deck-import-fix.js && node --check public/card-automation-ui.js && node --check public/gameplay-hotfix.js && node --check public/arena-table-v41.js && node --check public/clean-home.js && node --check public/meta-library.js && node --check public/lobby-notifier-ui.js && node --check public/arena-commander-notifier.user.js && node --check public/sw.js && node tests/card-automation-engine.test.js",
     "sync:meta": "node scripts/sync-meta-decks.js"
   },
   "engines": {
