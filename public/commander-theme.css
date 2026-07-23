@@ -1,0 +1,573 @@
+/* Arena Commander v39 — lightweight Commander-style visual layer.
+   CSS-only: no observers, no image downloads, no continuous animation loops. */
+:root {
+  --cmd-bg-0: #050806;
+  --cmd-bg-1: #0a100d;
+  --cmd-bg-2: #111a15;
+  --cmd-panel: rgba(15, 24, 19, 0.97);
+  --cmd-panel-2: rgba(21, 31, 25, 0.98);
+  --cmd-ink: #f2eee3;
+  --cmd-muted: #a9b2a9;
+  --cmd-gold: #c9a85d;
+  --cmd-gold-bright: #eed795;
+  --cmd-green: #58d69a;
+  --cmd-blue: #63b8e8;
+  --cmd-purple: #ad83dd;
+  --cmd-red: #da776a;
+  --cmd-line: rgba(201, 168, 93, 0.28);
+  --cmd-line-strong: rgba(201, 168, 93, 0.58);
+  --cmd-radius: 16px;
+  color-scheme: dark;
+}
+
+html,
+body {
+  background: var(--cmd-bg-0);
+  color: var(--cmd-ink);
+}
+
+body {
+  background-image:
+    radial-gradient(circle at 50% -20%, rgba(74, 145, 104, 0.20), transparent 38rem),
+    radial-gradient(circle at 90% 20%, rgba(57, 101, 130, 0.13), transparent 30rem),
+    linear-gradient(180deg, #09100c 0%, #050806 52%, #030504 100%);
+  background-attachment: fixed;
+}
+
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: -1;
+  opacity: 0.32;
+  background-image:
+    linear-gradient(30deg, transparent 47%, rgba(201, 168, 93, 0.035) 49%, transparent 51%),
+    linear-gradient(150deg, transparent 47%, rgba(88, 214, 154, 0.028) 49%, transparent 51%);
+  background-size: 56px 56px;
+}
+
+h1,
+h2,
+h3,
+h4,
+.brand-button strong,
+.room-code,
+.format-launch-card strong,
+.game-player-name {
+  font-family: Georgia, Cambria, "Times New Roman", serif;
+  letter-spacing: 0.015em;
+}
+
+h1,
+h2,
+h3 {
+  color: var(--cmd-ink);
+  text-wrap: balance;
+}
+
+p,
+small,
+label,
+.empty-state,
+.notice {
+  color: var(--cmd-muted);
+}
+
+.app-header {
+  background:
+    linear-gradient(180deg, rgba(18, 28, 22, 0.99), rgba(7, 12, 9, 0.99));
+  border-bottom: 1px solid var(--cmd-line-strong);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.34);
+}
+
+.app-header::after {
+  content: "";
+  position: absolute;
+  left: 5%;
+  right: 5%;
+  bottom: -1px;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--cmd-gold), transparent);
+  opacity: 0.58;
+}
+
+.brand-button {
+  color: var(--cmd-ink);
+}
+
+.brand-button small {
+  color: #b8bea9;
+}
+
+.brand-mark,
+.notifier-promo-icon {
+  background:
+    radial-gradient(circle at 35% 25%, #9bf0c4, #2f9270 48%, #102c23 100%);
+  color: #05120c;
+  border: 1px solid rgba(238, 215, 149, 0.62);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.18), 0 0 18px rgba(88, 214, 154, 0.18);
+}
+
+.connection-status.online span:first-child {
+  background: var(--cmd-green);
+  box-shadow: 0 0 10px rgba(88, 214, 154, 0.58);
+}
+
+.header-icon-button,
+.small-button,
+.icon-button {
+  border-color: rgba(201, 168, 93, 0.24);
+  background: #111b16;
+  color: #e8e2d1;
+}
+
+.app-main {
+  isolation: isolate;
+}
+
+.panel,
+.hero-panel,
+.notice-row,
+.zone-panel,
+.drawer-section,
+.rule-zero-card,
+.format-home-panel,
+.table-board,
+.game-player-card,
+.battlefield,
+.stack-item,
+.trigger-item,
+.meta-panel,
+.modal-sheet {
+  position: relative;
+  background:
+    linear-gradient(145deg, rgba(24, 35, 28, 0.98), rgba(8, 14, 10, 0.99));
+  border: 1px solid var(--cmd-line);
+  border-radius: var(--cmd-radius);
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.025),
+    0 14px 32px rgba(0, 0, 0, 0.24);
+}
+
+.panel::before,
+.format-home-panel::before,
+.rule-zero-card::before,
+.drawer-section::before,
+.zone-panel::before {
+  content: "";
+  position: absolute;
+  inset: 5px;
+  border: 1px solid rgba(201, 168, 93, 0.08);
+  border-radius: calc(var(--cmd-radius) - 5px);
+  pointer-events: none;
+}
+
+.eyebrow {
+  color: var(--cmd-gold-bright);
+  letter-spacing: 0.17em;
+  font-weight: 800;
+}
+
+.badge,
+.rule-chip-list span,
+.game-chip,
+.zone-summary-grid > div,
+.target-summary span {
+  background: rgba(201, 168, 93, 0.09);
+  border-color: rgba(201, 168, 93, 0.24);
+  color: #e8dfc8;
+}
+
+.badge.success {
+  color: #8ce7b7;
+  border-color: rgba(88, 214, 154, 0.38);
+  background: rgba(38, 107, 75, 0.18);
+}
+
+.badge.warning,
+.notice.warning {
+  color: #f0d08a;
+  border-color: rgba(201, 168, 93, 0.42);
+  background: rgba(112, 79, 24, 0.18);
+}
+
+input,
+select,
+textarea {
+  background: #09110d;
+  color: var(--cmd-ink);
+  border: 1px solid rgba(201, 168, 93, 0.25);
+  border-radius: 10px;
+  box-shadow: inset 0 2px 7px rgba(0, 0, 0, 0.28);
+}
+
+input:focus,
+select:focus,
+textarea:focus {
+  border-color: var(--cmd-gold-bright);
+  outline: 2px solid rgba(201, 168, 93, 0.14);
+  outline-offset: 1px;
+}
+
+.primary-button,
+.secondary-button,
+.ghost-button,
+.danger-button,
+.combat-button,
+button[data-action] {
+  border-radius: 10px;
+  font-weight: 800;
+}
+
+.primary-button {
+  color: #07100b;
+  border-color: #d7bd75;
+  background: linear-gradient(180deg, #f0d78b, #b88d3e);
+  box-shadow: inset 0 1px rgba(255, 255, 255, 0.34), 0 7px 18px rgba(98, 70, 25, 0.24);
+}
+
+.primary-button:hover {
+  background: linear-gradient(180deg, #f7e4a8, #c79b48);
+}
+
+.secondary-button,
+.combat-button {
+  color: #dff8e9;
+  border-color: rgba(88, 214, 154, 0.42);
+  background: linear-gradient(180deg, #1f513d, #123326);
+}
+
+.ghost-button {
+  color: #dfd6bf;
+  border-color: rgba(201, 168, 93, 0.28);
+  background: rgba(201, 168, 93, 0.055);
+}
+
+.danger-button {
+  background: rgba(124, 43, 38, 0.25);
+  border-color: rgba(218, 119, 106, 0.42);
+  color: #ffb4aa;
+}
+
+.format-home-hero {
+  overflow: hidden;
+  background:
+    radial-gradient(circle at 84% 10%, rgba(75, 158, 116, 0.22), transparent 23rem),
+    linear-gradient(130deg, rgba(18, 31, 23, 0.98), rgba(6, 11, 8, 0.99));
+}
+
+.format-home-hero::after {
+  content: "♛";
+  position: absolute;
+  right: 4%;
+  top: 50%;
+  transform: translateY(-50%);
+  color: rgba(201, 168, 93, 0.065);
+  font: 700 clamp(7rem, 22vw, 14rem)/1 Georgia, serif;
+  pointer-events: none;
+}
+
+.format-launch-card {
+  background:
+    linear-gradient(155deg, rgba(28, 42, 33, 0.98), rgba(8, 14, 10, 0.98));
+  border-color: rgba(201, 168, 93, 0.25);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.025), 0 9px 22px rgba(0, 0, 0, 0.22);
+}
+
+.format-launch-card::after {
+  content: "";
+  position: absolute;
+  inset: auto 14px 0;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, currentColor, transparent);
+  opacity: 0.55;
+}
+
+.format-launch-card.commander { color: #7fe5ab; }
+.format-launch-card.brawl { color: #78c7ef; }
+.format-launch-card.custom { color: #c89aec; }
+.format-launch-card.ai { color: #e4c875; }
+.format-launch-card.neutral { color: #d6d1c3; }
+
+.format-launch-card.is-active,
+.format-launch-card:hover {
+  border-color: currentColor;
+  transform: translateY(-2px);
+}
+
+.format-home-panel[data-home-panel="commander"],
+.format-commander,
+.rule-zero-card.format-commander {
+  --format-accent: var(--cmd-green);
+}
+
+.format-home-panel[data-home-panel="brawl"],
+.format-brawl,
+.rule-zero-card.format-brawl {
+  --format-accent: var(--cmd-blue);
+}
+
+.format-home-panel[data-home-panel="custom"],
+.format-custom,
+.rule-zero-card.format-custom {
+  --format-accent: var(--cmd-purple);
+}
+
+.format-home-panel,
+.rule-zero-card {
+  border-top: 2px solid var(--format-accent, var(--cmd-gold));
+}
+
+.format-badge {
+  border-color: rgba(201, 168, 93, 0.42);
+  background: rgba(201, 168, 93, 0.10);
+  color: var(--cmd-gold-bright);
+}
+
+.clean-decks-panel,
+.notifier-promo-card {
+  border-left: 3px solid var(--cmd-gold);
+}
+
+.notifier-promo-card {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 16px;
+}
+
+.notifier-promo-icon {
+  width: 54px;
+  height: 54px;
+  border-radius: 13px;
+  display: grid;
+  place-items: center;
+  font: 700 1.55rem/1 Georgia, serif;
+}
+
+.notifier-promo-copy h2,
+.notifier-promo-copy p {
+  margin-block: 0.2rem;
+}
+
+.notifier-promo-link {
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.notifier-lobby-panel {
+  border-top: 2px solid var(--cmd-green);
+}
+
+.notifier-list-toggle {
+  padding: 11px 12px;
+  border-radius: 10px;
+  background: rgba(88, 214, 154, 0.07);
+  border: 1px solid rgba(88, 214, 154, 0.21);
+}
+
+.lobby-top,
+.rolloff-hero {
+  background:
+    radial-gradient(circle at 85% 15%, rgba(88, 214, 154, 0.16), transparent 24rem),
+    linear-gradient(145deg, #17271e, #08100b);
+}
+
+.room-code {
+  color: var(--cmd-gold-bright);
+  text-shadow: 0 0 14px rgba(201, 168, 93, 0.18);
+}
+
+.lobby-player {
+  background: rgba(6, 12, 8, 0.54);
+  border-color: rgba(201, 168, 93, 0.15);
+}
+
+.lobby-player.is-bot {
+  border-left: 3px solid var(--cmd-blue);
+}
+
+.game-shell,
+.arena-layout,
+.table-board {
+  background:
+    radial-gradient(circle at center, rgba(47, 91, 66, 0.19), transparent 42%),
+    linear-gradient(145deg, #111d15, #060a07);
+}
+
+.game-topbar,
+.phase-track,
+.game-control-bar {
+  background: linear-gradient(180deg, #17251c, #09100c);
+  border-color: rgba(201, 168, 93, 0.24);
+}
+
+.phase-track button,
+.game-tabs button {
+  color: #b7b9ae;
+}
+
+.phase-track button.active,
+.game-tabs button.active {
+  color: #07110b;
+  background: linear-gradient(180deg, #e7d18d, #b88d3f);
+  border-color: #e7d18d;
+}
+
+.battlefield {
+  background:
+    radial-gradient(circle at 50% 30%, rgba(63, 126, 90, 0.16), transparent 65%),
+    repeating-linear-gradient(135deg, rgba(255, 255, 255, 0.012) 0 2px, transparent 2px 14px),
+    #09110c;
+  border-color: rgba(201, 168, 93, 0.18);
+}
+
+.battlefield-title {
+  border-bottom: 1px solid rgba(201, 168, 93, 0.16);
+}
+
+.arena-card {
+  border-color: rgba(201, 168, 93, 0.58);
+  background: #151913;
+  box-shadow: 0 7px 14px rgba(0, 0, 0, 0.34);
+}
+
+.arena-card-frame {
+  background: linear-gradient(145deg, #24291f, #0d110d);
+}
+
+.arena-card.is-commander {
+  box-shadow: 0 0 0 2px var(--cmd-gold), 0 8px 18px rgba(0, 0, 0, 0.38);
+}
+
+.arena-card.is-attacking,
+.arena-card.target-eligible {
+  box-shadow: 0 0 0 2px var(--cmd-green), 0 0 16px rgba(88, 214, 154, 0.28);
+}
+
+.arena-card.is-tapped {
+  filter: saturate(0.82) brightness(0.82);
+}
+
+.hand-strip {
+  padding-top: 12px;
+  background: radial-gradient(ellipse at bottom, rgba(201, 168, 93, 0.08), transparent 68%);
+}
+
+.stack-item,
+.trigger-item {
+  border-left: 3px solid var(--cmd-blue);
+}
+
+.mana-control {
+  border-color: rgba(201, 168, 93, 0.17);
+  background: rgba(5, 10, 7, 0.58);
+}
+
+.bottom-nav {
+  background: linear-gradient(180deg, rgba(13, 21, 16, 0.99), rgba(5, 8, 6, 0.99));
+  border-top: 1px solid var(--cmd-line-strong);
+  box-shadow: 0 -10px 25px rgba(0, 0, 0, 0.34);
+}
+
+.bottom-nav button {
+  color: #9da79f;
+  border-radius: 10px;
+}
+
+.bottom-nav button.active,
+.bottom-nav button:hover {
+  color: var(--cmd-gold-bright);
+  background: rgba(201, 168, 93, 0.09);
+}
+
+.bottom-nav button.active span {
+  color: var(--cmd-green);
+}
+
+.modal-backdrop {
+  background: rgba(0, 0, 0, 0.78);
+}
+
+.modal-sheet {
+  border-top: 2px solid var(--cmd-gold);
+}
+
+.modal-header {
+  border-bottom-color: rgba(201, 168, 93, 0.18);
+}
+
+.toast {
+  background: #132019;
+  border-color: rgba(201, 168, 93, 0.32);
+  color: var(--cmd-ink);
+}
+
+::-webkit-scrollbar {
+  width: 9px;
+  height: 9px;
+}
+
+::-webkit-scrollbar-track {
+  background: #07100b;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #5b5134;
+  border: 2px solid #07100b;
+  border-radius: 99px;
+}
+
+@media (max-width: 720px) {
+  .notifier-promo-card {
+    grid-template-columns: auto 1fr;
+  }
+
+  .notifier-promo-link {
+    grid-column: 1 / -1;
+    text-align: center;
+  }
+
+  .format-home-hero::after {
+    opacity: 0.55;
+  }
+
+  .panel,
+  .format-home-panel,
+  .rule-zero-card,
+  .drawer-section,
+  .zone-panel {
+    border-radius: 13px;
+  }
+}
+
+.reduce-motion * {
+  scroll-behavior: auto !important;
+  animation-duration: 0.01ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.01ms !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+.low-data body::before,
+.low-data .format-home-hero::after {
+  display: none;
+}
+
+.low-data .panel,
+.low-data .format-home-panel,
+.low-data .rule-zero-card,
+.low-data .drawer-section,
+.low-data .zone-panel,
+.low-data .arena-card {
+  box-shadow: none;
+}
