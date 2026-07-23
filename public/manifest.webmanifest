@@ -1,7 +1,7 @@
 {
-  "name": "Arena Commander Final Rules",
-  "short_name": "Commander v30",
-  "description": "Arena-style multiplayer Commander table with final assisted rules engine and universal Judge Mode.",
+  "name": "Arena Commander AI Test Lab",
+  "short_name": "Commander v35",
+  "description": "Arena-style 2\u20136 player Commander with Solo AI Test Lab, optional bot seats and assisted expert decisions.",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
