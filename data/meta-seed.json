@@ -1,0 +1,4 @@
+{
+  "description": "Optional locally curated Meta Deck Library entries. Add normalized deck objects or public Archidekt deckUrl entries to the decks array.",
+  "decks": []
+}
