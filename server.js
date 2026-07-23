@@ -6,6 +6,23 @@ const crypto = require("crypto");
 const express = require("express");
 const { Server } = require("socket.io");
 const { Pool } = require("pg");
+const {
+  normalizeDifficulty,
+  analyzeDeckProfile,
+  evaluateBoard,
+  scorePermanent,
+  scoreCastCard,
+  chooseOpponent,
+  chooseThreat,
+  inferSimpleEffect,
+  explainDecision,
+  isLand: aiIsLand,
+  isCreature: aiIsCreature,
+  isInstantSpeed,
+  manaValue: aiManaValue,
+  cardPower: aiCardPower,
+  cardToughness: aiCardToughness
+} = require("./ai-engine");
 
 const app = express();
 const server = http.createServer(app);
@@ -36,23 +53,25 @@ const MAX_REPLAY_FRAMES = 80;
 const MAX_SPECTATORS = 50;
 const MAX_RULE_DECISIONS = 80;
 const MAX_RULE_EFFECTS = 160;
-const RULES_VERSION = "30.0";
+const RULES_VERSION = "35.0";
 const ALLOWED_TURN_TIMERS = new Set([0, 60, 90, 120, 180, 300]);
 const PHASES = ["Untap", "Upkeep", "Draw", "Main 1", "Beginning Combat", "Declare Attackers", "Declare Blockers", "First-Strike Damage", "Combat Damage", "End Combat", "Main 2", "End", "Cleanup"];
 const ZONES = new Set(["hand", "battlefield", "graveyard", "exile", "commandZone", "library"]);
 const ALLOWED_MAX_PLAYERS = new Set([2, 3, 4, 5, 6]);
-const ALLOWED_STARTING_LIFE = new Set([20, 30, 40, 50, 60]);
+const ALLOWED_STARTING_LIFE = new Set([25, 30, 40]);
 const SCRYFALL_COLLECTION_URL = "https://api.scryfall.com/cards/collection";
 const SCRYFALL_BATCH_SIZE = 75;
 const CARD_CACHE_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000;
 const CARD_LOOKUP_MAX_NAMES = 150;
-const CARD_LOOKUP_USER_AGENT = process.env.SCRYFALL_USER_AGENT || "TornCommanderSandbox/30.0 (+https://torn-commander-sandbox.onrender.com)";
+const CARD_LOOKUP_USER_AGENT = process.env.SCRYFALL_USER_AGENT || "TornCommanderSandbox/35.0 (+https://torn-commander-sandbox.onrender.com)";
 
 const rooms = new Map();
 const disconnectTimers = new Map();
 const persistenceTimers = new Map();
 const persistenceChains = new Map();
 const cardLookupCache = new Map();
+const botTimers = new Map();
+const BOT_SPEEDS = new Set([250, 500, 900, 1400, 2200]);
 
 const DATABASE_URL = String(process.env.DATABASE_URL || "").trim();
 const databaseState = {
@@ -459,6 +478,57 @@ function normalizeRoomSettings(value) {
   };
 }
 
+function normalizeAiState(value) {
+  const speedMs = Number(value?.speedMs);
+  return {
+    enabled: Boolean(value?.enabled),
+    mode: ["multiplayer", "test-lab", "bot-arena"].includes(value?.mode) ? value.mode : "multiplayer",
+    paused: Boolean(value?.paused),
+    speedMs: BOT_SPEEDS.has(speedMs) ? speedMs : 900,
+    revealBotHands: Boolean(value?.revealBotHands),
+    allowHumanTakeover: value?.allowHumanTakeover !== false,
+    stepRequested: Boolean(value?.stepRequested),
+    activeBotId: normalizeText(value?.activeBotId, 100) || null,
+    startedAt: value?.startedAt || null,
+    gamesCompleted: clamp(Math.floor(Number(value?.gamesCompleted) || 0), 0, 999999),
+    turnsCompleted: clamp(Math.floor(Number(value?.turnsCompleted) || 0), 0, 999999),
+    decisions: Array.isArray(value?.decisions) ? value.decisions.slice(-120).map((entry) => ({
+      id: normalizeText(entry?.id, 100) || createId(),
+      time: entry?.time || nowIso(),
+      botId: normalizeText(entry?.botId, 100),
+      botName: normalizeText(entry?.botName, 24) || "Bot",
+      difficulty: normalizeDifficulty(entry?.difficulty),
+      action: normalizeText(entry?.action, 80),
+      cardName: normalizeText(entry?.cardName, 150),
+      targetName: normalizeText(entry?.targetName, 150),
+      score: Number(entry?.score) || 0,
+      explanation: normalizeText(entry?.explanation, 500)
+    })) : [],
+    testResult: value?.testResult && typeof value.testResult === "object" ? value.testResult : null
+  };
+}
+
+function normalizeBotState(value, deck = null) {
+  const profile = value?.profile && typeof value.profile === "object" ? value.profile : analyzeDeckProfile(deck);
+  return {
+    difficulty: normalizeDifficulty(value?.difficulty),
+    profile,
+    landPlayedTurn: clamp(Math.floor(Number(value?.landPlayedTurn) || 0), 0, 999999),
+    castsThisTurn: clamp(Math.floor(Number(value?.castsThisTurn) || 0), 0, 99),
+    attacksDeclaredTurn: clamp(Math.floor(Number(value?.attacksDeclaredTurn) || 0), 0, 999999),
+    blocksDeclaredTurn: clamp(Math.floor(Number(value?.blocksDeclaredTurn) || 0), 0, 999999),
+    mulligansTaken: clamp(Math.floor(Number(value?.mulligansTaken) || 0), 0, 9),
+    untappedTurn: clamp(Math.floor(Number(value?.untappedTurn) || 0), 0, 999999),
+    drawnTurn: clamp(Math.floor(Number(value?.drawnTurn) || 0), 0, 999999),
+    castTurn: clamp(Math.floor(Number(value?.castTurn) || 0), 0, 999999),
+    combatResolvedTurn: clamp(Math.floor(Number(value?.combatResolvedTurn) || 0), 0, 999999),
+    lastResponseStackId: normalizeText(value?.lastResponseStackId, 100) || null,
+    lastActionAt: value?.lastActionAt || null,
+    thinking: Boolean(value?.thinking),
+    takeoverByPlayerId: normalizeText(value?.takeoverByPlayerId, 100) || null
+  };
+}
+
 function normalizeEmotes(value) {
   if (!Array.isArray(value)) return [];
   return value.slice(-MAX_EMOTES).map((entry) => ({
@@ -694,16 +764,23 @@ function migrateRoom(room) {
   room.status = ["waiting", "rolloff", "started"].includes(room.status) ? room.status : "waiting";
   room.chat = Array.isArray(room.chat) ? room.chat.slice(-MAX_CHAT_MESSAGES) : [];
   room.log = Array.isArray(room.log) ? room.log.slice(-MAX_LOG_ENTRIES) : [];
-  room.players = room.players.map((player) => ({
-    ...player,
-    id: normalizeText(player.id, 100) || createId(),
-    name: normalizePlayerName(player.name) || "Player",
-    connected: false,
-    socketId: null,
-    ready: Boolean(player.ready),
-    sessionToken: normalizeText(player.sessionToken, 100) || createSessionToken(),
-    game: player.game || null
-  }));
+  room.mode = ["multiplayer", "test-lab", "bot-arena"].includes(room.mode) ? room.mode : "multiplayer";
+  room.players = room.players.map((player) => {
+    const isBot = Boolean(player.isBot);
+    const normalized = {
+      ...player,
+      id: normalizeText(player.id, 100) || createId(),
+      name: normalizePlayerName(player.name) || (isBot ? "Commander Bot" : "Player"),
+      isBot,
+      connected: isBot ? true : false,
+      socketId: null,
+      ready: isBot ? Boolean(player.deck) : Boolean(player.ready),
+      sessionToken: isBot ? "" : (normalizeText(player.sessionToken, 100) || createSessionToken()),
+      game: player.game || null,
+      botState: isBot ? normalizeBotState(player.botState, player.deck) : null
+    };
+    return normalized;
+  });
   const allPlayerIds = room.players.map((player) => player.id);
   room.players.forEach((player) => {
     if (room.status === "rolloff" || room.status === "started") {
@@ -734,6 +811,7 @@ function migrateRoom(room) {
     room.turn = null;
   }
   room.settings = normalizeRoomSettings(room.settings);
+  room.ai = normalizeAiState({ ...room.ai, enabled: room.players.some((player) => player.isBot) || room.mode !== "multiplayer", mode: room.mode });
   room.emotes = normalizeEmotes(room.emotes);
   room.replayFrames = normalizeReplayFrames(room.replayFrames);
   room.spectators = [];
@@ -767,7 +845,7 @@ function persistentRoomState(room) {
     ...room,
     spectators: [],
     undoStack: [],
-    players: room.players.map((player) => ({ ...player, connected: false, socketId: null }))
+    players: room.players.map((player) => ({ ...player, connected: player.isBot ? true : false, socketId: null }))
   };
 }
 
@@ -1219,6 +1297,8 @@ function createPublicRoom(room, viewerId = null) {
     code: room.code,
     hostId: room.hostId,
     privateRoom: room.privateRoom,
+    mode: room.mode || "multiplayer",
+    ai: normalizeAiState(room.ai),
     maxPlayers: room.maxPlayers,
     startingLife: room.startingLife,
     status: room.status,
@@ -1248,8 +1328,10 @@ function createPublicRoom(room, viewerId = null) {
       ready: player.ready,
       connected: player.connected,
       joinedAt: player.joinedAt,
+      isBot: Boolean(player.isBot),
+      botState: player.isBot ? normalizeBotState(player.botState, player.deck) : null,
       deck: publicDeck(player.deck),
-      game: publicGame(player.game, player.id === viewerId)
+      game: publicGame(player.game, player.id === viewerId || Boolean(room.ai?.revealBotHands && player.isBot && viewerId === room.hostId))
     }))
   };
 }
@@ -1310,8 +1392,11 @@ function detachSocket(socket, roomCode) {
 
 function transferHostIfNeeded(room) {
   const host = findPlayer(room, room.hostId);
-  if (host?.connected) return;
-  const next = room.players.find((player) => player.connected) || room.players[0];
+  if (host?.connected || (room.mode === "test-lab" && host && !host.isBot)) return;
+  const next = room.players.find((player) => player.connected && !player.isBot)
+    || room.players.find((player) => player.connected)
+    || room.players.find((player) => !player.isBot)
+    || room.players[0];
   if (next) room.hostId = next.id;
 }
 
@@ -1319,7 +1404,13 @@ function removePlayer(room, playerId) {
   const index = room.players.findIndex((player) => player.id === playerId);
   if (index < 0) return null;
   const [removed] = room.players.splice(index, 1);
-  if (room.players.length === 0) {
+  if (removed.isBot) {
+    room.ai = normalizeAiState({ ...room.ai, enabled: room.players.some((player) => player.isBot), activeBotId: null });
+    if (!room.players.some((player) => player.isBot)) clearBotSchedule(room.code);
+  }
+  room.rules = normalizeRulesState(room.rules, room.players.map((player) => player.id));
+  if (room.players.length === 0 || room.players.every((player) => player.isBot)) {
+    clearBotSchedule(room.code);
     rooms.delete(room.code);
     deletePersistedRoom(room.code);
   } else {
@@ -2000,7 +2091,7 @@ function processGameAction(room, actor, action) {
       const commanderTax = fromZone === "commandZone" && located.card.commander ? actor.game.commanderTax : 0;
       if (action?.enforcePayment) { const paid=payManaCost(actor,located.card,action?.manaPayment,action?.xValue,commanderTax); if(!paid.success)return paid; }
       const [card] = actor.game[fromZone].splice(located.index, 1); if(fromZone==="commandZone"&&card.commander) actor.game.commanderTax=clamp(actor.game.commanderTax+2,0,99);
-      const item = pushStack(room, { kind: "spell", name: card.name, controllerId: actor.id, sourceCardId: card.id, sourceZone: fromZone, card, text: currentOracleText(card), targets: validateTargets(room, action?.targets), createdAt: nowIso(), choices:{modes:normalizeStringArray(action?.modes,10,120),xValue:clamp(Math.floor(Number(action?.xValue)||0),0,999),additionalCosts:normalizeStringArray(action?.additionalCosts,20,180)} }, actor.id);
+      const item = pushStack(room, { kind: "spell", name: card.name, controllerId: actor.id, sourceCardId: card.id, sourceZone: fromZone, card, text: currentOracleText(card), targets: validateTargets(room, action?.targets), effect: action?.effect, createdAt: nowIso(), choices:{modes:normalizeStringArray(action?.modes,10,120),xValue:clamp(Math.floor(Number(action?.xValue)||0),0,999),additionalCosts:normalizeStringArray(action?.additionalCosts,20,180)} }, actor.id);
       queueSuggestedTriggers(room, "SPELL_CAST", { card, controllerId: actor.id }); addLog(room, `${actor.name} cast ${item.name} onto the stack.`, "stack"); break;
     }
     case "activate-card": { const located = controlledBattlefieldCard(room, actor, action?.cardId); if (!located) return { success: false, error: "You no longer control that permanent." }; if (action?.tapCost) located.card.tapped = true; const item = pushStack(room, { kind: "ability", name: `${located.card.name} ability`, controllerId: actor.id, sourceCardId: located.card.id, text: normalizeText(action?.text, 2500) || currentOracleText(located.card), targets: validateTargets(room, action?.targets), effect: action?.effect, createdAt: nowIso() }, actor.id); addLog(room, `${actor.name} activated ${item.name}.`, "stack"); break; }
@@ -2050,12 +2141,461 @@ function processGameAction(room, actor, action) {
 }
 
 
+function createRoomPlayer({ name, socket = null, deck = null, isBot = false, difficulty = "skilled" }) {
+  const timestamp = nowIso();
+  const normalizedDeck = deck ? normalizeDeck(deck) : null;
+  return {
+    id: createId(),
+    name: normalizePlayerName(name) || (isBot ? "Commander Bot" : "Player"),
+    ready: isBot ? Boolean(normalizedDeck) : false,
+    connected: isBot ? true : Boolean(socket),
+    socketId: isBot ? null : socket?.id || null,
+    sessionToken: isBot ? "" : createSessionToken(),
+    deck: normalizedDeck,
+    deckValidation: normalizedDeck ? validateCommanderDeck(normalizedDeck) : null,
+    game: null,
+    isBot,
+    botState: isBot ? normalizeBotState({ difficulty, profile: analyzeDeckProfile(normalizedDeck) }, normalizedDeck) : null,
+    joinedAt: timestamp,
+    lastSeenAt: timestamp
+  };
+}
+
+function createBaseRoom({ hostPlayer, maxPlayers = 6, startingLife = 40, mode = "multiplayer", ai = null }) {
+  const timestamp = nowIso();
+  const room = {
+    code: createRoomCode(),
+    hostId: hostPlayer.id,
+    privateRoom: true,
+    mode,
+    maxPlayers: ALLOWED_MAX_PLAYERS.has(Number(maxPlayers)) ? Number(maxPlayers) : 6,
+    startingLife: ALLOWED_STARTING_LIFE.has(Number(startingLife)) ? Number(startingLife) : 40,
+    status: "waiting",
+    createdAt: timestamp,
+    updatedAt: timestamp,
+    startedAt: null,
+    turn: null,
+    rollOff: null,
+    settings: normalizeRoomSettings(null),
+    ai: normalizeAiState({ enabled: mode !== "multiplayer", mode, ...ai }),
+    spectators: [],
+    emotes: [],
+    replayFrames: [],
+    stack: [],
+    triggerQueue: [],
+    priority: { playerId: null, passedPlayerIds: [] },
+    rules: normalizeRulesState(null, [hostPlayer.id]),
+    actionHistory: [],
+    undoStack: [],
+    players: [hostPlayer],
+    chat: [],
+    log: []
+  };
+  return room;
+}
+
+function startImmediateGame(room, startingPreference = "random") {
+  const ids = room.players.map((player) => player.id);
+  room.players.forEach((player) => {
+    player.game = buildGameState(player, room.startingLife, ids);
+    player.game.pregameComplete = true;
+    player.game.mulliganBottomRequired = 0;
+  });
+  let firstId = ids[0];
+  if (startingPreference === "bot") firstId = room.players.find((player) => player.isBot)?.id || firstId;
+  else if (startingPreference === "human") firstId = room.players.find((player) => !player.isBot)?.id || firstId;
+  else firstId = ids[crypto.randomInt(0, ids.length)];
+  room.status = "started";
+  room.startedAt = nowIso();
+  room.rollOff = { ...createStartingRollOff(ids), currentEligiblePlayerIds: [], winnerPlayerId: firstId, winningRoll: null, completed: true };
+  room.turn = { number: 1, phaseIndex: 0, activePlayerId: firstId, order: createClockwiseTurnOrder(ids, firstId), deadlineAt: null };
+  room.stack = [];
+  room.triggerQueue = [];
+  room.priority = { playerId: firstId, passedPlayerIds: [] };
+  room.rules = normalizeRulesState(null, ids);
+  room.actionHistory = [];
+  room.undoStack = [];
+  room.replayFrames = [];
+  room.ai = normalizeAiState({ ...room.ai, enabled: true, mode: room.mode, startedAt: nowIso(), paused: false, stepRequested: false });
+  resetTurnDeadline(room);
+  addLog(room, `${findPlayer(room, firstId)?.name || "A player"} takes the first turn.`, "turn");
+}
+
+function botPlayers(room) {
+  return room.players.filter((player) => player.isBot && player.game && !player.game.lost && !player.game.conceded);
+}
+
+function clearBotSchedule(roomCode) {
+  const timer = botTimers.get(roomCode);
+  if (timer) clearTimeout(timer);
+  botTimers.delete(roomCode);
+}
+
+function recordBotDecision(room, bot, action, detail = {}) {
+  room.ai = normalizeAiState(room.ai);
+  const profile = bot.botState?.profile || analyzeDeckProfile(bot.deck);
+  const opponents = room.players.filter((player) => player.id !== bot.id && playerIsActiveInGame(player));
+  const boardScore = evaluateBoard(bot, opponents, profile);
+  const explanation = detail.explanation || explainDecision({
+    action,
+    card: detail.card,
+    target: detail.target,
+    profile,
+    boardScore,
+    alternatives: detail.alternatives || []
+  });
+  const entry = {
+    id: createId(),
+    time: nowIso(),
+    botId: bot.id,
+    botName: bot.name,
+    difficulty: bot.botState?.difficulty || "skilled",
+    action: action?.type || "wait",
+    cardName: detail.card?.name || "",
+    targetName: detail.target?.name || detail.target?.player?.name || "",
+    score: Number(detail.score) || boardScore,
+    explanation
+  };
+  room.ai.decisions.push(entry);
+  if (room.ai.decisions.length > 120) room.ai.decisions.splice(0, room.ai.decisions.length - 120);
+  bot.botState.lastActionAt = entry.time;
+  return entry;
+}
+
+function botOpeningLandCount(bot) {
+  return (bot.game?.hand || []).filter((card) => aiIsLand(card)).length;
+}
+
+function botShouldMulligan(bot) {
+  const difficulty = normalizeDifficulty(bot.botState?.difficulty);
+  const lands = botOpeningLandCount(bot);
+  const limit = difficulty === "expert" ? 2 : difficulty === "competitive" ? 1 : difficulty === "skilled" ? 1 : 0;
+  if ((bot.game?.mulliganCount || 0) >= limit) return false;
+  if (difficulty === "beginner") return false;
+  return lands < 2 || lands > 5;
+}
+
+function chooseMulliganBottom(bot) {
+  const required = bot.game?.mulliganBottomRequired || 0;
+  if (!required) return [];
+  const ranked = [...bot.game.hand].sort((a, b) => {
+    if (aiIsLand(a) !== aiIsLand(b)) return aiIsLand(a) ? 1 : -1;
+    return aiManaValue(b) - aiManaValue(a);
+  });
+  return ranked.slice(0, required).map((card) => card.id);
+}
+
+function availableBotLands(bot) {
+  return (bot.game?.battlefield || []).filter((card) => aiIsLand(card) && !card.tapped && !card.phasedOut);
+}
+
+function totalBotMana(bot) {
+  const pool = Object.values(bot.game?.manaPool || {}).reduce((sum, value) => sum + (Number(value) || 0), 0);
+  return pool + availableBotLands(bot).length;
+}
+
+function tapBotMana(bot, amount) {
+  let remaining = Math.max(0, Math.floor(Number(amount) || 0));
+  const pool = bot.game.manaPool;
+  for (const symbol of ["C", "W", "U", "B", "R", "G"]) {
+    const spend = Math.min(remaining, Number(pool[symbol]) || 0);
+    pool[symbol] -= spend;
+    remaining -= spend;
+  }
+  for (const land of availableBotLands(bot)) {
+    if (remaining <= 0) break;
+    land.tapped = true;
+    remaining -= 1;
+  }
+  return remaining <= 0;
+}
+
+function botCastLimit(difficulty) {
+  return { beginner: 1, skilled: 2, competitive: 3, expert: 4 }[normalizeDifficulty(difficulty)] || 2;
+}
+
+function botAttackRatio(difficulty) {
+  return { beginner: 0.55, skilled: 0.72, competitive: 0.84, expert: 0.92 }[normalizeDifficulty(difficulty)] || 0.72;
+}
+
+function botEligibleCreatures(bot) {
+  return (bot.game?.battlefield || []).filter((card) => aiIsCreature(card) && !card.tapped && !card.summoningSick && !card.phasedOut && !card.attacking);
+}
+
+function botTargetOpponents(room, bot) {
+  return room.players.filter((player) => player.id !== bot.id && playerIsActiveInGame(player));
+}
+
+function chooseBotCast(room, bot, instantOnly = false) {
+  const difficulty = normalizeDifficulty(bot.botState?.difficulty);
+  const profile = bot.botState?.profile || analyzeDeckProfile(bot.deck);
+  const mana = totalBotMana(bot);
+  const sources = [
+    ...(bot.game?.hand || []).map((card) => ({ card, fromZone: "hand" })),
+    ...(bot.game?.commandZone || []).map((card) => ({ card, fromZone: "commandZone" }))
+  ];
+  const candidates = sources.filter(({ card, fromZone }) => {
+    if (aiIsLand(card)) return false;
+    if (instantOnly && !isInstantSpeed(card)) return false;
+    const tax = fromZone === "commandZone" && card.commander ? Number(bot.game.commanderTax || 0) : 0;
+    return aiManaValue(card) + tax <= mana;
+  }).map((entry) => ({ ...entry, score: scoreCastCard(entry.card, profile, difficulty) }));
+  candidates.sort((a, b) => b.score - a.score);
+  if (!candidates.length) return null;
+  if (difficulty === "beginner") return candidates[Math.floor(Math.random() * Math.min(3, candidates.length))];
+  return candidates[0];
+}
+
+function chooseBotBlock(room, bot) {
+  const attackers = [];
+  for (const player of room.players) {
+    if (player.id === bot.id) continue;
+    for (const card of player.game?.battlefield || []) {
+      if (card.attacking && card.defendingPlayerId === bot.id) attackers.push({ player, card });
+    }
+  }
+  const alreadyBlocked = new Set((bot.game?.battlefield || []).map((card) => card.blockingCardId).filter(Boolean));
+  const target = attackers.filter((entry) => !alreadyBlocked.has(entry.card.id)).sort((a, b) => aiCardPower(b.card) - aiCardPower(a.card))[0];
+  const blockers = (bot.game?.battlefield || []).filter((card) => aiIsCreature(card) && !card.tapped && !card.phasedOut && !card.blockingCardId);
+  if (!target || !blockers.length) return null;
+  blockers.sort((a, b) => {
+    const aTrade = aiCardToughness(a) >= aiCardPower(target.card) ? 10 : 0;
+    const bTrade = aiCardToughness(b) >= aiCardPower(target.card) ? 10 : 0;
+    return (bTrade + aiCardPower(b)) - (aTrade + aiCardPower(a));
+  });
+  return { blocker: blockers[0], attacker: target.card, attackerPlayer: target.player };
+}
+
+function executeBotAction(room, bot, action, detail = {}) {
+  const result = processGameAction(room, bot, action);
+  if (!result.success) {
+    recordBotDecision(room, bot, { type: "pass-priority" }, { explanation: `The planned ${action.type} action was rejected (${result.error}), so the bot passed instead.` });
+    const fallback = processGameAction(room, bot, { type: "pass-priority" });
+    return fallback;
+  }
+  recordBotDecision(room, bot, action, detail);
+  recordReplayFrame(room, bot.name, `AI: ${action.type}`);
+  return result;
+}
+
+function performBotRollOff(room, bot) {
+  if (bot.game?.mulliganBottomRequired > 0) {
+    const ids = chooseMulliganBottom(bot);
+    return executeBotAction(room, bot, { type: "finish-mulligan", cardIds: ids }, { explanation: `Put ${ids.length} high-cost card(s) on the bottom after the mulligan.` });
+  }
+  if (botShouldMulligan(bot)) {
+    return executeBotAction(room, bot, { type: "take-mulligan" }, { explanation: `The opening hand had ${botOpeningLandCount(bot)} lands, outside the preferred range.` });
+  }
+  if (room.rollOff?.currentEligiblePlayerIds.includes(bot.id) && !Object.prototype.hasOwnProperty.call(room.rollOff.currentRolls || {}, bot.id)) {
+    const result = performStartingRoll(room, bot);
+    recordBotDecision(room, bot, { type: "roll-starting-d20" }, { explanation: "Rolled for the starting player after keeping the opening hand." });
+    return result;
+  }
+  return { success: true, idle: true };
+}
+
+function performBotStartedAction(room, bot) {
+  const phase = PHASES[room.turn?.phaseIndex || 0];
+  const activeBot = room.turn?.activePlayerId === bot.id;
+  const priorityBot = room.priority?.playerId === bot.id;
+  const difficulty = normalizeDifficulty(bot.botState?.difficulty);
+  const opponents = botTargetOpponents(room, bot);
+
+  if (!priorityBot && !activeBot) return { success: true, idle: true };
+
+  if (priorityBot && room.stack.length) {
+    const top = room.stack.at(-1);
+    const mayRespond = ["competitive", "expert"].includes(difficulty) && top?.controllerId !== bot.id && bot.botState.lastResponseStackId !== top.id;
+    if (mayRespond) {
+      const choice = chooseBotCast(room, bot, true);
+      if (choice) {
+        bot.botState.lastResponseStackId = top.id;
+        const inferred = inferSimpleEffect(choice.card, bot, opponents);
+        const cost = aiManaValue(choice.card) + (choice.fromZone === "commandZone" && choice.card.commander ? Number(bot.game.commanderTax || 0) : 0);
+        tapBotMana(bot, cost);
+        return executeBotAction(room, bot, { type: "cast-card", cardId: choice.card.id, fromZone: choice.fromZone, targets: inferred.targets, effect: inferred.effect }, { card: choice.card, score: choice.score, explanation: `Responded to ${top.name}; ${inferred.reason}.` });
+      }
+    }
+    return executeBotAction(room, bot, { type: "pass-priority" }, { explanation: `Held priority but found no response worth using against ${top?.name || "the stack"}.` });
+  }
+
+  if (!activeBot) {
+    if (phase === "Declare Blockers") {
+      const block = chooseBotBlock(room, bot);
+      if (block) return executeBotAction(room, bot, { type: "block-card", sourceCardId: block.blocker.id, targetCardId: block.attacker.id }, { card: block.blocker, target: block.attacker, explanation: `Blocked ${block.attacker.name} with ${block.blocker.name} to reduce expected combat damage.` });
+    }
+    if (priorityBot) return executeBotAction(room, bot, { type: "pass-priority" }, { explanation: "No profitable instant-speed action was available." });
+    return { success: true, idle: true };
+  }
+
+  if (!priorityBot) return { success: true, idle: true };
+
+  if (phase === "Untap") {
+    if (bot.botState.untappedTurn !== room.turn.number) {
+      bot.game.battlefield.forEach((card) => { card.tapped = false; card.summoningSick = false; });
+      bot.botState.untappedTurn = room.turn.number;
+      recordBotDecision(room, bot, { type: "untap-all" }, { explanation: "Untapped permanents and cleared summoning sickness for the new turn." });
+      return executeBotAction(room, bot, { type: "next-phase" }, { explanation: "Advanced after the automatic untap step." });
+    }
+    return executeBotAction(room, bot, { type: "next-phase" });
+  }
+
+  if (phase === "Upkeep") return executeBotAction(room, bot, { type: "next-phase" }, { explanation: "No optional upkeep action had a higher score." });
+
+  if (phase === "Draw") {
+    if (bot.botState.drawnTurn !== room.turn.number) {
+      bot.botState.drawnTurn = room.turn.number;
+      const drawResult = processGameAction(room, bot, { type: "draw", amount: 1 });
+      if (drawResult.success) recordBotDecision(room, bot, { type: "draw" }, { explanation: "Drew the normal card for the turn." });
+      recordReplayFrame(room, bot.name, "AI: draw");
+      return { success: true };
+    }
+    return executeBotAction(room, bot, { type: "next-phase" });
+  }
+
+  if (phase === "Main 1" || phase === "Main 2") {
+    const land = (bot.game.hand || []).find((card) => aiIsLand(card));
+    if (land && bot.botState.landPlayedTurn !== room.turn.number) {
+      bot.botState.landPlayedTurn = room.turn.number;
+      return executeBotAction(room, bot, { type: "move-card", cardId: land.id, fromZone: "hand", toZone: "battlefield" }, { card: land, explanation: "Played the available land for the turn to increase future mana." });
+    }
+    if (bot.botState.castTurn !== room.turn.number) {
+      bot.botState.castTurn = room.turn.number;
+      bot.botState.castsThisTurn = 0;
+    }
+    if (bot.botState.castsThisTurn < botCastLimit(difficulty)) {
+      const choice = chooseBotCast(room, bot, false);
+      if (choice) {
+        const inferred = inferSimpleEffect(choice.card, bot, opponents);
+        const cost = aiManaValue(choice.card) + (choice.fromZone === "commandZone" && choice.card.commander ? Number(bot.game.commanderTax || 0) : 0);
+        tapBotMana(bot, cost);
+        bot.botState.castsThisTurn += 1;
+        return executeBotAction(room, bot, { type: "cast-card", cardId: choice.card.id, fromZone: choice.fromZone, targets: inferred.targets, effect: inferred.effect }, { card: choice.card, score: choice.score, explanation: `${choice.card.name} was the best affordable play; ${inferred.reason}.` });
+      }
+    }
+    return executeBotAction(room, bot, { type: "next-phase" }, { explanation: "No additional affordable play improved the board enough." });
+  }
+
+  if (phase === "Beginning Combat") return executeBotAction(room, bot, { type: "next-phase" }, { explanation: "Entered combat after completing main-phase development." });
+
+  if (phase === "Declare Attackers") {
+    const target = chooseOpponent(bot, opponents);
+    const creatures = botEligibleCreatures(bot).sort((a, b) => aiCardPower(b) - aiCardPower(a));
+    const attackCount = Math.ceil(creatures.length * botAttackRatio(difficulty));
+    const already = (bot.game.battlefield || []).filter((card) => card.attacking).length;
+    const next = creatures[0];
+    if (target && next && already < attackCount) {
+      return executeBotAction(room, bot, { type: "declare-attacker", cardId: next.id, defenderPlayerId: target.id }, { card: next, target, explanation: `Attacked ${target.name}, the lowest evaluated opponent, with an efficient creature.` });
+    }
+    return executeBotAction(room, bot, { type: "next-phase" }, { explanation: `Declared ${already} attacker(s) and moved to blockers.` });
+  }
+
+  if (phase === "Declare Blockers") return executeBotAction(room, bot, { type: "next-phase" }, { explanation: "The active player has no blocks to declare." });
+
+  if (phase === "First-Strike Damage") return executeBotAction(room, bot, { type: "next-phase" }, { explanation: "First-strike damage was handled by the combat engine." });
+
+  if (phase === "Combat Damage") {
+    if (bot.botState.combatResolvedTurn !== room.turn.number) {
+      bot.botState.combatResolvedTurn = room.turn.number;
+      return executeBotAction(room, bot, { type: "resolve-combat-damage", pass: "normal" }, { explanation: "Resolved normal combat damage after attacks and blocks were declared." });
+    }
+    return executeBotAction(room, bot, { type: "next-phase" });
+  }
+
+  if (["End Combat", "End"].includes(phase)) return executeBotAction(room, bot, { type: "next-phase" }, { explanation: `Advanced through ${phase}.` });
+  if (phase === "Cleanup") return executeBotAction(room, bot, { type: "end-turn" }, { explanation: "Ended the turn after cleanup." });
+  return executeBotAction(room, bot, { type: "next-phase" });
+}
+
+function pickBotNeedingAction(room) {
+  const bots = botPlayers(room);
+  if (!bots.length) return null;
+  if (room.status === "rolloff") {
+    return bots.find((bot) => bot.game?.mulliganBottomRequired > 0 || botShouldMulligan(bot) || (room.rollOff?.currentEligiblePlayerIds.includes(bot.id) && !Object.prototype.hasOwnProperty.call(room.rollOff.currentRolls || {}, bot.id))) || null;
+  }
+  const priorityBot = bots.find((bot) => room.priority?.playerId === bot.id);
+  if (priorityBot) return priorityBot;
+  if (!room.priority?.playerId) return bots.find((bot) => room.turn?.activePlayerId === bot.id) || null;
+  return null;
+}
+
+function runBotStep(room) {
+  if (!room || !["rolloff", "started"].includes(room.status) || room.rules?.gameOver) return { success: true, idle: true };
+  const bot = pickBotNeedingAction(room);
+  if (!bot) return { success: true, idle: true };
+  room.ai.activeBotId = bot.id;
+  bot.botState = normalizeBotState(bot.botState, bot.deck);
+  bot.botState.thinking = true;
+  let result;
+  try {
+    result = room.status === "rolloff" ? performBotRollOff(room, bot) : performBotStartedAction(room, bot);
+  } finally {
+    bot.botState.thinking = false;
+    room.ai.activeBotId = null;
+  }
+  runStateBasedActions(room, "ai-step");
+  if (room.rules?.gameOver && !room.ai.testResult) {
+    const winners = room.players.filter((player) => room.rules.winnerPlayerIds.includes(player.id));
+    room.ai.gamesCompleted += 1;
+    room.ai.testResult = { endedAt: nowIso(), winnerNames: winners.map((player) => player.name), turns: room.turn?.number || 0 };
+  }
+  return result;
+}
+
+function scheduleBots(room, immediate = false) {
+  clearBotSchedule(room?.code);
+  if (!room || !room.players.some((player) => player.isBot) || !["rolloff", "started"].includes(room.status) || room.rules?.gameOver) return;
+  room.ai = normalizeAiState({ ...room.ai, enabled: true, mode: room.mode || room.ai?.mode });
+  if (room.ai.paused && !room.ai.stepRequested) return;
+  const delay = immediate ? 40 : room.ai.speedMs;
+  const timer = setTimeout(() => {
+    botTimers.delete(room.code);
+    const stepWasRequested = room.ai.stepRequested;
+    room.ai.stepRequested = false;
+    const result = runBotStep(room);
+    emitRoomUpdate(room);
+    if (stepWasRequested) {
+      room.ai.paused = true;
+      emitRoomUpdate(room);
+      return;
+    }
+    if (!result?.idle) scheduleBots(room, false);
+    else if (pickBotNeedingAction(room)) scheduleBots(room, false);
+  }, delay);
+  timer.unref?.();
+  botTimers.set(room.code, timer);
+}
+
+function restartTestLab(room) {
+  if (!room || !["test-lab", "bot-arena"].includes(room.mode)) return false;
+  room.players.forEach((player) => {
+    player.ready = true;
+    if (player.isBot) player.botState = normalizeBotState({ difficulty: player.botState?.difficulty, profile: analyzeDeckProfile(player.deck) }, player.deck);
+  });
+  room.chat = [];
+  room.log = [];
+  startImmediateGame(room, "random");
+  addLog(room, "The AI test was restarted with the same decks.", "ai");
+  scheduleBots(room, true);
+  return true;
+}
+
 app.post("/api/decks/validate", (request, response) => {
   const result = validateCommanderDeck(request.body?.deck);
   return response.status(result.valid ? 200 : 422).json({ success: result.valid, validation: result });
 });
 
-app.get("/api/rules/coverage", (request, response) => response.json({ success:true, version:RULES_VERSION, automatic:["Commander setup validation","multiplayer London mulligans","mana-payment checking for standard symbols","stack and clockwise priority","combat damage and common keywords","state-based losses","lethal and zero-toughness creatures","planeswalker loyalty and battle defense","legend-rule decisions","tokens leaving valid zones"], assisted:["targets and modes","replacement and prevention effects","continuous effects and layers","trigger ordering","special card layouts","votes and secret choices","loops and shortcuts"], universalFallback:"Judge Mode can move objects, change players/cards, create objects, add effects, assign roles and record loop results." }));
+app.get("/api/rules/coverage", (request, response) => response.json({ success:true, version:RULES_VERSION, automatic:["Commander setup validation","AI legal-action generation","AI mana and phase sequencing","AI combat attacks and blocks","AI deck profiling and threat scoring","multiplayer London mulligans","mana-payment checking for standard symbols","stack and clockwise priority","combat damage and common keywords","state-based losses","lethal and zero-toughness creatures","planeswalker loyalty and battle defense","legend-rule decisions","tokens leaving valid zones"], assisted:["targets and modes","replacement and prevention effects","continuous effects and layers","trigger ordering","special card layouts","votes and secret choices","loops and shortcuts"], universalFallback:"Judge Mode can move objects, change players/cards, create objects, add effects, assign roles and record loop results." }));
+
+app.get("/api/ai/coverage", (request, response) => response.json({
+  success: true,
+  version: "35.0.0",
+  modes: ["Solo Test Lab", "optional AI seats in 2–6 player rooms"],
+  difficulties: ["beginner", "skilled", "competitive", "expert"],
+  automatic: ["opening-hand land checks", "d20 roll-off", "priority passing", "land development", "mana approximation", "spell selection", "simple targets and effects", "attacks", "blocks", "turn sequencing", "decision explanations"],
+  assisted: ["complex replacement effects", "unusual alternative costs", "multi-card combo execution", "card-specific exceptions not represented by the shared rules engine"],
+  note: "Expert is a strong heuristic testing opponent, not a perfect solver for every Magic card. Judge Mode remains the universal fallback."
+}));
 
 app.post("/api/cards/resolve", async (request, response) => {
   const names = Array.isArray(request.body?.names) ? request.body.names : [];
@@ -2077,7 +2617,7 @@ app.get("/api/health", (request, response) => {
     success: true,
     status: "online",
     app: "Arena Commander Table",
-    version: "30.0.0",
+    version: "35.0.0",
     connectedSockets: io.engine.clientsCount,
     activeRooms: rooms.size,
     persistence: persistenceSummary(),
@@ -2086,7 +2626,7 @@ app.get("/api/health", (request, response) => {
 });
 
 app.get("/api", (request, response) => {
-  response.status(200).json({ success: true, name: "Arena Commander Table API", version: "30.0.0", persistence: persistenceSummary() });
+  response.status(200).json({ success: true, name: "Arena Commander Table API", version: "35.0.0", modes: ["2–6 player Commander", "Solo Test Lab", "Human + bot mixed tables"], persistence: persistenceSummary() });
 });
 
 io.on("connection", (socket) => {
@@ -2098,10 +2638,10 @@ io.on("connection", (socket) => {
       const name = normalizePlayerName(payload?.playerName);
       if (name.length < 2) return fail(callback, "Enter a player name with at least two characters.");
       const timestamp = nowIso();
-      const player = { id: createId(), name, ready: false, connected: true, socketId: socket.id, sessionToken: createSessionToken(), deck: null, game: null, joinedAt: timestamp, lastSeenAt: timestamp };
+      const player = { id: createId(), name, ready: false, connected: true, socketId: socket.id, sessionToken: createSessionToken(), deck: null, game: null, isBot: false, botState: null, joinedAt: timestamp, lastSeenAt: timestamp };
       const maxPlayers = ALLOWED_MAX_PLAYERS.has(Number(payload?.maxPlayers)) ? Number(payload.maxPlayers) : 6;
       const startingLife = ALLOWED_STARTING_LIFE.has(Number(payload?.startingLife)) ? Number(payload.startingLife) : 40;
-      const room = { code: createRoomCode(), hostId: player.id, privateRoom: true, maxPlayers, startingLife, status: "waiting", createdAt: timestamp, updatedAt: timestamp, startedAt: null, turn: null, rollOff: null, settings: normalizeRoomSettings(null), spectators: [], emotes: [], replayFrames: [], stack: [], triggerQueue: [], priority: { playerId: null, passedPlayerIds: [] }, rules: normalizeRulesState(null,[player.id]), actionHistory: [], undoStack: [], players: [player], chat: [], log: [] };
+      const room = { code: createRoomCode(), hostId: player.id, privateRoom: true, mode: "multiplayer", maxPlayers, startingLife, status: "waiting", createdAt: timestamp, updatedAt: timestamp, startedAt: null, turn: null, rollOff: null, settings: normalizeRoomSettings(null), ai: normalizeAiState({ enabled:false, mode:"multiplayer" }), spectators: [], emotes: [], replayFrames: [], stack: [], triggerQueue: [], priority: { playerId: null, passedPlayerIds: [] }, rules: normalizeRulesState(null,[player.id]), actionHistory: [], undoStack: [], players: [player], chat: [], log: [] };
       rooms.set(room.code, room);
       attachSocket(socket, room, player);
       addLog(room, `${name} created the room.`, "room");
@@ -2110,6 +2650,36 @@ io.on("connection", (socket) => {
     } catch (error) {
       console.error(error);
       fail(callback, "An unexpected server error occurred.");
+    }
+  });
+
+  socket.on("create-test-lab", (payload, callback) => {
+    try {
+      if (socket.data.roomCode) return fail(callback, "Leave your current room first.");
+      const name = normalizePlayerName(payload?.playerName);
+      if (name.length < 2) return fail(callback, "Enter a player name with at least two characters.");
+      const playerDeck = normalizeDeck(payload?.playerDeck);
+      const botDeck = normalizeDeck(payload?.botDeck);
+      if (!playerDeck || !botDeck) return fail(callback, "Choose two complete Commander decks first.");
+      const difficulty = normalizeDifficulty(payload?.difficulty);
+      const human = createRoomPlayer({ name, socket, deck: playerDeck, isBot: false });
+      human.ready = true;
+      const bot = createRoomPlayer({ name: normalizePlayerName(payload?.botName) || `${difficulty[0].toUpperCase()}${difficulty.slice(1)} Bot`, deck: botDeck, isBot: true, difficulty });
+      const speedMs = BOT_SPEEDS.has(Number(payload?.speedMs)) ? Number(payload.speedMs) : 900;
+      const room = createBaseRoom({ hostPlayer: human, maxPlayers: 2, startingLife: payload?.startingLife, mode: "test-lab", ai: { enabled: true, mode: "test-lab", speedMs, paused: false } });
+      room.players.push(bot);
+      room.settings = normalizeRoomSettings({ ...room.settings, enforceDeckRules: false, allowInvalidDecks: true, allowSpectators: false, turnTimerSeconds: 0 });
+      room.rules = normalizeRulesState(null, room.players.map((player) => player.id));
+      rooms.set(room.code, room);
+      attachSocket(socket, room, human);
+      startImmediateGame(room, ["human", "bot", "random"].includes(payload?.startingPlayer) ? payload.startingPlayer : "random");
+      addLog(room, `${human.name} opened Solo Test Lab against ${bot.name} (${difficulty}).`, "ai");
+      acknowledge(callback, { success: true, playerId: human.id, sessionToken: human.sessionToken, room: createPublicRoom(room, human.id) });
+      emitRoomUpdate(room);
+      scheduleBots(room, true);
+    } catch (error) {
+      console.error(error);
+      fail(callback, "Unable to create the AI Test Lab.");
     }
   });
 
@@ -2124,7 +2694,7 @@ io.on("connection", (socket) => {
       if (name.length < 2) return fail(callback, "Enter a player name with at least two characters.");
       if (room.players.some((player) => player.name.toLowerCase() === name.toLowerCase())) return fail(callback, "That player name is already being used.");
       const timestamp = nowIso();
-      const player = { id: createId(), name, ready: false, connected: true, socketId: socket.id, sessionToken: createSessionToken(), deck: null, game: null, joinedAt: timestamp, lastSeenAt: timestamp };
+      const player = { id: createId(), name, ready: false, connected: true, socketId: socket.id, sessionToken: createSessionToken(), deck: null, game: null, isBot: false, botState: null, joinedAt: timestamp, lastSeenAt: timestamp };
       room.players.push(player);
       attachSocket(socket, room, player);
       addLog(room, `${name} joined the room.`, "room");
@@ -2205,6 +2775,68 @@ io.on("connection", (socket) => {
     emitRoomUpdate(auth.room);
   });
 
+  socket.on("add-bot", (payload, callback) => {
+    const auth = authenticationFrom(payload);
+    if (!auth.success) return acknowledge(callback, auth);
+    if (auth.room.hostId !== auth.player.id) return fail(callback, "Only the host can add bot seats.");
+    if (auth.room.status !== "waiting") return fail(callback, "Bots can only be added in the lobby.");
+    if (auth.room.players.length >= auth.room.maxPlayers) return fail(callback, "The room is already full.");
+    const deck = normalizeDeck(payload?.deck);
+    if (!deck) return fail(callback, "Choose a complete Commander deck for the bot.");
+    const difficulty = normalizeDifficulty(payload?.difficulty);
+    let name = normalizePlayerName(payload?.name) || `${difficulty[0].toUpperCase()}${difficulty.slice(1)} Bot`;
+    let suffix = 2;
+    while (auth.room.players.some((entry) => entry.name.toLowerCase() === name.toLowerCase())) name = `${normalizePlayerName(payload?.name) || "Commander Bot"} ${suffix++}`;
+    const bot = createRoomPlayer({ name, deck, isBot: true, difficulty });
+    auth.room.players.push(bot);
+    auth.room.ai = normalizeAiState({ ...auth.room.ai, enabled: true, mode: auth.room.mode || "multiplayer" });
+    auth.room.rules = normalizeRulesState(auth.room.rules, auth.room.players.map((player) => player.id));
+    addLog(auth.room, `${bot.name} joined as a ${difficulty} AI seat.`, "ai");
+    acknowledge(callback, { success: true, botId: bot.id, room: createPublicRoom(auth.room, auth.player.id) });
+    emitRoomUpdate(auth.room);
+  });
+
+  socket.on("ai-control", (payload, callback) => {
+    const auth = authenticationFrom(payload);
+    if (!auth.success) return acknowledge(callback, auth);
+    if (auth.room.hostId !== auth.player.id) return fail(callback, "Only the host can control AI testing.");
+    if (!auth.room.players.some((player) => player.isBot)) return fail(callback, "This room has no bot seats.");
+    const mode = normalizeText(payload?.mode, 40);
+    auth.room.ai = normalizeAiState({ ...auth.room.ai, enabled: true, mode: auth.room.mode || auth.room.ai?.mode });
+    if (mode === "pause") auth.room.ai.paused = true;
+    else if (mode === "resume") { auth.room.ai.paused = false; auth.room.ai.stepRequested = false; }
+    else if (mode === "step") { auth.room.ai.paused = true; auth.room.ai.stepRequested = true; }
+    else if (mode === "speed") {
+      const speedMs = Number(payload?.speedMs);
+      if (!BOT_SPEEDS.has(speedMs)) return fail(callback, "Choose a supported AI speed.");
+      auth.room.ai.speedMs = speedMs;
+    }
+    else if (mode === "reveal") auth.room.ai.revealBotHands = Boolean(payload?.enabled);
+    else if (mode === "difficulty") {
+      const bot = findPlayer(auth.room, String(payload?.botId || ""));
+      if (!bot?.isBot) return fail(callback, "Choose a bot seat.");
+      bot.botState = normalizeBotState({ ...bot.botState, difficulty: normalizeDifficulty(payload?.difficulty), profile: analyzeDeckProfile(bot.deck) }, bot.deck);
+    }
+    else if (mode === "restart") {
+      if (!restartTestLab(auth.room)) return fail(callback, "Restart is only available in Test Lab.");
+    }
+    else if (mode === "swap-decks") {
+      if (auth.room.mode !== "test-lab") return fail(callback, "Deck swapping is only available in Test Lab.");
+      const bot = auth.room.players.find((player) => player.isBot);
+      if (!bot) return fail(callback, "The test bot was not found.");
+      const previous = auth.player.deck;
+      auth.player.deck = bot.deck;
+      bot.deck = previous;
+      bot.botState = normalizeBotState({ ...bot.botState, profile: analyzeDeckProfile(bot.deck) }, bot.deck);
+      restartTestLab(auth.room);
+    }
+    else return fail(callback, "Unknown AI control.");
+    addLog(auth.room, `${auth.player.name} changed AI control: ${mode}.`, "ai");
+    acknowledge(callback, { success: true, room: createPublicRoom(auth.room, auth.player.id) });
+    emitRoomUpdate(auth.room);
+    scheduleBots(auth.room, true);
+  });
+
   socket.on("start-game", (payload, callback) => {
     const auth = authenticationFrom(payload);
     if (!auth.success) return acknowledge(callback, auth);
@@ -2229,6 +2861,7 @@ io.on("connection", (socket) => {
     addLog(auth.room, "Starting-player d20 roll-off began. Every player must roll once; tied high rolls reroll.", "roll");
     acknowledge(callback, { success: true, room: createPublicRoom(auth.room, auth.player.id) });
     emitRoomUpdate(auth.room);
+    scheduleBots(auth.room, true);
   });
 
   socket.on("roll-starting-d20", (payload, callback) => {
@@ -2239,6 +2872,7 @@ io.on("connection", (socket) => {
     if (result.completed) recordReplayFrame(auth.room, auth.player.name, "Starting player chosen");
     acknowledge(callback, { ...result, room: createPublicRoom(auth.room, auth.player.id) });
     emitRoomUpdate(auth.room);
+    scheduleBots(auth.room, true);
   });
 
   socket.on("game-action", (payload, callback) => {
@@ -2250,6 +2884,7 @@ io.on("connection", (socket) => {
     recordReplayFrame(auth.room, auth.player.name, normalizeText(action.type, 80) || "Game action");
     acknowledge(callback, { success: true, room: createPublicRoom(auth.room, auth.player.id) });
     emitRoomUpdate(auth.room);
+    scheduleBots(auth.room, true);
   });
 
   socket.on("send-chat", (payload, callback) => {
@@ -2308,7 +2943,9 @@ io.on("connection", (socket) => {
     auth.room.replayFrames = [];
     auth.room.emotes = [];
     auth.room.rules = normalizeRulesState(null, auth.room.players.map((player) => player.id));
-    auth.room.players.forEach((player) => { player.game = null; player.ready = false; });
+    auth.room.players.forEach((player) => { player.game = null; player.ready = player.isBot ? Boolean(player.deck) : false; });
+    clearBotSchedule(auth.room.code);
+    auth.room.ai = normalizeAiState({ ...auth.room.ai, paused: true, stepRequested: false, testResult: null });
     auth.room.chat = [];
     auth.room.log = [];
     addLog(auth.room, `${auth.player.name} returned the room to the lobby.`, "room");
@@ -2414,8 +3051,9 @@ async function start() {
     databaseState.lastError = normalizeText(error?.message, 240);
     console.error("PostgreSQL initialization failed. Continuing with memory:", error);
   }
+  for (const room of rooms.values()) if (room.players.some((player) => player.isBot)) scheduleBots(room, true);
   server.listen(PORT, "0.0.0.0", () => {
-    console.log(`Arena Commander Final Rules v30 running on port ${PORT}`);
+    console.log(`Arena Commander AI Test Lab v35 running on port ${PORT}`);
   });
 }
 
@@ -2423,6 +3061,7 @@ async function shutdown(signal) {
   console.log(`${signal} received. Closing server...`);
   clearInterval(cleanupInterval);
   for (const timer of disconnectTimers.values()) clearTimeout(timer);
+  for (const timer of botTimers.values()) clearTimeout(timer);
   try { await flushPersistence(); } catch (error) { console.error("Final persistence flush failed:", error); }
   io.close();
   server.close(async () => {
@@ -2460,7 +3099,15 @@ module.exports = {
   parseManaRequirement,
   payManaCost,
   resolveRuleDecision,
-  applyJudgeAction
+  applyJudgeAction,
+  createRoomPlayer,
+  createBaseRoom,
+  buildGameState,
+  startImmediateGame,
+  runBotStep,
+  recordBotDecision,
+  normalizeAiState,
+  normalizeBotState
 };
 
 if (require.main === module) start();
