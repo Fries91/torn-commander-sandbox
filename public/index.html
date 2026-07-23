@@ -5,18 +5,19 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1">
   <meta name="theme-color" content="#08110f">
   <meta name="description" content="Arena-style MTG with Official Commander, Official Brawl, Custom Rule Zero rooms, AI Test Lab, Meta Deck Library, bots and persistent games.">
-  <title>Arena Commander Meta Library</title>
+  <title>Arena Commander — Table, Meta & Torn Notifier</title>
   <link rel="manifest" href="/manifest.webmanifest">
   <link rel="icon" href="/icon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="/styles.css">
-  <link rel="stylesheet" href="/clean-home.css?v=38.0.0">
-  <link rel="stylesheet" href="/meta-library.css?v=38.0.0">
+  <link rel="stylesheet" href="/clean-home.css?v=39.0.0">
+  <link rel="stylesheet" href="/meta-library.css?v=39.0.0">
+  <link rel="stylesheet" href="/commander-theme.css?v=39.0.0">
 </head>
 <body>
   <header class="app-header">
     <button id="brandButton" class="brand-button" type="button" aria-label="Home">
       <span class="brand-mark">♛</span>
-      <span><strong>Arena Commander</strong><small>Meta Library v38</small></span>
+      <span><strong>Arena Commander</strong><small>Commander Table v39</small></span>
     </button>
     <div class="header-actions">
       <div id="connectionStatus" class="connection-status offline"><span></span><span id="connectionText">Connecting…</span></div>
@@ -51,7 +52,8 @@
 
   <script src="/socket.io/socket.io.js"></script>
   <script src="/app.js" defer></script>
-  <script src="/clean-home.js?v=38.0.0" defer></script>
-  <script src="/meta-library.js?v=38.0.0" defer></script>
+  <script src="/clean-home.js?v=39.0.0" defer></script>
+  <script src="/meta-library.js?v=39.0.0" defer></script>
+  <script src="/lobby-notifier-ui.js?v=39.0.0" defer></script>
 </body>
 </html>
