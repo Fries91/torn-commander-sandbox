@@ -1,0 +1,227 @@
+/* Arena Commander v57 — replacement, prevention and redirection */
+
+.v57-replacement-button {
+  position: relative;
+  border-color: rgba(105, 224, 255, .52) !important;
+}
+
+.v57-replacement-button > b {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  display: grid;
+  place-items: center;
+  min-width: 19px;
+  height: 19px;
+  border-radius: 999px;
+  background: #177ca6;
+  color: white;
+  font-size: 9px;
+}
+
+.v57-replacement-sheet {
+  position: fixed;
+  inset: 0;
+  z-index: 1330000;
+  display: grid;
+  align-items: end;
+  padding: 12px;
+  background: rgba(0, 0, 0, .87);
+  backdrop-filter: blur(7px);
+}
+
+.v57-replacement-sheet > section {
+  width: min(1040px, 100%);
+  max-height: 94dvh;
+  margin-inline: auto;
+  overflow: auto;
+  padding: 15px;
+  border: 1px solid rgba(106, 220, 255, .56);
+  border-radius: 18px 18px 8px 8px;
+  background:
+    radial-gradient(
+      circle at 10% 4%,
+      rgba(20, 133, 178, .24),
+      transparent 35%
+    ),
+    #061722;
+  color: #f2fbff;
+}
+
+.v57-replacement-sheet > section > header {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.v57-replacement-sheet header small {
+  color: #82dfff;
+  font-weight: 1000;
+  letter-spacing: .09em;
+}
+
+.v57-replacement-sheet header h2 {
+  margin: 3px 0 12px;
+}
+
+.v57-replacement-sheet header > button {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+}
+
+.v57-help {
+  color: #b8d0db;
+}
+
+.v57-effect-list,
+.v57-history {
+  display: grid;
+  gap: 7px;
+}
+
+.v57-effect-row {
+  display: grid;
+  grid-template-columns:
+    34px minmax(0, 1fr)
+    minmax(140px, 220px)
+    auto auto;
+  gap: 7px;
+  align-items: center;
+  padding: 8px;
+  border: 1px solid rgba(255,255,255,.1);
+  border-radius: 10px;
+  background: rgba(255,255,255,.035);
+}
+
+.v57-order-handle {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  background: rgba(93, 207, 245, .16);
+  color: #a9eaff;
+  font-weight: 1000;
+}
+
+.v57-effect-row > div {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.v57-effect-row small {
+  color: #a7c0ca;
+}
+
+.v57-effect-row span {
+  color: #7bdcff;
+}
+
+.v57-effect-row select {
+  width: 100%;
+  min-width: 0;
+  padding: 7px;
+}
+
+.v57-order-buttons {
+  display: grid !important;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px !important;
+}
+
+.v57-order-buttons button {
+  min-width: 34px;
+}
+
+.v57-effect-row button,
+.v57-save-order,
+.v57-builder button {
+  border-color: #80ddff !important;
+  background:
+    linear-gradient(
+      135deg,
+      #238db6,
+      #15516e
+    ) !important;
+  color: white !important;
+  font-weight: 900;
+}
+
+.v57-save-order {
+  width: 100%;
+  min-height: 43px;
+  margin-top: 8px;
+}
+
+.v57-builder {
+  display: grid;
+  grid-template-columns:
+    repeat(4, minmax(0, 1fr));
+  gap: 7px;
+  padding: 10px;
+  border: 1px solid rgba(255,255,255,.1);
+  border-radius: 10px;
+  background: rgba(255,255,255,.035);
+}
+
+.v57-builder select,
+.v57-builder input {
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  padding: 9px;
+}
+
+.v57-builder button {
+  grid-column: 1 / -1;
+}
+
+.v57-history-row {
+  display: grid;
+  grid-template-columns:
+    minmax(0, 1fr) auto;
+  gap: 3px 8px;
+  padding: 8px;
+  border: 1px solid rgba(255,255,255,.09);
+  border-radius: 9px;
+  background: rgba(255,255,255,.03);
+}
+
+.v57-history-row span {
+  color: #81ddff;
+  font-weight: 900;
+}
+
+.v57-history-row small {
+  grid-column: 1 / -1;
+  color: #adc2cb;
+}
+
+@media (max-width: 780px) {
+  .v57-effect-row {
+    grid-template-columns:
+      34px minmax(0, 1fr);
+  }
+
+  .v57-effect-row > select,
+  .v57-effect-row > button,
+  .v57-order-buttons {
+    grid-column: 1 / -1;
+  }
+
+  .v57-builder {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+@media (max-width: 520px) {
+  .v57-builder {
+    grid-template-columns: 1fr;
+  }
+
+  .v57-builder button {
+    grid-column: 1;
+  }
+}
