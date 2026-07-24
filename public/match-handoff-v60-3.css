@@ -1,0 +1,33 @@
+/* Arena Commander v60.3 — mobile match handoff and stale-layer safety */
+
+.toast-region,
+.toast-region .toast {
+  pointer-events: none !important;
+}
+
+.meta-library-overlay.is-hidden,
+.modal-backdrop.is-hidden,
+.reconnect-overlay.is-hidden {
+  display: none !important;
+  pointer-events: none !important;
+}
+
+body:not(.in-game) .clean-resume-card {
+  position: relative;
+  z-index: 2;
+}
+
+body:not(.in-game)
+.clean-resume-card
+button[data-action="rejoin"] {
+  touch-action: manipulation;
+  pointer-events: auto;
+}
+
+@media (pointer: coarse) {
+  body:not(.in-game)
+  .clean-resume-card
+  button[data-action="rejoin"] {
+    min-height: 48px;
+  }
+}
