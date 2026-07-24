@@ -1,6 +1,7 @@
 "use strict";
 
-const CACHE_NAME = "arena-commander-match-handoff-v60.3.0";
+const CACHE_NAME = "arena-commander-connection-v60.4.0";
+
 const APP_SHELL = [
   "/",
   "/index.html",
@@ -32,37 +33,9 @@ const APP_SHELL = [
   "/hidden-v59.css?v=59.0.0",
   "/turn-v60.css?v=60.0.0",
   "/match-handoff-v60-3.css?v=60.3.0",
-  "/app.js",
-  "/deck-import-fix.js?v=39.2.0",
-  "/card-automation-ui.js?v=40.0.0",
-  "/gameplay-hotfix.js?v=40.1.0",
-  "/arena-table-v41-1.js?v=41.1.0",
-  "/arena-table-v41.js?v=41.0.0",
-  "/arena-autotap-v42.js?v=42.0.0",
-  "/zone-choices-v43.js?v=43.0.0",
-  "/targeting-v44.js?v=44.0.0",
-  "/effects-v45.js?v=45.0.0",
-  "/mechanics-v46.js?v=46.0.0",
-  "/permissions-v47.js?v=47.0.0",
-  "/triggers-v48.js?v=48.0.0",
-  "/forms-v49.js?v=49.0.0",
-  "/casting-v50.js?v=50.0.0",
-  "/combat-v51.js?v=51.0.0",
-  "/walkers-v52.js?v=52.0.0",
-  "/attachments-v53.js?v=53.0.0",
-  "/copies-v54.js?v=54.0.0",
-  "/commander-v55.js?v=55.0.0",
-  "/multiplayer-v56.js?v=56.0.0",
-  "/replacement-v57.js?v=57.0.0",
-  "/control-v58.js?v=58.0.0",
-  "/hidden-v59.js?v=59.0.0",
-  "/turn-v60.js?v=60.0.0",
-  "/clean-home.js?v=39.0.0",
-  "/meta-library.js?v=39.0.0",
-  "/lobby-notifier-ui.js?v=39.1.0",
-  "/match-handoff-v60-3.js?v=60.3.0",
-  "/notifier-install.html",
-  "/notifier-icon.svg",
+  "/socket-mobile-v60-4.js?v=60.4.0",
+  "/app.js?v=60.4.0",
+  "/match-handoff-v60-4.js?v=60.4.0",
   "/manifest.webmanifest",
   "/icon.svg"
 ];
@@ -96,8 +69,7 @@ self.addEventListener("fetch", (event) => {
   if (
     url.origin !== self.location.origin ||
     url.pathname.startsWith("/socket.io/") ||
-    url.pathname.startsWith("/api/") ||
-    url.pathname.endsWith(".user.js")
+    url.pathname.startsWith("/api/")
   ) {
     return;
   }
@@ -105,20 +77,16 @@ self.addEventListener("fetch", (event) => {
   event.respondWith(
     fetch(request)
       .then((response) => {
-        const copy = response.clone();
-
-        caches.open(CACHE_NAME)
-          .then((cache) => cache.put(request, copy))
-          .catch(() => undefined);
-
+        if (response.ok) {
+          caches.open(CACHE_NAME)
+            .then((cache) => cache.put(request, response.clone()))
+            .catch(() => undefined);
+        }
         return response;
       })
       .catch(() =>
         caches.match(request)
-          .then((cached) =>
-            cached ||
-            caches.match("/index.html")
-          )
+          .then((cached) => cached || caches.match("/index.html"))
       )
   );
 });
