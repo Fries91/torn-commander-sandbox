@@ -1,0 +1,110 @@
+/* Arena Commander v45 — replacement and continuous effects */
+
+.v45-replacement-overlay,
+.v45-effects-sheet {
+  position: fixed;
+  inset: 0;
+  z-index: 1210000;
+  display: grid;
+  place-items: center;
+  padding: 14px;
+  background: rgba(0,0,0,.82);
+  backdrop-filter: blur(7px);
+}
+
+.v45-replacement-overlay > section,
+.v45-effects-sheet > section {
+  width: min(620px, 100%);
+  max-height: 88dvh;
+  overflow: auto;
+  padding: 17px;
+  border: 1px solid rgba(105, 220, 164, .52);
+  border-radius: 17px;
+  background:
+    radial-gradient(circle at 12% 5%, rgba(55, 170, 112, .2), transparent 34%),
+    #07150e;
+  color: #effbf3;
+  box-shadow: 0 28px 80px rgba(0,0,0,.78);
+}
+
+.v45-replacement-overlay small,
+.v45-effects-sheet small {
+  color: #82dfaa;
+  font-weight: 900;
+  letter-spacing: .09em;
+}
+
+.v45-replacement-overlay h2 {
+  margin: 4px 0;
+}
+
+.v45-replacement-overlay > section > div {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.v45-pay-life {
+  border-color: #8ce8b5 !important;
+  background: linear-gradient(135deg, #31865a, #175137) !important;
+  color: white !important;
+  font-weight: 900;
+}
+
+.v45-effects-sheet header {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.v45-effects-sheet header h2 {
+  margin: 3px 0 10px;
+}
+
+.v45-effects-sheet header button {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+}
+
+.v45-effect-list {
+  display: grid;
+  gap: 8px;
+}
+
+.v45-effect-list article {
+  position: relative;
+  padding: 11px;
+  border: 1px solid rgba(255,255,255,.1);
+  border-radius: 10px;
+  background: rgba(255,255,255,.04);
+}
+
+.v45-effect-list article p {
+  margin: 4px 0;
+  color: #aec4b7;
+}
+
+.v45-effect-list article > small {
+  position: absolute;
+  top: 9px;
+  right: 9px;
+  padding: 4px 6px;
+  border-radius: 999px;
+  background: rgba(66, 184, 119, .15);
+}
+
+.arena-card.v45-continuous-effect {
+  box-shadow:
+    0 0 0 2px rgba(92, 224, 151, .75),
+    0 0 20px rgba(92, 224, 151, .42) !important;
+}
+
+.v45-effects-button {
+  border-color: rgba(92,224,151,.45) !important;
+}
+
+@media (max-width: 520px) {
+  .v45-replacement-overlay > section > div { grid-template-columns: 1fr; }
+}
