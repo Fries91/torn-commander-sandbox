@@ -1,0 +1,316 @@
+/* Arena Commander v49 — card faces and permanent forms */
+
+.v49-forms-panel {
+  display: grid;
+  gap: 10px;
+  margin: 12px 0;
+  padding: 12px;
+  border: 1px solid rgba(255, 137, 209, .46);
+  border-radius: 14px;
+  background:
+    radial-gradient(circle at 12% 4%, rgba(211, 64, 157, .19), transparent 35%),
+    rgba(31, 7, 24, .74);
+}
+
+.v49-forms-panel > header {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.v49-forms-panel header small,
+.v49-forms-panel header strong {
+  display: block;
+}
+
+.v49-forms-panel header small {
+  color: #ff9fdb;
+  font-weight: 1000;
+  letter-spacing: .09em;
+}
+
+.v49-forms-panel header > span {
+  padding: 5px 7px;
+  border-radius: 999px;
+  background: rgba(213, 75, 162, .18);
+  color: #ffc9ea;
+}
+
+.v49-face-grid {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding-bottom: 4px;
+}
+
+.v49-face-option {
+  flex: 0 0 126px;
+  position: relative;
+  display: grid !important;
+  gap: 4px;
+  padding: 7px;
+  border: 1px solid rgba(255,255,255,.1);
+  border-radius: 10px;
+  background: rgba(0,0,0,.2);
+}
+
+.v49-face-option:has(input:checked) {
+  border-color: #ff91d4;
+  box-shadow: 0 0 17px rgba(255, 102, 197, .34);
+}
+
+.v49-face-option input {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  width: 19px;
+  height: 19px;
+  z-index: 2;
+}
+
+.v49-face-option img,
+.v49-face-option .v49-face-back {
+  width: 100%;
+  aspect-ratio: 488 / 680;
+  object-fit: contain;
+  border-radius: 7px;
+}
+
+.v49-face-back {
+  display: grid;
+  place-items: center;
+  background: #111;
+  color: #f0b6db;
+  font-size: 2rem;
+}
+
+.v49-face-option strong,
+.v49-face-option small,
+.v49-face-option span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.v49-face-option strong {
+  font-size: .72rem;
+}
+
+.v49-face-option small {
+  color: #ffb9e4;
+}
+
+.v49-face-option span {
+  color: #a999a4;
+  font-size: .62rem;
+}
+
+.v49-mutate-target,
+.v49-mutate-position {
+  display: grid !important;
+  gap: 5px;
+}
+
+.v49-mutate-target select {
+  width: 100%;
+  padding: 9px;
+}
+
+.v49-play-form,
+.v49-manifest-button,
+.v49-cast-battle {
+  border-color: #ff9bd9 !important;
+  background: linear-gradient(135deg, #bf3d91, #742358) !important;
+  color: white !important;
+  font-weight: 900;
+}
+
+.v49-play-form {
+  min-height: 56px;
+  display: grid;
+  place-items: center;
+  align-content: center;
+}
+
+.v49-hide-base-cast {
+  display: none !important;
+}
+
+.v49-forms-button {
+  position: relative;
+  border-color: rgba(255, 144, 212, .42) !important;
+}
+
+.v49-forms-button > b {
+  position: absolute;
+  top: -5px;
+  right: -8px;
+  padding: 3px 5px;
+  border-radius: 999px;
+  background: #a72b77;
+  color: white;
+  font-size: 8px;
+}
+
+.v49-forms-sheet,
+.v49-battle-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1250000;
+  display: grid;
+  align-items: end;
+  padding: 12px;
+  background: rgba(0,0,0,.83);
+  backdrop-filter: blur(7px);
+}
+
+.v49-forms-sheet > section {
+  width: min(920px,100%);
+  max-height: 92dvh;
+  margin-inline: auto;
+  overflow: auto;
+  padding: 15px;
+  border: 1px solid rgba(255, 139, 209, .48);
+  border-radius: 18px 18px 8px 8px;
+  background:
+    radial-gradient(circle at 10% 4%, rgba(203, 60, 149, .2), transparent 35%),
+    #180713;
+  color: #fff1fa;
+}
+
+.v49-forms-sheet header {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.v49-forms-sheet header small {
+  color: #ff9ed9;
+  font-weight: 1000;
+  letter-spacing: .09em;
+}
+
+.v49-forms-sheet header h2 {
+  margin: 3px 0 12px;
+}
+
+.v49-forms-sheet header button {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+}
+
+.v49-manifest-button {
+  width: 100%;
+  margin-bottom: 12px;
+}
+
+.v49-state-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(135px, 1fr));
+  gap: 9px;
+}
+
+.v49-state-card {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+  padding: 7px;
+  border: 1px solid rgba(255,255,255,.1);
+  border-radius: 10px;
+  background: rgba(255,255,255,.035);
+}
+
+.v49-state-card > img,
+.v49-state-card > .v49-face-back {
+  width: 100%;
+  aspect-ratio: 488 / 680;
+  object-fit: contain;
+  border-radius: 7px;
+}
+
+.v49-state-card strong,
+.v49-state-card small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.v49-state-card small {
+  color: #c2aab8;
+}
+
+.v49-state-card > div {
+  display: grid;
+  gap: 5px;
+}
+
+.v49-state-card button {
+  min-height: 34px;
+}
+
+.v49-battle-list {
+  display: grid;
+  gap: 7px;
+}
+
+.v49-battle-list article {
+  display: grid;
+  grid-template-columns: minmax(0,1fr) auto auto auto;
+  gap: 8px;
+  align-items: center;
+  padding: 9px;
+  border: 1px solid rgba(255,255,255,.1);
+  border-radius: 9px;
+  background: rgba(255,255,255,.035);
+}
+
+.v49-battle-list label {
+  display: flex !important;
+  align-items: center;
+  gap: 5px;
+}
+
+.v49-battle-list input {
+  width: 64px;
+}
+
+.v49-battle-overlay {
+  place-items: center;
+}
+
+.v49-battle-overlay > section {
+  width: min(520px,100%);
+  padding: 17px;
+  border: 1px solid rgba(255, 179, 85, .55);
+  border-radius: 17px;
+  background:
+    radial-gradient(circle at 10% 5%, rgba(193, 109, 24, .2), transparent 35%),
+    #171006;
+  color: #fff7e8;
+}
+
+.v49-battle-overlay small {
+  color: #ffbe68;
+  font-weight: 1000;
+  letter-spacing: .09em;
+}
+
+.v49-battle-overlay h2 {
+  margin: 4px 0;
+}
+
+.v49-battle-overlay > section > div {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+@media (max-width: 620px) {
+  .v49-battle-list article {
+    grid-template-columns: 1fr auto;
+  }
+
+  .v49-battle-overlay > section > div {
+    grid-template-columns: 1fr;
+  }
+}
