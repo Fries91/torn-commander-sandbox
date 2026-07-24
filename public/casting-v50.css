@@ -1,0 +1,287 @@
+/* Arena Commander v50 — remaining casting mechanics */
+
+.v50-casting-panel {
+  display: grid;
+  gap: 10px;
+  margin: 12px 0;
+  padding: 12px;
+  border: 1px solid rgba(111, 232, 202, .45);
+  border-radius: 14px;
+  background:
+    radial-gradient(circle at 12% 4%, rgba(38, 181, 147, .19), transparent 35%),
+    rgba(4, 29, 24, .77);
+}
+
+.v50-casting-panel > header {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.v50-casting-panel header small,
+.v50-casting-panel header strong {
+  display: block;
+}
+
+.v50-casting-panel header small {
+  color: #79e9ce;
+  font-weight: 1000;
+  letter-spacing: .08em;
+}
+
+.v50-casting-panel header > span {
+  padding: 5px 7px;
+  border-radius: 999px;
+  background: rgba(50, 191, 157, .17);
+  color: #b9f8e9;
+}
+
+.v50-toggle-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 7px;
+}
+
+.v50-toggle-grid label,
+.v50-toggle-grid > span {
+  display: flex !important;
+  align-items: center;
+  gap: 7px;
+  padding: 8px;
+  border: 1px solid rgba(255,255,255,.09);
+  border-radius: 9px;
+  background: rgba(0,0,0,.18);
+}
+
+.v50-select,
+.v50-choice-select {
+  display: grid !important;
+  gap: 5px;
+}
+
+.v50-select select,
+.v50-choice-select select {
+  width: 100%;
+  padding: 9px;
+}
+
+.v50-splice-list {
+  display: grid;
+  gap: 5px;
+  margin: 0;
+  padding: 9px;
+  border: 1px solid rgba(255,255,255,.1);
+  border-radius: 9px;
+}
+
+.v50-splice-list legend {
+  color: #84ead2;
+  font-weight: 900;
+}
+
+.v50-splice-list label {
+  display: grid !important;
+  grid-template-columns: 22px minmax(0,1fr) auto;
+  gap: 6px;
+  align-items: center;
+  padding: 6px;
+  border-radius: 7px;
+  background: rgba(255,255,255,.035);
+}
+
+.v50-splice-list small {
+  color: #91b8af;
+}
+
+.v50-cast-button,
+.v50-use-choice {
+  border-color: #7ce8ce !important;
+  background: linear-gradient(135deg, #299a7e, #135c4b) !important;
+  color: white !important;
+  font-weight: 900;
+}
+
+.v50-cast-button {
+  min-height: 56px;
+  display: grid;
+  place-items: center;
+  align-content: center;
+}
+
+.v50-hide-base {
+  display: none !important;
+}
+
+.v50-timed-button {
+  position: relative;
+  border-color: rgba(117, 232, 204, .44) !important;
+}
+
+.v50-timed-button > b {
+  position: absolute;
+  top: -5px;
+  right: -6px;
+  display: grid;
+  place-items: center;
+  min-width: 19px;
+  height: 19px;
+  border-radius: 999px;
+  background: #177c65;
+  color: white;
+  font-size: 9px;
+}
+
+.v50-timed-sheet,
+.v50-choice-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1260000;
+  display: grid;
+  align-items: end;
+  padding: 12px;
+  background: rgba(0,0,0,.84);
+  backdrop-filter: blur(7px);
+}
+
+.v50-timed-sheet > section {
+  width: min(900px,100%);
+  max-height: 92dvh;
+  margin-inline: auto;
+  overflow: auto;
+  padding: 15px;
+  border: 1px solid rgba(108, 230, 201, .5);
+  border-radius: 18px 18px 8px 8px;
+  background:
+    radial-gradient(circle at 10% 4%, rgba(35, 172, 139, .2), transparent 35%),
+    #041b16;
+  color: #effffb;
+}
+
+.v50-timed-sheet header {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.v50-timed-sheet header small,
+.v50-choice-overlay small {
+  color: #77e6cc;
+  font-weight: 1000;
+  letter-spacing: .09em;
+}
+
+.v50-timed-sheet header h2 {
+  margin: 3px 0 12px;
+}
+
+.v50-timed-sheet header button {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+}
+
+.v50-hand-list {
+  display: grid;
+  gap: 7px;
+}
+
+.v50-hand-action {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  align-items: center;
+  padding: 8px;
+  border: 1px solid rgba(255,255,255,.1);
+  border-radius: 9px;
+  background: rgba(255,255,255,.035);
+}
+
+.v50-hand-action > div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.v50-timed-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(135px, 1fr));
+  gap: 9px;
+}
+
+.v50-timed-card {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+}
+
+.v50-timed-card img,
+.v50-card-back {
+  width: 100%;
+  aspect-ratio: 488 / 680;
+  object-fit: contain;
+  border-radius: 8px;
+}
+
+.v50-card-back {
+  display: grid;
+  place-items: center;
+  background: #09110e;
+  color: #8fead5;
+  font-size: 2rem;
+}
+
+.v50-timed-card strong,
+.v50-timed-card small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.v50-timed-card small {
+  color: #a2c5bd;
+}
+
+.v50-choice-overlay {
+  place-items: center;
+}
+
+.v50-choice-overlay > section {
+  width: min(560px,100%);
+  padding: 17px;
+  border: 1px solid rgba(121, 231, 205, .53);
+  border-radius: 17px;
+  background:
+    radial-gradient(circle at 10% 5%, rgba(39, 177, 144, .22), transparent 35%),
+    #061c17;
+  color: #effffb;
+}
+
+.v50-choice-overlay h2 {
+  margin: 4px 0;
+}
+
+.v50-choice-overlay > section > p {
+  max-height: 33dvh;
+  overflow: auto;
+  padding: 9px;
+  border-radius: 9px;
+  background: rgba(255,255,255,.04);
+}
+
+.v50-choice-overlay > section > div:last-child {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-top: 13px;
+}
+
+@media (max-width: 600px) {
+  .v50-hand-action {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .v50-choice-overlay > section > div:last-child {
+    grid-template-columns: 1fr;
+  }
+}
