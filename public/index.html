@@ -1,4 +1,96 @@
-<!doctype html>
+<!doctype html><!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1">
+  <meta name="theme-color" content="#08110f">
+  <meta name="description" content="Arena-style MTG Commander with visible cards, guided actions, automatic triggers, AI Test Lab and Torn game alerts.">
+  <title>Arena Commander — Attachments v53</title>
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="icon" href="/icon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/styles.css">
+  <link rel="stylesheet" href="/clean-home.css?v=39.0.0">
+  <link rel="stylesheet" href="/meta-library.css?v=39.0.0">
+  <link rel="stylesheet" href="/commander-theme.css?v=39.0.0">
+  <link rel="stylesheet" href="/card-automation.css?v=40.0.0">
+  <link rel="stylesheet" href="/gameplay-hotfix.css?v=40.1.0">
+  <link rel="stylesheet" href="/arena-table-v41.css?v=41.0.0">
+  <link rel="stylesheet" href="/arena-table-v41-1.css?v=41.1.0">
+  <link rel="stylesheet" href="/arena-autotap-v42.css?v=42.0.0">
+  <link rel="stylesheet" href="/zone-choices-v43.css?v=43.0.0">
+  <link rel="stylesheet" href="/targeting-v44.css?v=44.0.0">
+  <link rel="stylesheet" href="/effects-v45.css?v=45.0.0">
+  <link rel="stylesheet" href="/mechanics-v46.css?v=46.0.0">
+  <link rel="stylesheet" href="/permissions-v47.css?v=47.0.0">
+  <link rel="stylesheet" href="/triggers-v48.css?v=48.0.0">
+  <link rel="stylesheet" href="/forms-v49.css?v=49.0.0">
+  <link rel="stylesheet" href="/casting-v50.css?v=50.0.0">
+  <link rel="stylesheet" href="/combat-v51.css?v=51.0.0">
+  <link rel="stylesheet" href="/walkers-v52.css?v=52.0.0">
+  <link rel="stylesheet" href="/attachments-v53.css?v=53.0.0">
+</head>
+<body>
+  <header class="app-header">
+    <button id="brandButton" class="brand-button" type="button" aria-label="Home">
+      <span class="brand-mark">♛</span>
+      <span><strong>Arena Commander</strong><small>Attachments & Vehicles v53</small></span>
+    </button>
+    <div class="header-actions">
+      <div id="connectionStatus" class="connection-status offline"><span></span><span id="connectionText">Connecting…</span></div>
+      <button id="settingsButton" class="small-button header-icon-button" type="button" aria-label="Display settings">⚙</button>
+      <button id="fullscreenButton" class="small-button header-icon-button" type="button" aria-label="Fullscreen">⛶</button>
+      <button id="installButton" class="small-button" type="button" hidden>Install</button>
+    </div>
+  </header>
+
+  <main id="app" class="app-main" aria-live="polite"></main>
+
+  <nav id="bottomNav" class="bottom-nav" aria-label="Main navigation">
+    <button type="button" data-nav="home"><span>⌂</span>Home</button>
+    <button type="button" data-nav="decks"><span>▤</span>Decks</button>
+    <button type="button" data-nav="game"><span>♛</span>Play</button>
+    <button type="button" data-meta-action="open"><span>♜</span>Meta</button>
+    <button type="button" data-nav="help"><span>?</span>Help</button>
+  </nav>
+
+  <div id="modalBackdrop" class="modal-backdrop is-hidden" aria-hidden="true">
+    <section class="modal-sheet" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
+      <header class="modal-header"><h2 id="modalTitle">Menu</h2><button class="icon-button" type="button" data-action="close-modal" aria-label="Close">×</button></header>
+      <div id="modalBody" class="modal-body"></div>
+    </section>
+  </div>
+
+  <div id="reconnectOverlay" class="reconnect-overlay is-hidden" aria-live="assertive">
+    <div class="reconnect-card"><span class="reconnect-spinner"></span><strong>Reconnecting to your table…</strong><small>Your PostgreSQL-saved game is safe.</small></div>
+  </div>
+
+  <div id="toastRegion" class="toast-region" aria-live="assertive"></div>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="/app.js" defer></script>
+  <script src="/deck-import-fix.js?v=39.2.0" defer></script>
+  <script src="/card-automation-ui.js?v=40.0.0" defer></script>
+  <script src="/gameplay-hotfix.js?v=40.1.0" defer></script>
+  <script src="/arena-table-v41-1.js?v=41.1.0" defer></script>
+  <script src="/arena-table-v41.js?v=41.0.0" defer></script>
+  <script src="/arena-autotap-v42.js?v=42.0.0" defer></script>
+  <script src="/zone-choices-v43.js?v=43.0.0" defer></script>
+  <script src="/targeting-v44.js?v=44.0.0" defer></script>
+  <script src="/effects-v45.js?v=45.0.0" defer></script>
+  <script src="/mechanics-v46.js?v=46.0.0" defer></script>
+  <script src="/permissions-v47.js?v=47.0.0" defer></script>
+  <script src="/triggers-v48.js?v=48.0.0" defer></script>
+  <script src="/forms-v49.js?v=49.0.0" defer></script>
+  <script src="/casting-v50.js?v=50.0.0" defer></script>
+  <script src="/combat-v51.js?v=51.0.0" defer></script>
+  <script src="/walkers-v52.js?v=52.0.0" defer></script>
+  <script src="/attachments-v53.js?v=53.0.0" defer></script>
+  <script src="/clean-home.js?v=39.0.0" defer></script>
+  <script src="/meta-library.js?v=39.0.0" defer></script>
+  <script src="/lobby-notifier-ui.js?v=39.1.0" defer></script>
+</body>
+</html>
+
 <html lang="en">
 <head>
   <meta charset="utf-8">
