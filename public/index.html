@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1">
   <meta name="theme-color" content="#08110f">
   <meta name="description" content="Arena-style MTG Commander with visible cards, guided actions, automatic triggers, AI Test Lab and Torn game alerts.">
-  <title>Arena Commander — Match Handoff v60.3</title>
+  <title>Arena Commander — Connection Fix v60.4</title>
   <link rel="manifest" href="/manifest.webmanifest">
   <link rel="icon" href="/icon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="/styles.css">
@@ -41,7 +41,7 @@
   <header class="app-header">
     <button id="brandButton" class="brand-button" type="button" aria-label="Home">
       <span class="brand-mark">♛</span>
-      <span><strong>Arena Commander</strong><small>Match Handoff v60.3</small></span>
+      <span><strong>Arena Commander</strong><small>Connection Fix v60.4</small></span>
     </button>
     <div class="header-actions">
       <div id="connectionStatus" class="connection-status offline"><span></span><span id="connectionText">Connecting…</span></div>
@@ -75,7 +75,8 @@
   <div id="toastRegion" class="toast-region" aria-live="assertive"></div>
 
   <script src="/socket.io/socket.io.js"></script>
-  <script src="/app.js" defer></script>
+  <script src="/socket-mobile-v60-4.js?v=60.4.0"></script>
+  <script src="/app.js?v=60.4.0" defer></script>
   <script src="/deck-import-fix.js?v=39.2.0" defer></script>
   <script src="/card-automation-ui.js?v=40.0.0" defer></script>
   <script src="/gameplay-hotfix.js?v=40.1.0" defer></script>
@@ -103,6 +104,6 @@
   <script src="/clean-home.js?v=39.0.0" defer></script>
   <script src="/meta-library.js?v=39.0.0" defer></script>
   <script src="/lobby-notifier-ui.js?v=39.1.0" defer></script>
-  <script src="/match-handoff-v60-3.js?v=60.3.0" defer></script>
+  <script src="/match-handoff-v60-4.js?v=60.4.0" defer></script>
 </body>
 </html>
