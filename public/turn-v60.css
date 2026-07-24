@@ -1,0 +1,209 @@
+/* Arena Commander v60 — turn order, extra turns, skips and phase control */
+
+.v60-turn-button {
+  position: relative;
+  border-color: rgba(255, 188, 91, .58) !important;
+}
+
+.v60-turn-button > b {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  display: grid;
+  place-items: center;
+  min-width: 19px;
+  height: 19px;
+  border-radius: 999px;
+  background: #a45b12;
+  color: white;
+  font-size: 9px;
+}
+
+.v60-turn-sheet {
+  position: fixed;
+  inset: 0;
+  z-index: 1360000;
+  display: grid;
+  align-items: end;
+  padding: 12px;
+  background: rgba(0, 0, 0, .88);
+  backdrop-filter: blur(7px);
+}
+
+.v60-turn-sheet > section {
+  width: min(1080px, 100%);
+  max-height: 94dvh;
+  margin-inline: auto;
+  overflow: auto;
+  padding: 15px;
+  border: 1px solid rgba(255, 186, 87, .58);
+  border-radius: 18px 18px 8px 8px;
+  background:
+    radial-gradient(
+      circle at 10% 4%,
+      rgba(180, 103, 24, .25),
+      transparent 35%
+    ),
+    #201105;
+  color: #fff9ee;
+}
+
+.v60-turn-sheet > section > header {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.v60-turn-sheet header small {
+  color: #ffc878;
+  font-weight: 1000;
+  letter-spacing: .09em;
+}
+
+.v60-turn-sheet header h2 {
+  margin: 3px 0 4px;
+}
+
+.v60-turn-sheet header p {
+  margin: 0 0 12px;
+  color: #e7c9a1;
+}
+
+.v60-turn-sheet header > button {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+}
+
+.v60-help {
+  color: #dfc29d;
+}
+
+.v60-order-grid {
+  display: grid;
+  grid-template-columns:
+    repeat(auto-fit, minmax(135px, 1fr));
+  gap: 7px;
+}
+
+.v60-order-card {
+  display: grid;
+  grid-template-columns: 30px minmax(0, 1fr);
+  gap: 6px;
+  align-items: center;
+  padding: 8px;
+  border: 1px solid rgba(255,255,255,.1);
+  border-radius: 9px;
+  background: rgba(255,255,255,.035);
+}
+
+.v60-order-card > span {
+  display: grid;
+  place-items: center;
+  width: 27px;
+  height: 27px;
+  border-radius: 50%;
+  background: rgba(255, 184, 84, .15);
+  color: #ffca7f;
+  font-weight: 1000;
+}
+
+.v60-order-card.active {
+  border-color: #ffbd62;
+  background: rgba(255, 175, 61, .12);
+}
+
+.v60-order-card small {
+  grid-column: 1 / -1;
+  color: #ffca7a;
+  font-weight: 1000;
+}
+
+.v60-host-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 7px;
+  margin-top: 9px;
+}
+
+.v60-host-actions button,
+.v60-builder button {
+  border-color: #ffc06d !important;
+  background:
+    linear-gradient(
+      135deg,
+      #b66b1e,
+      #713a0c
+    ) !important;
+  color: white !important;
+  font-weight: 900;
+}
+
+.v60-builder {
+  display: grid;
+  grid-template-columns:
+    minmax(0, 1fr)
+    minmax(90px, 150px)
+    1fr 1fr;
+  gap: 7px;
+  padding: 10px;
+  border: 1px solid rgba(255,255,255,.1);
+  border-radius: 10px;
+  background: rgba(255,255,255,.035);
+}
+
+.v60-builder select,
+.v60-builder input {
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  padding: 9px;
+}
+
+.v60-queue-grid {
+  display: grid;
+  grid-template-columns:
+    repeat(auto-fill, minmax(210px, 1fr));
+  gap: 7px;
+}
+
+.v60-queue-card {
+  display: grid;
+  gap: 3px;
+  padding: 8px;
+  border: 1px solid rgba(255,255,255,.09);
+  border-radius: 9px;
+  background: rgba(255,255,255,.03);
+}
+
+.v60-queue-card span {
+  color: #ffc675;
+}
+
+.v60-queue-card small {
+  color: #d9b98e;
+}
+
+.v60-queue-card.danger {
+  border-color: rgba(255, 117, 101, .35);
+}
+
+.v60-queue-card.danger span {
+  color: #ff9f91;
+}
+
+@media (max-width: 760px) {
+  .v60-host-actions {
+    grid-template-columns: 1fr;
+  }
+
+  .v60-builder {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+@media (max-width: 500px) {
+  .v60-builder {
+    grid-template-columns: 1fr;
+  }
+}
