@@ -1,6 +1,6 @@
 "use strict";
 
-const CACHE_NAME = "arena-commander-hidden-v59.0.0";
+const CACHE_NAME = "arena-commander-turn-v60.0.0";
 const APP_SHELL = [
   "/",
   "/index.html",
@@ -30,6 +30,7 @@ const APP_SHELL = [
   "/replacement-v57.css?v=57.0.0",
   "/control-v58.css?v=58.0.0",
   "/hidden-v59.css?v=59.0.0",
+  "/turn-v60.css?v=60.0.0",
   "/app.js",
   "/deck-import-fix.js?v=39.2.0",
   "/card-automation-ui.js?v=40.0.0",
@@ -54,6 +55,7 @@ const APP_SHELL = [
   "/replacement-v57.js?v=57.0.0",
   "/control-v58.js?v=58.0.0",
   "/hidden-v59.js?v=59.0.0",
+  "/turn-v60.js?v=60.0.0",
   "/clean-home.js?v=39.0.0",
   "/meta-library.js?v=39.0.0",
   "/lobby-notifier-ui.js?v=39.1.0",
