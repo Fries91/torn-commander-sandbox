@@ -1,6 +1,6 @@
 "use strict";
 
-const CACHE_NAME = "arena-commander-zone-rules-v43.0.0";
+const CACHE_NAME = "arena-commander-advanced-rules-v47.0.0";
 const APP_SHELL = [
   "/",
   "/index.html",
@@ -14,6 +14,10 @@ const APP_SHELL = [
   "/arena-table-v41-1.css?v=41.1.0",
   "/arena-autotap-v42.css?v=42.0.0",
   "/zone-choices-v43.css?v=43.0.0",
+  "/targeting-v44.css?v=44.0.0",
+  "/effects-v45.css?v=45.0.0",
+  "/mechanics-v46.css?v=46.0.0",
+  "/permissions-v47.css?v=47.0.0",
   "/app.js",
   "/deck-import-fix.js?v=39.2.0",
   "/card-automation-ui.js?v=40.0.0",
@@ -22,6 +26,10 @@ const APP_SHELL = [
   "/arena-table-v41.js?v=41.0.0",
   "/arena-autotap-v42.js?v=42.0.0",
   "/zone-choices-v43.js?v=43.0.0",
+  "/targeting-v44.js?v=44.0.0",
+  "/effects-v45.js?v=45.0.0",
+  "/mechanics-v46.js?v=46.0.0",
+  "/permissions-v47.js?v=47.0.0",
   "/clean-home.js?v=39.0.0",
   "/meta-library.js?v=39.0.0",
   "/lobby-notifier-ui.js?v=39.1.0",
