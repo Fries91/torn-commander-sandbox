@@ -1,0 +1,292 @@
+/* Arena Commander v55 — complete Commander rules */
+
+.v55-commander-button {
+  position: relative;
+  border-color: rgba(255, 207, 91, .52) !important;
+}
+
+.v55-commander-button > b {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  display: grid;
+  place-items: center;
+  min-width: 19px;
+  height: 19px;
+  border-radius: 999px;
+  background: #a66e12;
+  color: white;
+  font-size: 9px;
+}
+
+.v55-commander-sheet,
+.v55-zone-choice-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1310000;
+  display: grid;
+  align-items: end;
+  padding: 12px;
+  background: rgba(0, 0, 0, .87);
+  backdrop-filter: blur(7px);
+}
+
+.v55-commander-sheet > section {
+  width: min(1020px, 100%);
+  max-height: 94dvh;
+  margin-inline: auto;
+  overflow: auto;
+  padding: 15px;
+  border: 1px solid rgba(255, 205, 84, .55);
+  border-radius: 18px 18px 8px 8px;
+  background:
+    radial-gradient(
+      circle at 10% 4%,
+      rgba(189, 126, 17, .23),
+      transparent 35%
+    ),
+    #191205;
+  color: #fff9e9;
+}
+
+.v55-commander-sheet > section > header {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.v55-commander-sheet header small,
+.v55-zone-choice-overlay small {
+  color: #ffd46f;
+  font-weight: 1000;
+  letter-spacing: .09em;
+}
+
+.v55-commander-sheet header h2 {
+  margin: 3px 0 12px;
+}
+
+.v55-commander-sheet header > button {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+}
+
+.v55-pair {
+  display: grid;
+  gap: 3px;
+  padding: 10px;
+  border-radius: 10px;
+}
+
+.v55-pair.valid {
+  border: 1px solid rgba(103, 220, 144, .4);
+  background: rgba(33, 121, 65, .18);
+}
+
+.v55-pair.invalid {
+  border: 1px solid rgba(255, 111, 111, .45);
+  background: rgba(139, 28, 28, .18);
+}
+
+.v55-pair span {
+  color: #d5cbb0;
+}
+
+.v55-commander-grid {
+  display: grid;
+  grid-template-columns:
+    repeat(auto-fill, minmax(250px, 1fr));
+  gap: 8px;
+}
+
+.v55-commander-card {
+  display: grid;
+  grid-template-columns: 78px minmax(0, 1fr);
+  gap: 8px;
+  padding: 8px;
+  border: 1px solid rgba(255,255,255,.1);
+  border-radius: 10px;
+  background: rgba(255,255,255,.035);
+}
+
+.v55-commander-card > img,
+.v55-card-back {
+  width: 78px;
+  aspect-ratio: 488 / 680;
+  object-fit: contain;
+  border-radius: 7px;
+}
+
+.v55-card-back {
+  display: grid;
+  place-items: center;
+  background: #141007;
+  color: #ffd36c;
+  font-size: 2rem;
+}
+
+.v55-commander-card > div {
+  display: grid;
+  align-content: start;
+  gap: 3px;
+}
+
+.v55-commander-card small {
+  color: #bdb293;
+}
+
+.v55-commander-card span {
+  color: #e4cb8a;
+}
+
+.v55-commander-card button {
+  grid-column: 1 / -1;
+}
+
+.v55-commander-card button,
+.v55-companion-active button,
+.v55-companion-setup button,
+.v55-zone-choice-overlay button {
+  border-color: #ffd06a !important;
+  background:
+    linear-gradient(
+      135deg,
+      #b77b1c,
+      #71470a
+    ) !important;
+  color: white !important;
+  font-weight: 900;
+}
+
+.v55-damage-scroll {
+  overflow-x: auto;
+}
+
+.v55-damage-table {
+  width: 100%;
+  min-width: 620px;
+  border-collapse: collapse;
+}
+
+.v55-damage-table th,
+.v55-damage-table td {
+  padding: 8px;
+  border: 1px solid rgba(255,255,255,.1);
+  text-align: center;
+}
+
+.v55-damage-table th {
+  background: rgba(255,255,255,.04);
+}
+
+.v55-damage-table td.lethal {
+  background: rgba(158, 28, 28, .33);
+  color: #ffd0d0;
+  font-weight: 1000;
+}
+
+.v55-companion-active {
+  display: grid;
+  grid-template-columns: 88px minmax(0,1fr) auto;
+  gap: 9px;
+  align-items: center;
+  padding: 9px;
+  border: 1px solid rgba(255,255,255,.1);
+  border-radius: 10px;
+  background: rgba(255,255,255,.035);
+}
+
+.v55-companion-active > img,
+.v55-companion-active > .v55-card-back {
+  width: 88px;
+}
+
+.v55-companion-active > div {
+  display: grid;
+  gap: 4px;
+}
+
+.v55-companion-active .valid {
+  color: #7fe2a0;
+}
+
+.v55-companion-active .invalid {
+  color: #ff9a9a;
+}
+
+.v55-companion-setup {
+  display: grid;
+  gap: 7px;
+  padding: 10px;
+  border: 1px solid rgba(255,255,255,.1);
+  border-radius: 10px;
+  background: rgba(255,255,255,.035);
+}
+
+.v55-companion-setup select {
+  width: 100%;
+  min-width: 0;
+  padding: 9px;
+}
+
+.v55-companion-setup small {
+  color: #bdb394;
+}
+
+.v55-zone-choice-overlay {
+  place-items: center;
+}
+
+.v55-zone-choice-overlay > section {
+  width: min(580px, 100%);
+  padding: 17px;
+  border: 1px solid rgba(255, 206, 88, .58);
+  border-radius: 17px;
+  background:
+    radial-gradient(
+      circle at 10% 5%,
+      rgba(190, 127, 17, .25),
+      transparent 35%
+    ),
+    #191205;
+  color: #fff9e9;
+  text-align: center;
+}
+
+.v55-zone-choice-overlay h2 {
+  margin: 4px 0;
+}
+
+.v55-zone-choice-overlay img {
+  width: min(210px, 55vw);
+  max-height: 42dvh;
+  object-fit: contain;
+  border-radius: 9px;
+}
+
+.v55-zone-choice-overlay > section > div {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+@media (max-width: 650px) {
+  .v55-companion-active {
+    grid-template-columns: 72px minmax(0, 1fr);
+  }
+
+  .v55-companion-active > img,
+  .v55-companion-active > .v55-card-back {
+    width: 72px;
+  }
+
+  .v55-companion-active button {
+    grid-column: 1 / -1;
+  }
+
+  .v55-zone-choice-overlay > section > div {
+    grid-template-columns: 1fr;
+  }
+}
