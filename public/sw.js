@@ -1,6 +1,6 @@
 "use strict";
 
-const CACHE_NAME = "arena-commander-walkers-v52.0.0";
+const CACHE_NAME = "arena-commander-attachments-v53.0.0";
 const APP_SHELL = [
   "/",
   "/index.html",
@@ -23,6 +23,7 @@ const APP_SHELL = [
   "/casting-v50.css?v=50.0.0",
   "/combat-v51.css?v=51.0.0",
   "/walkers-v52.css?v=52.0.0",
+  "/attachments-v53.css?v=53.0.0",
   "/app.js",
   "/deck-import-fix.js?v=39.2.0",
   "/card-automation-ui.js?v=40.0.0",
@@ -40,6 +41,7 @@ const APP_SHELL = [
   "/casting-v50.js?v=50.0.0",
   "/combat-v51.js?v=51.0.0",
   "/walkers-v52.js?v=52.0.0",
+  "/attachments-v53.js?v=53.0.0",
   "/clean-home.js?v=39.0.0",
   "/meta-library.js?v=39.0.0",
   "/lobby-notifier-ui.js?v=39.1.0",
