@@ -1,0 +1,240 @@
+/* Arena Commander v54 — copies, Clones and copyable values */
+
+.v54-copy-button {
+  position: relative;
+  border-color: rgba(110, 221, 200, .5) !important;
+}
+
+.v54-copy-button > b {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  display: grid;
+  place-items: center;
+  min-width: 19px;
+  height: 19px;
+  border-radius: 999px;
+  background: #147b6d;
+  color: white;
+  font-size: 9px;
+}
+
+.v54-copy-sheet,
+.v54-clone-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1300000;
+  display: grid;
+  align-items: end;
+  padding: 12px;
+  background: rgba(0, 0, 0, .86);
+  backdrop-filter: blur(7px);
+}
+
+.v54-copy-sheet > section {
+  width: min(1000px, 100%);
+  max-height: 94dvh;
+  margin-inline: auto;
+  overflow: auto;
+  padding: 15px;
+  border: 1px solid rgba(104, 225, 201, .52);
+  border-radius: 18px 18px 8px 8px;
+  background:
+    radial-gradient(circle at 10% 4%, rgba(26, 151, 128, .22), transparent 35%),
+    #061815;
+  color: #effffc;
+}
+
+.v54-copy-sheet > section > header {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.v54-copy-sheet header small,
+.v54-clone-overlay small {
+  color: #75e4cf;
+  font-weight: 1000;
+  letter-spacing: .09em;
+}
+
+.v54-copy-sheet header h2 {
+  margin: 3px 0 12px;
+}
+
+.v54-copy-sheet header > button {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+}
+
+.v54-copy-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 9px;
+}
+
+.v54-copy-grid > article {
+  display: grid;
+  gap: 7px;
+  min-width: 0;
+  padding: 11px;
+  border: 1px solid rgba(255,255,255,.1);
+  border-radius: 11px;
+  background: rgba(255,255,255,.035);
+}
+
+.v54-copy-grid h3 {
+  margin: 0;
+}
+
+.v54-copy-grid select,
+.v54-copy-grid input,
+.v54-copy-grid textarea {
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  padding: 9px;
+}
+
+.v54-copy-grid textarea {
+  min-height: 86px;
+  resize: vertical;
+}
+
+.v54-copy-grid button,
+.v54-clone-grid button,
+.v54-skip-copy {
+  border-color: #72e0cb !important;
+  background: linear-gradient(135deg, #279d89, #155f53) !important;
+  color: white !important;
+  font-weight: 900;
+}
+
+.v54-modifiers {
+  padding: 7px;
+  border: 1px solid rgba(255,255,255,.09);
+  border-radius: 8px;
+  background: rgba(0,0,0,.15);
+}
+
+.v54-modifiers summary {
+  cursor: pointer;
+  color: #8ce7d5;
+  font-weight: 900;
+}
+
+.v54-modifiers label {
+  display: flex !important;
+  align-items: center;
+  gap: 7px;
+  margin-top: 6px;
+}
+
+.v54-modifiers label input {
+  width: auto;
+}
+
+.v54-modifiers > div {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 5px;
+  margin-top: 6px;
+}
+
+.v54-current-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(135px, 1fr));
+  gap: 8px;
+}
+
+.v54-current-grid article {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.v54-current-grid img,
+.v54-card-back {
+  width: 100%;
+  aspect-ratio: 488 / 680;
+  object-fit: contain;
+  border-radius: 8px;
+}
+
+.v54-card-back {
+  display: grid;
+  place-items: center;
+  background: #0a1211;
+  color: #79dfca;
+  font-size: 2rem;
+}
+
+.v54-current-grid strong,
+.v54-current-grid small,
+.v54-current-grid span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.v54-current-grid small {
+  color: #9fb9b4;
+}
+
+.v54-current-grid span {
+  color: #79d8c5;
+  font-size: 12px;
+}
+
+.v54-clone-overlay {
+  place-items: center;
+}
+
+.v54-clone-overlay > section {
+  width: min(780px, 100%);
+  max-height: 92dvh;
+  overflow: auto;
+  padding: 17px;
+  border: 1px solid rgba(111, 227, 204, .55);
+  border-radius: 17px;
+  background:
+    radial-gradient(circle at 10% 5%, rgba(27, 151, 128, .23), transparent 35%),
+    #061815;
+  color: #effffc;
+}
+
+.v54-clone-overlay h2 {
+  margin: 4px 0;
+}
+
+.v54-clone-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(135px, 1fr));
+  gap: 8px;
+}
+
+.v54-clone-grid button {
+  display: grid;
+  gap: 4px;
+  padding: 8px;
+}
+
+.v54-clone-grid img,
+.v54-clone-grid .v54-card-back {
+  width: 100%;
+  aspect-ratio: 488 / 680;
+  object-fit: contain;
+  border-radius: 7px;
+}
+
+.v54-skip-copy {
+  width: 100%;
+  min-height: 46px;
+  margin-top: 11px;
+}
+
+@media (max-width: 700px) {
+  .v54-copy-grid {
+    grid-template-columns: 1fr;
+  }
+}
