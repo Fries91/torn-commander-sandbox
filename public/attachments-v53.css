@@ -1,0 +1,282 @@
+/* Arena Commander v53 — attachments, Vehicles and Mounts */
+
+.v53-attachment-button {
+  position: relative;
+  border-color: rgba(88, 200, 255, .48) !important;
+}
+
+.v53-attachment-button > b {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  display: grid;
+  place-items: center;
+  min-width: 19px;
+  height: 19px;
+  border-radius: 999px;
+  background: #177aa4;
+  color: white;
+  font-size: 9px;
+}
+
+.v53-aura-panel {
+  display: grid;
+  gap: 9px;
+  margin: 12px 0;
+  padding: 12px;
+  border: 1px solid rgba(87, 201, 255, .47);
+  border-radius: 14px;
+  background:
+    radial-gradient(circle at 10% 4%, rgba(28, 141, 198, .2), transparent 35%),
+    rgba(4, 24, 35, .78);
+}
+
+.v53-aura-panel > header {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.v53-aura-panel header small,
+.v53-aura-panel header strong {
+  display: block;
+}
+
+.v53-aura-panel header small {
+  color: #7dd6ff;
+  font-weight: 1000;
+  letter-spacing: .09em;
+}
+
+.v53-aura-panel header > span {
+  padding: 5px 7px;
+  border-radius: 999px;
+  background: rgba(55, 171, 226, .18);
+  color: #c9efff;
+}
+
+.v53-aura-panel p {
+  margin: 0;
+  color: #b9d4df;
+}
+
+.v53-aura-panel select {
+  width: 100%;
+  padding: 9px;
+}
+
+.v53-aura-panel button,
+.v53-attachment-card button,
+.v53-power-card button,
+.v53-aura-choice-grid button {
+  border-color: #70ccf6 !important;
+  background: linear-gradient(135deg, #278dbb, #15516e) !important;
+  color: white !important;
+  font-weight: 900;
+}
+
+.v53-aura-panel button {
+  min-height: 54px;
+  display: grid;
+  place-items: center;
+  align-content: center;
+}
+
+.v53-hide-base {
+  display: none !important;
+}
+
+.v53-attachment-sheet,
+.v53-aura-choice-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1290000;
+  display: grid;
+  align-items: end;
+  padding: 12px;
+  background: rgba(0, 0, 0, .85);
+  backdrop-filter: blur(7px);
+}
+
+.v53-attachment-sheet > section {
+  width: min(980px, 100%);
+  max-height: 94dvh;
+  margin-inline: auto;
+  overflow: auto;
+  padding: 15px;
+  border: 1px solid rgba(92, 202, 255, .52);
+  border-radius: 18px 18px 8px 8px;
+  background:
+    radial-gradient(circle at 10% 4%, rgba(28, 143, 199, .22), transparent 35%),
+    #06131b;
+  color: #f1faff;
+}
+
+.v53-attachment-sheet > section > header {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.v53-attachment-sheet header small,
+.v53-aura-choice-overlay small {
+  color: #79d5ff;
+  font-weight: 1000;
+  letter-spacing: .09em;
+}
+
+.v53-attachment-sheet header h2 {
+  margin: 3px 0 12px;
+}
+
+.v53-attachment-sheet header > button {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+}
+
+.v53-attachment-grid,
+.v53-power-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(155px, 1fr));
+  gap: 9px;
+}
+
+.v53-attachment-card,
+.v53-power-card {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+  padding: 8px;
+  border: 1px solid rgba(255,255,255,.1);
+  border-radius: 10px;
+  background: rgba(255,255,255,.035);
+}
+
+.v53-attachment-card > img,
+.v53-power-card > img,
+.v53-card-back {
+  width: 100%;
+  aspect-ratio: 488 / 680;
+  object-fit: contain;
+  border-radius: 8px;
+}
+
+.v53-card-back {
+  display: grid;
+  place-items: center;
+  background: #0b1115;
+  color: #8cdcff;
+  font-size: 2rem;
+}
+
+.v53-attachment-card strong,
+.v53-power-card strong,
+.v53-attachment-card small,
+.v53-power-card small,
+.v53-attachment-card span,
+.v53-power-card span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.v53-attachment-card small,
+.v53-power-card small {
+  color: #a4bdc7;
+}
+
+.v53-attachment-card span,
+.v53-power-card span {
+  color: #8edbff;
+  font-weight: 800;
+}
+
+.v53-attachment-card select {
+  width: 100%;
+  min-width: 0;
+  padding: 8px;
+}
+
+.v53-power-choices {
+  display: grid;
+  gap: 4px;
+  max-height: 180px;
+  overflow: auto;
+}
+
+.v53-power-choices label {
+  display: grid !important;
+  grid-template-columns: 20px minmax(0, 1fr);
+  gap: 1px 6px;
+  align-items: center;
+  padding: 5px;
+  border-radius: 7px;
+  background: rgba(0,0,0,.17);
+}
+
+.v53-power-choices input {
+  grid-row: 1 / 3;
+}
+
+.v53-current-list {
+  display: grid;
+  gap: 6px;
+}
+
+.v53-current-list article {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  gap: 7px;
+  align-items: center;
+  padding: 8px;
+  border: 1px solid rgba(255,255,255,.09);
+  border-radius: 8px;
+  background: rgba(255,255,255,.03);
+}
+
+.v53-current-list span {
+  color: #8fdcff;
+}
+
+.v53-current-list small {
+  color: #9bb1bb;
+}
+
+.v53-aura-choice-overlay {
+  place-items: center;
+}
+
+.v53-aura-choice-overlay > section {
+  width: min(650px, 100%);
+  max-height: 90dvh;
+  overflow: auto;
+  padding: 17px;
+  border: 1px solid rgba(95, 205, 255, .55);
+  border-radius: 17px;
+  background:
+    radial-gradient(circle at 10% 5%, rgba(25, 143, 200, .23), transparent 35%),
+    #06131b;
+  color: #f1faff;
+}
+
+.v53-aura-choice-overlay h2 {
+  margin: 4px 0;
+}
+
+.v53-aura-choice-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(145px, 1fr));
+  gap: 8px;
+}
+
+.v53-aura-choice-grid button {
+  display: grid;
+  gap: 3px;
+  padding: 12px;
+}
+
+@media (max-width: 620px) {
+  .v53-current-list article {
+    grid-template-columns: 1fr;
+  }
+}
