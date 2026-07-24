@@ -1,0 +1,280 @@
+/* Arena Commander v48 — APNAP trigger ordering and optional triggers */
+
+.v48-trigger-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1240000;
+  display: grid;
+  align-items: end;
+  padding:
+    max(10px, env(safe-area-inset-top))
+    max(10px, env(safe-area-inset-right))
+    max(10px, env(safe-area-inset-bottom))
+    max(10px, env(safe-area-inset-left));
+  background: rgba(0, 0, 0, .84);
+  backdrop-filter: blur(7px);
+}
+
+.v48-trigger-sheet,
+.v48-may-sheet {
+  width: min(900px, 100%);
+  max-height: 94dvh;
+  margin-inline: auto;
+  overflow: auto;
+  padding: 15px;
+  border: 1px solid rgba(112, 198, 255, .52);
+  border-radius: 18px 18px 8px 8px;
+  background:
+    radial-gradient(circle at 10% 5%, rgba(52, 142, 207, .22), transparent 34%),
+    #06131c;
+  color: #eef8ff;
+  box-shadow: 0 28px 90px rgba(0, 0, 0, .82);
+}
+
+.v48-trigger-sheet > header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.v48-trigger-sheet header small,
+.v48-may-sheet > small {
+  color: #79c6ff;
+  font-weight: 1000;
+  letter-spacing: .09em;
+}
+
+.v48-trigger-sheet h2,
+.v48-may-sheet h2 {
+  margin: 3px 0;
+}
+
+.v48-trigger-sheet header > span {
+  padding: 6px 9px;
+  border: 1px solid rgba(121, 198, 255, .42);
+  border-radius: 999px;
+  background: rgba(49, 130, 190, .18);
+  color: #d6efff;
+  font-size: .68rem;
+  font-weight: 900;
+}
+
+.v48-trigger-sheet > p {
+  color: #a9bdc9;
+}
+
+.v48-trigger-error {
+  margin: 9px 0;
+  padding: 9px;
+  border: 1px solid rgba(255, 128, 128, .44);
+  border-radius: 9px;
+  background: rgba(147, 37, 37, .18);
+  color: #ffc6c6;
+}
+
+.v48-trigger-list {
+  display: grid;
+  gap: 9px;
+}
+
+.v48-trigger-card {
+  display: grid;
+  grid-template-columns: 34px 90px minmax(0, 1fr) 43px;
+  gap: 9px;
+  align-items: start;
+  padding: 9px;
+  border: 1px solid rgba(255,255,255,.11);
+  border-radius: 12px;
+  background: rgba(255,255,255,.035);
+}
+
+.v48-trigger-order-number {
+  display: grid;
+  place-items: center;
+  width: 31px;
+  height: 31px;
+  border: 1px solid #83c9ff;
+  border-radius: 50%;
+  background: rgba(58, 143, 205, .25);
+  color: white;
+  font-weight: 1000;
+}
+
+.v48-trigger-card > img,
+.v48-trigger-card-back {
+  width: 90px;
+  aspect-ratio: 488 / 680;
+  object-fit: contain;
+  border-radius: 7px;
+  background: #09110d;
+}
+
+.v48-trigger-card-back {
+  display: grid;
+  place-items: center;
+  color: #e9d58c;
+  font-size: 2rem;
+}
+
+.v48-trigger-copy {
+  min-width: 0;
+}
+
+.v48-trigger-copy > small {
+  color: #88cfff;
+  font-weight: 900;
+}
+
+.v48-trigger-copy > strong {
+  display: block;
+  margin-top: 3px;
+  color: white;
+  font-size: .82rem;
+  line-height: 1.35;
+}
+
+.v48-trigger-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 7px;
+}
+
+.v48-trigger-badges span {
+  padding: 3px 6px;
+  border-radius: 999px;
+  background: rgba(82, 160, 214, .16);
+  color: #bce4ff;
+  font-size: .58rem;
+  font-weight: 900;
+}
+
+.v48-order-buttons {
+  display: grid;
+  gap: 5px;
+}
+
+.v48-order-buttons button {
+  width: 39px;
+  min-height: 36px;
+  padding: 0;
+}
+
+.v48-target-box {
+  margin-top: 8px;
+  padding: 8px;
+  border: 1px solid rgba(255,255,255,.1);
+  border-radius: 9px;
+  background: rgba(0,0,0,.2);
+}
+
+.v48-target-box > strong {
+  display: block;
+  margin-bottom: 5px;
+  color: #ffe0a6;
+}
+
+.v48-target-box > div {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(145px, 1fr));
+  gap: 5px;
+}
+
+.v48-target-box label {
+  display: grid !important;
+  grid-template-columns: 22px minmax(0, 1fr);
+  gap: 1px 6px;
+  align-items: center;
+  padding: 6px;
+  border-radius: 7px;
+  background: rgba(255,255,255,.045);
+}
+
+.v48-target-box label input {
+  grid-row: 1 / 3;
+  width: 18px;
+  height: 18px;
+}
+
+.v48-target-box label small {
+  color: #839ba8;
+}
+
+.v48-trigger-sheet > footer {
+  position: sticky;
+  bottom: -15px;
+  margin: 10px -15px -15px;
+  padding: 12px 15px max(12px, env(safe-area-inset-bottom));
+  border-top: 1px solid rgba(255,255,255,.1);
+  background: rgba(3, 12, 18, .97);
+}
+
+.v48-confirm-order {
+  width: 100%;
+  min-height: 50px;
+  border-color: #85caff !important;
+  background: linear-gradient(135deg, #2783c3, #14517d) !important;
+  color: white !important;
+  font-weight: 1000;
+}
+
+.v48-may-sheet {
+  width: min(550px, 100%);
+  align-self: center;
+  border-color: rgba(196, 153, 255, .56);
+  background:
+    radial-gradient(circle at 10% 5%, rgba(129, 75, 196, .24), transparent 34%),
+    #10091a;
+}
+
+.v48-may-sheet > p {
+  padding: 11px;
+  border-radius: 10px;
+  background: rgba(255,255,255,.045);
+  color: #e9ddf7;
+}
+
+.v48-may-sheet > div {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.v48-use-trigger {
+  border-color: #d4b2ff !important;
+  background: linear-gradient(135deg, #8150bc, #4d2877) !important;
+  color: white !important;
+  font-weight: 900;
+}
+
+@media (max-width: 620px) {
+  .v48-trigger-sheet {
+    padding: 10px;
+  }
+
+  .v48-trigger-card {
+    grid-template-columns: 29px 66px minmax(0, 1fr) 39px;
+    padding: 7px;
+    gap: 6px;
+  }
+
+  .v48-trigger-card > img,
+  .v48-trigger-card-back {
+    width: 66px;
+  }
+
+  .v48-order-buttons button {
+    width: 35px;
+  }
+
+  .v48-trigger-sheet > footer {
+    margin-inline: -10px;
+    margin-bottom: -10px;
+    padding-inline: 10px;
+  }
+
+  .v48-may-sheet > div {
+    grid-template-columns: 1fr;
+  }
+}
