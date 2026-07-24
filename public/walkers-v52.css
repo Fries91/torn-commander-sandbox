@@ -1,0 +1,333 @@
+/* Arena Commander v52 — planeswalkers, Battles and loyalty */
+
+.v52-walker-button {
+  position: relative;
+  border-color: rgba(181, 119, 255, .5) !important;
+}
+
+.v52-walker-button > b {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  display: grid;
+  place-items: center;
+  min-width: 19px;
+  height: 19px;
+  border-radius: 999px;
+  background: #6d36a8;
+  color: white;
+  font-size: 9px;
+}
+
+.v52-walker-sheet,
+.v52-protector-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1280000;
+  display: grid;
+  align-items: end;
+  padding: 12px;
+  background: rgba(0, 0, 0, .85);
+  backdrop-filter: blur(7px);
+}
+
+.v52-walker-sheet > section {
+  width: min(980px, 100%);
+  max-height: 94dvh;
+  margin-inline: auto;
+  overflow: auto;
+  padding: 15px;
+  border: 1px solid rgba(184, 121, 255, .52);
+  border-radius: 18px 18px 8px 8px;
+  background:
+    radial-gradient(circle at 10% 4%, rgba(120, 52, 185, .22), transparent 35%),
+    #100719;
+  color: #fbf3ff;
+}
+
+.v52-sheet-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.v52-sheet-header small,
+.v52-protector-overlay small {
+  color: #c495ff;
+  font-weight: 1000;
+  letter-spacing: .09em;
+}
+
+.v52-sheet-header h2 {
+  margin: 3px 0 12px;
+}
+
+.v52-sheet-header > button {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+}
+
+.v52-error {
+  padding: 9px;
+  border: 1px solid rgba(255, 111, 128, .45);
+  border-radius: 9px;
+  background: rgba(149, 29, 56, .2);
+  color: #ffcbd3;
+}
+
+.v52-section {
+  margin-top: 13px;
+  padding: 11px;
+  border: 1px solid rgba(255,255,255,.09);
+  border-radius: 12px;
+  background: rgba(255,255,255,.025);
+}
+
+.v52-section h3 {
+  margin: 0 0 9px;
+}
+
+.v52-attack-form {
+  display: grid;
+  grid-template-columns: 1fr 1fr auto;
+  gap: 7px;
+}
+
+.v52-attack-form select {
+  min-width: 0;
+  padding: 9px;
+}
+
+.v52-attack-form button,
+.v52-loyalty-ability > button,
+.v52-damage-helper button {
+  border-color: #bd86ff !important;
+  background: linear-gradient(135deg, #8244bd, #4e2678) !important;
+  color: white !important;
+  font-weight: 900;
+}
+
+.v52-section > small {
+  display: block;
+  margin-top: 7px;
+  color: #b6a5c1;
+}
+
+.v52-walker-list {
+  display: grid;
+  gap: 10px;
+}
+
+.v52-walker-card {
+  display: grid;
+  grid-template-columns: 110px minmax(120px, .45fr) minmax(250px, 1.55fr);
+  gap: 10px;
+  padding: 9px;
+  border: 1px solid rgba(197, 144, 255, .24);
+  border-radius: 11px;
+  background: rgba(50, 15, 74, .26);
+}
+
+.v52-walker-card > img,
+.v52-card-back {
+  width: 110px;
+  aspect-ratio: 488 / 680;
+  object-fit: contain;
+  border-radius: 8px;
+}
+
+.v52-card-back {
+  display: grid;
+  place-items: center;
+  background: #120d16;
+  color: #c991ff;
+  font-size: 2rem;
+}
+
+.v52-walker-card > header {
+  display: grid;
+  align-content: start;
+  gap: 5px;
+}
+
+.v52-walker-card > header span {
+  color: #d4aaff;
+  font-weight: 900;
+}
+
+.v52-walker-card > header small {
+  color: #b5a2bf;
+}
+
+.v52-ability-list {
+  display: grid;
+  gap: 7px;
+}
+
+.v52-loyalty-ability {
+  display: grid;
+  grid-template-columns: 48px minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: start;
+  padding: 8px;
+  border: 1px solid rgba(255,255,255,.09);
+  border-radius: 9px;
+  background: rgba(0,0,0,.18);
+}
+
+.v52-loyalty-cost {
+  display: grid;
+  place-items: center;
+  min-height: 42px;
+  border: 1px solid rgba(210, 168, 255, .55);
+  border-radius: 8px;
+  background: rgba(129, 64, 189, .25);
+  color: white;
+  font-weight: 1000;
+}
+
+.v52-loyalty-ability p {
+  margin: 0 0 6px;
+  line-height: 1.35;
+}
+
+.v52-targets {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(135px, 1fr));
+  gap: 5px;
+}
+
+.v52-targets > strong {
+  grid-column: 1 / -1;
+  color: #ddbaff;
+}
+
+.v52-targets label {
+  display: grid !important;
+  grid-template-columns: 21px minmax(0,1fr);
+  gap: 1px 5px;
+  align-items: center;
+  padding: 5px;
+  border-radius: 7px;
+  background: rgba(255,255,255,.035);
+}
+
+.v52-targets input {
+  grid-row: 1 / 3;
+}
+
+.v52-targets small {
+  color: #a997b3;
+}
+
+.v52-x-value {
+  display: flex !important;
+  align-items: center;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.v52-x-value input {
+  width: 78px;
+}
+
+.v52-battle-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(145px, 1fr));
+  gap: 9px;
+}
+
+.v52-battle-card {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+}
+
+.v52-battle-card > img,
+.v52-battle-card > .v52-card-back {
+  width: 100%;
+  aspect-ratio: 488 / 680;
+  object-fit: contain;
+  border-radius: 8px;
+}
+
+.v52-battle-card span {
+  color: #ffc987;
+  font-weight: 900;
+}
+
+.v52-battle-card small {
+  color: #b8a7a0;
+}
+
+.v52-damage-helper {
+  display: grid;
+  grid-template-columns: 65px minmax(0,1fr);
+  gap: 5px;
+}
+
+.v52-damage-helper input {
+  min-width: 0;
+}
+
+.v52-protector-overlay {
+  place-items: center;
+}
+
+.v52-protector-overlay > section {
+  width: min(560px, 100%);
+  padding: 17px;
+  border: 1px solid rgba(255, 183, 92, .55);
+  border-radius: 17px;
+  background:
+    radial-gradient(circle at 10% 5%, rgba(192, 107, 26, .23), transparent 35%),
+    #191006;
+  color: #fff7e9;
+}
+
+.v52-protector-overlay h2 {
+  margin: 4px 0;
+}
+
+.v52-protector-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(145px, 1fr));
+  gap: 8px;
+}
+
+.v52-protector-grid button {
+  display: grid;
+  gap: 3px;
+  padding: 13px;
+  border-color: #ffbd6d !important;
+  background: linear-gradient(135deg, #a86421, #63370e) !important;
+  color: white !important;
+}
+
+@media (max-width: 720px) {
+  .v52-attack-form {
+    grid-template-columns: 1fr;
+  }
+
+  .v52-walker-card {
+    grid-template-columns: 72px minmax(0,1fr);
+  }
+
+  .v52-walker-card > img,
+  .v52-walker-card > .v52-card-back {
+    width: 72px;
+  }
+
+  .v52-ability-list {
+    grid-column: 1 / -1;
+  }
+
+  .v52-loyalty-ability {
+    grid-template-columns: 44px minmax(0, 1fr);
+  }
+
+  .v52-loyalty-ability > button {
+    grid-column: 1 / -1;
+  }
+}
