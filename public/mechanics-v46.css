@@ -1,0 +1,166 @@
+/* Arena Commander v46 — advanced casting mechanics */
+
+.v46-mechanics-panel {
+  display: grid;
+  gap: 10px;
+  margin: 13px 0;
+  padding: 12px;
+  border: 1px solid rgba(248, 175, 79, .46);
+  border-radius: 14px;
+  background:
+    radial-gradient(circle at 12% 5%, rgba(210, 116, 35, .2), transparent 34%),
+    rgba(32, 16, 6, .74);
+}
+
+.v46-mechanics-panel header {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.v46-mechanics-panel header small,
+.v46-mechanics-panel header strong {
+  display: block;
+}
+
+.v46-mechanics-panel header small {
+  color: #ffbc69;
+  font-weight: 1000;
+  letter-spacing: .08em;
+}
+
+.v46-mechanics-panel header > span {
+  padding: 5px 7px;
+  border-radius: 999px;
+  background: rgba(216, 121, 38, .18);
+  color: #ffd2a0;
+}
+
+.v46-option-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit,minmax(150px,1fr));
+  gap: 7px;
+}
+
+.v46-option-grid label {
+  display: flex !important;
+  align-items: center;
+  gap: 7px;
+  padding: 8px;
+  border: 1px solid rgba(255,255,255,.09);
+  border-radius: 9px;
+  background: rgba(0,0,0,.19);
+}
+
+.v46-card-cost-group {
+  min-width: 0;
+  margin: 0;
+  padding: 9px;
+  border: 1px solid rgba(255,255,255,.1);
+  border-radius: 10px;
+}
+
+.v46-card-cost-group legend {
+  color: #ffc37d;
+  font-size: .75rem;
+  font-weight: 900;
+}
+
+.v46-card-cost-group > div {
+  display: flex;
+  gap: 7px;
+  overflow-x: auto;
+}
+
+.v46-card-cost-group label {
+  flex: 0 0 92px;
+  display: grid !important;
+  gap: 4px;
+  font-size: .66rem;
+}
+
+.v46-card-cost-group img {
+  width: 100%;
+  aspect-ratio: 488/680;
+  object-fit: contain;
+  border-radius: 6px;
+}
+
+.v46-cast-button {
+  min-height: 57px;
+  display: grid;
+  place-items: center;
+  align-content: center;
+  border-color: #ffb361 !important;
+  background: linear-gradient(135deg,#df792b,#8d350e) !important;
+  color: white !important;
+}
+
+.v46-cast-button small {
+  color: #ffe2c7;
+}
+
+.v46-base-autotap-hidden {
+  display: none !important;
+}
+
+.v46-mechanic-choice {
+  position: fixed;
+  inset: 0;
+  z-index: 1220000;
+  display: grid;
+  place-items: center;
+  padding: 14px;
+  background: rgba(0,0,0,.84);
+  backdrop-filter: blur(7px);
+}
+
+.v46-mechanic-choice > section {
+  width: min(480px,100%);
+  padding: 16px;
+  border: 1px solid rgba(255,177,93,.56);
+  border-radius: 17px;
+  background: #170c05;
+  color: #fff5e9;
+  text-align: center;
+}
+
+.v46-mechanic-choice header {
+  display: flex;
+  justify-content: space-between;
+  text-align: left;
+}
+
+.v46-mechanic-choice header small {
+  color: #ffb665;
+  font-weight: 1000;
+  letter-spacing: .09em;
+}
+
+.v46-mechanic-choice header h2 {
+  margin: 3px 0;
+}
+
+.v46-mechanic-choice header > span {
+  font-size: .65rem;
+  color: #ffd3a4;
+}
+
+.v46-mechanic-choice > section > img {
+  width: min(270px,70vw);
+  max-height: 52dvh;
+  object-fit: contain;
+  border-radius: 12px;
+}
+
+.v46-mechanic-choice > section > div:last-child {
+  display: grid;
+  gap: 7px;
+}
+
+.v46-free {
+  border-color: #ffc078 !important;
+  background: linear-gradient(135deg,#dc772c,#84300c) !important;
+  color: white !important;
+  font-weight: 900;
+}
