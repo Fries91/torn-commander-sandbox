@@ -1,0 +1,100 @@
+/* Arena Commander v44 — targeting legality and Ward */
+
+.v44-illegal-target {
+  opacity: .34 !important;
+  filter: grayscale(.8);
+  text-decoration: line-through;
+}
+
+.v44-ward-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1200000;
+  display: grid;
+  place-items: center;
+  padding: 14px;
+  background: rgba(0,0,0,.82);
+  backdrop-filter: blur(7px);
+}
+
+.v44-ward-overlay > section {
+  width: min(540px, 100%);
+  padding: 17px;
+  border: 1px solid rgba(179, 132, 255, .58);
+  border-radius: 17px;
+  background:
+    radial-gradient(circle at 15% 5%, rgba(132, 72, 208, .22), transparent 34%),
+    #0c1019;
+  color: #f4efff;
+  box-shadow: 0 28px 80px rgba(0,0,0,.78);
+}
+
+.v44-ward-overlay header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.v44-ward-overlay header small {
+  color: #c4a1ff;
+  font-weight: 1000;
+  letter-spacing: .09em;
+}
+
+.v44-ward-overlay header h2 {
+  margin: 3px 0;
+}
+
+.v44-ward-overlay header > span {
+  padding: 6px 8px;
+  border-radius: 999px;
+  background: rgba(153, 91, 226, .19);
+  color: #dcc7ff;
+  font-size: .63rem;
+  font-weight: 900;
+}
+
+.v44-ward-cost {
+  margin: 12px 0;
+  padding: 13px;
+  border: 1px solid rgba(196, 161, 255, .3);
+  border-radius: 11px;
+  background: rgba(91, 45, 143, .18);
+  font-size: 1.05rem;
+  font-weight: 900;
+  text-align: center;
+}
+
+.v44-choice-select {
+  display: grid !important;
+  gap: 5px;
+  margin: 9px 0;
+}
+
+.v44-choice-select select {
+  width: 100%;
+  padding: 10px;
+}
+
+.v44-ward-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.v44-ward-actions button {
+  min-height: 50px;
+}
+
+.v44-ward-actions .v44-pay {
+  border-color: #d4baff;
+  background: linear-gradient(135deg, #8551c4, #4f267e);
+  color: white;
+  font-weight: 900;
+}
+
+@media (max-width: 520px) {
+  .v44-ward-actions { grid-template-columns: 1fr; }
+}
