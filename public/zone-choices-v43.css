@@ -1,0 +1,317 @@
+/* Arena Commander v43 — private library, scry, surveil and search choices */
+
+.v43-choice-open {
+  overflow: hidden !important;
+}
+
+.v43-zone-choice-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1100000;
+  display: grid;
+  align-items: end;
+  padding:
+    max(12px, env(safe-area-inset-top))
+    max(10px, env(safe-area-inset-right))
+    max(10px, env(safe-area-inset-bottom))
+    max(10px, env(safe-area-inset-left));
+  background: rgba(0, 0, 0, .82);
+  backdrop-filter: blur(7px);
+}
+
+.v43-zone-choice-sheet {
+  width: min(1100px, 100%);
+  max-height: 94dvh;
+  margin-inline: auto;
+  overflow: auto;
+  padding: 15px;
+  border: 1px solid rgba(119, 192, 255, .52);
+  border-radius: 18px 18px 8px 8px;
+  background:
+    radial-gradient(circle at 12% 5%, rgba(55, 135, 204, .22), transparent 32%),
+    linear-gradient(180deg, #071722, #040c10);
+  color: #eef8ff;
+  box-shadow: 0 28px 90px rgba(0, 0, 0, .82);
+}
+
+.v43-zone-choice-sheet > header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.v43-zone-choice-sheet header small {
+  color: #76c0ff;
+  font-weight: 900;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+
+.v43-zone-choice-sheet h2 {
+  margin: 3px 0 0;
+  font-size: clamp(1.2rem, 3vw, 2rem);
+}
+
+.v43-private-badge {
+  padding: 6px 9px;
+  border: 1px solid rgba(127, 204, 255, .54);
+  border-radius: 999px;
+  background: rgba(31, 105, 158, .25);
+  color: #cdeaff;
+  font-size: .65rem;
+  font-weight: 1000;
+  letter-spacing: .08em;
+}
+
+.v43-choice-notes {
+  margin: 10px 0;
+  color: #a9bfcc;
+  font-size: .82rem;
+}
+
+.v43-search-tools {
+  position: sticky;
+  z-index: 8;
+  top: -15px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 9px;
+  align-items: center;
+  margin: 12px -4px;
+  padding: 10px 4px;
+  background: rgba(7, 23, 34, .96);
+}
+
+.v43-search-tools input {
+  min-width: 0;
+  padding: 11px;
+  border: 1px solid rgba(255,255,255,.17);
+  border-radius: 10px;
+  background: rgba(0,0,0,.32);
+  color: white;
+}
+
+.v43-search-tools span {
+  padding: 7px 10px;
+  border-radius: 999px;
+  background: rgba(85, 163, 226, .17);
+  color: #d5eeff;
+  font-weight: 900;
+}
+
+.v43-card-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(116px, 1fr));
+  gap: 10px;
+  padding-bottom: 12px;
+}
+
+.v43-card-tile {
+  min-width: 0;
+}
+
+.v43-card-select {
+  position: relative;
+  width: 100%;
+  padding: 0;
+  overflow: hidden;
+  aspect-ratio: 488 / 680;
+  border: 2px solid rgba(255,255,255,.13);
+  border-radius: 10px;
+  background: #0b1713;
+}
+
+.v43-card-select img,
+.v43-card-back {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.v43-card-back {
+  display: grid;
+  place-items: center;
+  color: #e9d58c;
+  font-size: 3rem;
+}
+
+.v43-card-tile > strong,
+.v43-card-tile > small {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.v43-card-tile > strong {
+  margin-top: 5px;
+  color: white;
+  font-size: .76rem;
+}
+
+.v43-card-tile > small {
+  color: #91a9b5;
+  font-size: .62rem;
+}
+
+.v43-card-check {
+  position: absolute;
+  top: 5px;
+  right: 5px;
+  display: none;
+  place-items: center;
+  width: 27px;
+  height: 27px;
+  border: 2px solid white;
+  border-radius: 50%;
+  background: #257ec0;
+  color: white;
+  font-weight: 1000;
+  box-shadow: 0 3px 9px rgba(0,0,0,.62);
+}
+
+.v43-card-tile.is-selected .v43-card-select {
+  border-color: #72c5ff;
+  box-shadow:
+    0 0 0 2px rgba(114,197,255,.26),
+    0 0 24px rgba(72,162,224,.48);
+}
+
+.v43-card-tile.is-selected .v43-card-check {
+  display: grid;
+}
+
+.v43-card-tile.is-ineligible {
+  opacity: .38;
+  filter: grayscale(.75);
+}
+
+.v43-choice-footer {
+  position: sticky;
+  bottom: -15px;
+  z-index: 10;
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin: 5px -15px -15px;
+  padding: 12px 15px max(12px, env(safe-area-inset-bottom));
+  border-top: 1px solid rgba(255,255,255,.10);
+  background: rgba(3, 12, 17, .97);
+}
+
+.v43-choice-footer button {
+  min-height: 47px;
+}
+
+.v43-confirm {
+  border-color: #ffb06e !important;
+  background: linear-gradient(135deg, #d96928, #8e300d) !important;
+  color: white !important;
+  font-weight: 900;
+}
+
+.v43-secondary {
+  background: rgba(255,255,255,.06) !important;
+  color: #dbe9ef !important;
+}
+
+.v43-order-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.v43-order-column {
+  min-width: 0;
+  padding: 10px;
+  border: 1px solid rgba(255,255,255,.11);
+  border-radius: 13px;
+  background: rgba(255,255,255,.035);
+}
+
+.v43-order-column h3 {
+  margin: 0 0 9px;
+  color: #9ed5ff;
+}
+
+.v43-order-column > div {
+  display: grid;
+  gap: 8px;
+}
+
+.v43-order-card {
+  display: grid;
+  grid-template-columns: 56px minmax(0, 1fr);
+  grid-template-rows: auto auto;
+  gap: 6px 9px;
+  align-items: center;
+  padding: 7px;
+  border: 1px solid rgba(255,255,255,.10);
+  border-radius: 10px;
+  background: rgba(0,0,0,.23);
+}
+
+.v43-order-card img,
+.v43-order-card .v43-card-back {
+  grid-row: 1 / 3;
+  width: 56px;
+  aspect-ratio: 488 / 680;
+  object-fit: contain;
+  border-radius: 5px;
+}
+
+.v43-order-card > strong {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.v43-order-card > div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.v43-order-card button {
+  min-width: 34px;
+  min-height: 30px;
+  padding: 4px 7px;
+  border-radius: 7px;
+  font-size: .68rem;
+}
+
+.v43-empty-column {
+  color: #778d98;
+  text-align: center;
+}
+
+@media (max-width: 680px) {
+  .v43-zone-choice-sheet {
+    max-height: 96dvh;
+    padding: 11px;
+  }
+
+  .v43-card-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 7px;
+  }
+
+  .v43-order-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .v43-choice-footer {
+    margin-inline: -11px;
+    margin-bottom: -11px;
+    padding-inline: 11px;
+  }
+
+  .v43-choice-footer button {
+    flex: 1;
+    min-width: 0;
+  }
+}
