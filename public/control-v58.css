@@ -1,0 +1,271 @@
+/* Arena Commander v58 — control, ownership, exchange and leave cleanup */
+
+.v58-control-button {
+  position: relative;
+  border-color: rgba(217, 143, 255, .52) !important;
+}
+
+.v58-control-button > b {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  display: grid;
+  place-items: center;
+  min-width: 19px;
+  height: 19px;
+  border-radius: 999px;
+  background: #7a2ca4;
+  color: white;
+  font-size: 9px;
+}
+
+.v58-control-sheet {
+  position: fixed;
+  inset: 0;
+  z-index: 1340000;
+  display: grid;
+  align-items: end;
+  padding: 12px;
+  background: rgba(0, 0, 0, .87);
+  backdrop-filter: blur(7px);
+}
+
+.v58-control-sheet > section {
+  width: min(1080px, 100%);
+  max-height: 94dvh;
+  margin-inline: auto;
+  overflow: auto;
+  padding: 15px;
+  border: 1px solid rgba(216, 143, 255, .55);
+  border-radius: 18px 18px 8px 8px;
+  background:
+    radial-gradient(
+      circle at 10% 4%,
+      rgba(130, 48, 170, .24),
+      transparent 35%
+    ),
+    #18071e;
+  color: #fff5ff;
+}
+
+.v58-control-sheet > section > header {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.v58-control-sheet header small {
+  color: #dfa2ff;
+  font-weight: 1000;
+  letter-spacing: .09em;
+}
+
+.v58-control-sheet header h2 {
+  margin: 3px 0 12px;
+}
+
+.v58-control-sheet header > button {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+}
+
+.v58-help {
+  color: #d0b8d8;
+}
+
+.v58-builder {
+  display: grid;
+  grid-template-columns:
+    repeat(4, minmax(0, 1fr));
+  gap: 7px;
+  padding: 10px;
+  border: 1px solid rgba(255,255,255,.1);
+  border-radius: 10px;
+  background: rgba(255,255,255,.035);
+}
+
+.v58-builder select,
+.v58-builder input {
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  padding: 9px;
+}
+
+.v58-builder label {
+  display: flex !important;
+  align-items: center;
+  gap: 7px;
+  padding: 8px;
+  border: 1px solid rgba(255,255,255,.08);
+  border-radius: 8px;
+}
+
+.v58-builder label input {
+  width: auto;
+}
+
+.v58-builder button,
+.v58-exchange-builder button,
+.v58-leave-builder button,
+.v58-permanent-card button {
+  border-color: #dfa1ff !important;
+  background:
+    linear-gradient(
+      135deg,
+      #993bc2,
+      #5b1b72
+    ) !important;
+  color: white !important;
+  font-weight: 900;
+}
+
+.v58-builder button {
+  grid-column: 1 / -1;
+}
+
+.v58-exchange-builder,
+.v58-leave-builder {
+  display: grid;
+  gap: 7px;
+  align-items: center;
+  padding: 10px;
+  border: 1px solid rgba(255,255,255,.1);
+  border-radius: 10px;
+  background: rgba(255,255,255,.035);
+}
+
+.v58-exchange-builder {
+  grid-template-columns:
+    minmax(0, 1fr)
+    36px
+    minmax(0, 1fr)
+    auto;
+}
+
+.v58-exchange-builder > span {
+  text-align: center;
+  color: #df9fff;
+  font-size: 1.4rem;
+}
+
+.v58-leave-builder {
+  grid-template-columns:
+    minmax(0, 1fr)
+    auto;
+}
+
+.v58-exchange-builder select,
+.v58-leave-builder select {
+  width: 100%;
+  min-width: 0;
+  padding: 9px;
+}
+
+.v58-permanent-grid {
+  display: grid;
+  grid-template-columns:
+    repeat(auto-fill, minmax(260px, 1fr));
+  gap: 8px;
+}
+
+.v58-permanent-card {
+  display: grid;
+  grid-template-columns:
+    78px minmax(0, 1fr);
+  gap: 8px;
+  padding: 8px;
+  border: 1px solid rgba(255,255,255,.1);
+  border-radius: 10px;
+  background: rgba(255,255,255,.035);
+}
+
+.v58-permanent-card img,
+.v58-card-back {
+  width: 78px;
+  aspect-ratio: 488 / 680;
+  object-fit: contain;
+  border-radius: 7px;
+}
+
+.v58-card-back {
+  display: grid;
+  place-items: center;
+  background: #120617;
+  color: #dda0ff;
+  font-size: 2rem;
+}
+
+.v58-permanent-card > div {
+  display: grid;
+  align-content: start;
+  gap: 3px;
+  min-width: 0;
+}
+
+.v58-permanent-card small {
+  color: #c8aeca;
+}
+
+.v58-permanent-card span {
+  color: #e0a8ff;
+}
+
+.v58-permanent-card button {
+  grid-column: 1 / -1;
+}
+
+.v58-effect-list {
+  display: grid;
+  gap: 7px;
+}
+
+.v58-effect-row {
+  display: grid;
+  grid-template-columns:
+    minmax(0, 1fr)
+    auto;
+  gap: 3px 8px;
+  padding: 8px;
+  border: 1px solid rgba(255,255,255,.09);
+  border-radius: 9px;
+  background: rgba(255,255,255,.03);
+}
+
+.v58-effect-row span {
+  color: #dca0fb;
+}
+
+.v58-effect-row small {
+  grid-column: 1 / -1;
+  color: #c2adc7;
+}
+
+@media (max-width: 760px) {
+  .v58-builder {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .v58-exchange-builder {
+    grid-template-columns: 1fr;
+  }
+
+  .v58-exchange-builder > span {
+    transform: rotate(90deg);
+  }
+
+  .v58-leave-builder {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 500px) {
+  .v58-builder {
+    grid-template-columns: 1fr;
+  }
+
+  .v58-builder button {
+    grid-column: 1;
+  }
+}
