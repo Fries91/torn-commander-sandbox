@@ -1,0 +1,327 @@
+/* Arena Commander v59 — hidden information, search, reveal and shuffle */
+
+.v59-hidden-button {
+  position: relative;
+  border-color: rgba(105, 255, 191, .52) !important;
+}
+
+.v59-hidden-button > b {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  display: grid;
+  place-items: center;
+  min-width: 19px;
+  height: 19px;
+  border-radius: 999px;
+  background: #187953;
+  color: white;
+  font-size: 9px;
+}
+
+.v59-hidden-sheet,
+.v59-pending-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1350000;
+  display: grid;
+  align-items: end;
+  padding: 12px;
+  background: rgba(0, 0, 0, .88);
+  backdrop-filter: blur(7px);
+}
+
+.v59-hidden-sheet > section,
+.v59-pending-overlay > section {
+  width: min(1080px, 100%);
+  max-height: 94dvh;
+  margin-inline: auto;
+  overflow: auto;
+  padding: 15px;
+  border: 1px solid rgba(101, 255, 188, .55);
+  border-radius: 18px 18px 8px 8px;
+  background:
+    radial-gradient(
+      circle at 10% 4%,
+      rgba(25, 153, 104, .23),
+      transparent 35%
+    ),
+    #061b13;
+  color: #f3fff9;
+}
+
+.v59-hidden-sheet > section > header {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.v59-hidden-sheet header small,
+.v59-pending-overlay > section > small {
+  color: #79efb8;
+  font-weight: 1000;
+  letter-spacing: .09em;
+}
+
+.v59-hidden-sheet header h2,
+.v59-pending-overlay h2 {
+  margin: 3px 0 12px;
+}
+
+.v59-hidden-sheet header > button {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+}
+
+.v59-player-grid,
+.v59-reveal-grid {
+  display: grid;
+  grid-template-columns:
+    repeat(auto-fill, minmax(220px, 1fr));
+  gap: 8px;
+}
+
+.v59-player-card {
+  display: grid;
+  gap: 4px;
+  padding: 9px;
+  border: 1px solid rgba(255,255,255,.1);
+  border-radius: 10px;
+  background: rgba(255,255,255,.035);
+}
+
+.v59-player-card span {
+  color: #a8d9c1;
+}
+
+.v59-player-card small {
+  color: #8fc7aa;
+}
+
+.v59-player-card small.blocked {
+  color: #ffaaa7;
+}
+
+.v59-basic-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-top: 9px;
+}
+
+.v59-basic-actions button,
+.v59-search-builder button,
+.v59-look-builder button,
+.v59-reveal-card button,
+.v59-pending-overlay button {
+  border-color: #76efb5 !important;
+  background:
+    linear-gradient(
+      135deg,
+      #209c6c,
+      #145d43
+    ) !important;
+  color: white !important;
+  font-weight: 900;
+}
+
+.v59-search-builder,
+.v59-look-builder {
+  display: grid;
+  grid-template-columns:
+    repeat(4, minmax(0, 1fr));
+  gap: 7px;
+  padding: 10px;
+  border: 1px solid rgba(255,255,255,.1);
+  border-radius: 10px;
+  background: rgba(255,255,255,.035);
+}
+
+.v59-search-builder select,
+.v59-search-builder input,
+.v59-look-builder select,
+.v59-look-builder input {
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  padding: 9px;
+}
+
+.v59-search-builder label,
+.v59-look-builder label {
+  display: flex !important;
+  align-items: center;
+  gap: 7px;
+  padding: 8px;
+  border: 1px solid rgba(255,255,255,.08);
+  border-radius: 8px;
+}
+
+.v59-search-builder label input,
+.v59-look-builder label input {
+  width: auto;
+}
+
+.v59-search-builder button,
+.v59-look-builder button {
+  grid-column: 1 / -1;
+}
+
+.v59-reveal-card {
+  display: grid;
+  grid-template-columns: 70px minmax(0, 1fr);
+  gap: 8px;
+  padding: 8px;
+  border: 1px solid rgba(255,255,255,.1);
+  border-radius: 10px;
+  background: rgba(255,255,255,.035);
+}
+
+.v59-reveal-card img,
+.v59-card-back {
+  width: 70px;
+  aspect-ratio: 488 / 680;
+  object-fit: contain;
+  border-radius: 7px;
+}
+
+.v59-card-back {
+  display: grid;
+  place-items: center;
+  background: #04110c;
+  color: #76eeb4;
+  font-size: 2rem;
+}
+
+.v59-reveal-card > div {
+  display: grid;
+  align-content: start;
+  gap: 3px;
+}
+
+.v59-reveal-card span,
+.v59-reveal-card small {
+  color: #a9d2bf;
+}
+
+.v59-reveal-card button {
+  grid-column: 1 / -1;
+}
+
+.v59-pending-overlay {
+  place-items: center;
+}
+
+.v59-pending-overlay > section {
+  border-radius: 17px;
+}
+
+.v59-candidate-grid {
+  display: grid;
+  grid-template-columns:
+    repeat(auto-fill, minmax(145px, 1fr));
+  gap: 8px;
+}
+
+.v59-candidate {
+  display: grid !important;
+  gap: 5px;
+  padding: 8px;
+  border: 1px solid rgba(255,255,255,.1);
+  border-radius: 9px;
+  background: rgba(255,255,255,.035);
+}
+
+.v59-candidate > input {
+  justify-self: end;
+  width: 22px;
+  height: 22px;
+}
+
+.v59-candidate img,
+.v59-candidate .v59-card-back {
+  width: 100%;
+  max-height: 250px;
+  object-fit: contain;
+}
+
+.v59-candidate small {
+  color: #a9cdbb;
+}
+
+.v59-pending-overlay > section > button {
+  width: 100%;
+  min-height: 44px;
+  margin-top: 10px;
+}
+
+.v59-look-list {
+  display: grid;
+  gap: 7px;
+}
+
+.v59-look-card {
+  display: grid;
+  grid-template-columns:
+    34px 72px minmax(0, 1fr)
+    auto auto;
+  gap: 7px;
+  align-items: center;
+  padding: 7px;
+  border: 1px solid rgba(255,255,255,.1);
+  border-radius: 9px;
+  background: rgba(255,255,255,.035);
+}
+
+.v59-look-card > span {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  background: rgba(91, 225, 162, .15);
+  color: #81edb9;
+  font-weight: 1000;
+}
+
+.v59-look-card img,
+.v59-look-card .v59-card-back {
+  width: 68px;
+}
+
+.v59-look-card > div {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px;
+}
+
+@media (max-width: 760px) {
+  .v59-search-builder,
+  .v59-look-builder {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .v59-look-card {
+    grid-template-columns:
+      34px 60px minmax(0, 1fr);
+  }
+
+  .v59-look-card > label,
+  .v59-look-card > div {
+    grid-column: 1 / -1;
+  }
+}
+
+@media (max-width: 500px) {
+  .v59-basic-actions,
+  .v59-search-builder,
+  .v59-look-builder {
+    grid-template-columns: 1fr;
+  }
+
+  .v59-search-builder button,
+  .v59-look-builder button {
+    grid-column: 1;
+  }
+}
