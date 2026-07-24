@@ -1,0 +1,163 @@
+/* Arena Commander v47 — permissions, linked exile and copy UI */
+
+.v47-playable-button {
+  position: relative;
+  border-color: rgba(245,205,105,.44) !important;
+}
+
+.v47-playable-button > b {
+  position: absolute;
+  top: -5px;
+  right: -5px;
+  display: grid;
+  place-items: center;
+  min-width: 20px;
+  height: 20px;
+  border-radius: 999px;
+  background: #ba6d18;
+  color: white;
+  font-size: 10px;
+}
+
+.v47-playable-button.has-cards {
+  box-shadow: 0 0 20px rgba(245,184,70,.35);
+}
+
+.v47-playable-sheet,
+.v47-copy-sheet {
+  position: fixed;
+  inset: 0;
+  z-index: 1230000;
+  display: grid;
+  align-items: end;
+  padding: 12px;
+  background: rgba(0,0,0,.82);
+  backdrop-filter: blur(7px);
+}
+
+.v47-playable-sheet > section,
+.v47-copy-sheet > section {
+  width: min(900px,100%);
+  max-height: 91dvh;
+  margin-inline: auto;
+  overflow: auto;
+  padding: 15px;
+  border: 1px solid rgba(242,201,104,.5);
+  border-radius: 18px 18px 8px 8px;
+  background:
+    radial-gradient(circle at 12% 5%,rgba(206,150,43,.18),transparent 34%),
+    #151005;
+  color: #fff9e9;
+}
+
+.v47-playable-sheet header,
+.v47-copy-sheet header {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.v47-playable-sheet header small,
+.v47-copy-sheet header small {
+  color: #f0c866;
+  font-weight: 1000;
+  letter-spacing: .09em;
+}
+
+.v47-playable-sheet header h2,
+.v47-copy-sheet header h2 {
+  margin: 3px 0 12px;
+}
+
+.v47-playable-sheet header button,
+.v47-copy-sheet header button {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+}
+
+.v47-permission-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill,minmax(140px,1fr));
+  gap: 10px;
+}
+
+.v47-permission-card {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+}
+
+.v47-permission-card img,
+.v47-permission-card > div {
+  width: 100%;
+  aspect-ratio: 488/680;
+  object-fit: contain;
+  border-radius: 10px;
+  background: #080b08;
+}
+
+.v47-permission-card > div {
+  display: grid;
+  place-items: center;
+  color: #e8cc78;
+  font-size: 3rem;
+}
+
+.v47-permission-card strong,
+.v47-permission-card small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.v47-permission-card small {
+  color: #b9aa80;
+}
+
+.v47-permission-card button,
+.v47-permission-cast,
+.v47-copy-open {
+  border-color: #f0c064 !important;
+  background: linear-gradient(135deg,#bd751c,#74400a) !important;
+  color: white !important;
+  font-weight: 900;
+}
+
+.v47-copy-open {
+  width: 100%;
+  margin-top: 14px;
+}
+
+.v47-permission-cast {
+  width: 100%;
+  min-height: 56px;
+  display: grid;
+  place-items: center;
+  align-content: center;
+}
+
+.v47-hidden-base-cast {
+  display: none !important;
+}
+
+.v47-copy-sheet h3 {
+  color: #f1ca70;
+  margin-bottom: 6px;
+}
+
+.v47-copy-list {
+  display: grid;
+  gap: 6px;
+}
+
+.v47-copy-list button {
+  display: flex;
+  justify-content: space-between;
+  text-align: left;
+  padding: 10px;
+}
+
+.v47-copy-list button small {
+  color: #bdae84;
+}
