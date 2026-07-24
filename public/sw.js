@@ -1,6 +1,6 @@
 "use strict";
 
-const CACHE_NAME = "arena-commander-turn-v60.0.0";
+const CACHE_NAME = "arena-commander-match-handoff-v60.3.0";
 const APP_SHELL = [
   "/",
   "/index.html",
@@ -31,6 +31,7 @@ const APP_SHELL = [
   "/control-v58.css?v=58.0.0",
   "/hidden-v59.css?v=59.0.0",
   "/turn-v60.css?v=60.0.0",
+  "/match-handoff-v60-3.css?v=60.3.0",
   "/app.js",
   "/deck-import-fix.js?v=39.2.0",
   "/card-automation-ui.js?v=40.0.0",
@@ -59,6 +60,7 @@ const APP_SHELL = [
   "/clean-home.js?v=39.0.0",
   "/meta-library.js?v=39.0.0",
   "/lobby-notifier-ui.js?v=39.1.0",
+  "/match-handoff-v60-3.js?v=60.3.0",
   "/notifier-install.html",
   "/notifier-icon.svg",
   "/manifest.webmanifest",
@@ -76,7 +78,11 @@ self.addEventListener("install", (event) => {
 self.addEventListener("activate", (event) => {
   event.waitUntil(
     caches.keys()
-      .then((keys) => Promise.all(keys.filter((key) => key !== CACHE_NAME).map((key) => caches.delete(key))))
+      .then((keys) => Promise.all(
+        keys
+          .filter((key) => key !== CACHE_NAME)
+          .map((key) => caches.delete(key))
+      ))
       .then(() => self.clients.claim())
   );
 });
@@ -86,20 +92,33 @@ self.addEventListener("fetch", (event) => {
   if (request.method !== "GET") return;
 
   const url = new URL(request.url);
+
   if (
     url.origin !== self.location.origin ||
     url.pathname.startsWith("/socket.io/") ||
     url.pathname.startsWith("/api/") ||
     url.pathname.endsWith(".user.js")
-  ) return;
+  ) {
+    return;
+  }
 
   event.respondWith(
     fetch(request)
       .then((response) => {
         const copy = response.clone();
-        caches.open(CACHE_NAME).then((cache) => cache.put(request, copy)).catch(() => undefined);
+
+        caches.open(CACHE_NAME)
+          .then((cache) => cache.put(request, copy))
+          .catch(() => undefined);
+
         return response;
       })
-      .catch(() => caches.match(request).then((cached) => cached || caches.match("/index.html")))
+      .catch(() =>
+        caches.match(request)
+          .then((cached) =>
+            cached ||
+            caches.match("/index.html")
+          )
+      )
   );
 });
