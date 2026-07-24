@@ -1,0 +1,255 @@
+/* Arena Commander v51 — complete combat rules */
+
+.v51-combat-button {
+  position: relative;
+  border-color: rgba(255, 112, 88, .48) !important;
+}
+
+.v51-combat-button > b {
+  position: absolute;
+  top: -6px;
+  right: -9px;
+  max-width: 62px;
+  overflow: hidden;
+  padding: 3px 5px;
+  border-radius: 999px;
+  background: #a83423;
+  color: white;
+  font-size: 8px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.v51-combat-sheet,
+.v51-choice-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1270000;
+  display: grid;
+  align-items: end;
+  padding: 12px;
+  background: rgba(0,0,0,.85);
+  backdrop-filter: blur(7px);
+}
+
+.v51-combat-sheet > section {
+  width: min(960px,100%);
+  max-height: 93dvh;
+  margin-inline: auto;
+  overflow: auto;
+  padding: 15px;
+  border: 1px solid rgba(255, 116, 91, .52);
+  border-radius: 18px 18px 8px 8px;
+  background:
+    radial-gradient(circle at 10% 4%, rgba(197, 51, 30, .22), transparent 35%),
+    #1a0906;
+  color: #fff4f1;
+}
+
+.v51-combat-sheet header {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.v51-combat-sheet header small,
+.v51-choice-overlay small {
+  color: #ff957f;
+  font-weight: 1000;
+  letter-spacing: .09em;
+}
+
+.v51-combat-sheet header h2 {
+  margin: 3px 0 12px;
+}
+
+.v51-combat-sheet header button {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+}
+
+.v51-error {
+  padding: 9px;
+  border: 1px solid rgba(255,117,117,.46);
+  border-radius: 9px;
+  background: rgba(150,30,30,.19);
+  color: #ffd0d0;
+}
+
+.v51-damage-buttons {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.v51-damage-buttons button,
+.v51-ninjutsu-box button,
+.v51-goad-box button,
+.v51-confirm-choice {
+  border-color: #ff8b72 !important;
+  background: linear-gradient(135deg,#c94d35,#7c2517) !important;
+  color: white !important;
+  font-weight: 900;
+}
+
+.v51-attacker-list {
+  display: grid;
+  gap: 8px;
+}
+
+.v51-attacker {
+  display: grid;
+  grid-template-columns: 82px minmax(0,1fr) minmax(190px,1fr);
+  gap: 9px;
+  padding: 8px;
+  border: 1px solid rgba(255,255,255,.1);
+  border-radius: 11px;
+  background: rgba(255,255,255,.035);
+}
+
+.v51-attacker > img,
+.v51-card-back {
+  width: 82px;
+  aspect-ratio: 488 / 680;
+  object-fit: contain;
+  border-radius: 7px;
+}
+
+.v51-card-back {
+  display: grid;
+  place-items: center;
+  background: #120b09;
+  color: #ff9a84;
+  font-size: 2rem;
+}
+
+.v51-attacker > div:nth-child(2) {
+  display: grid;
+  align-content: start;
+  gap: 4px;
+}
+
+.v51-attacker > div:nth-child(2) small,
+.v51-attacker > div:nth-child(2) span {
+  color: #c8aaa4;
+}
+
+.v51-blocker-order {
+  display: grid;
+  gap: 5px;
+}
+
+.v51-blocker-order > div {
+  display: grid;
+  grid-template-columns: minmax(0,1fr) 34px 34px;
+  gap: 5px;
+  align-items: center;
+  padding: 5px;
+  border-radius: 7px;
+  background: rgba(0,0,0,.2);
+}
+
+.v51-blocker-order button {
+  min-height: 32px;
+  padding: 0;
+}
+
+.v51-ninjutsu-box,
+.v51-goad-box {
+  display: grid;
+  grid-template-columns: 1fr 1fr auto;
+  gap: 7px;
+}
+
+.v51-goad-box {
+  grid-template-columns: 1fr auto;
+}
+
+.v51-goad-box small {
+  grid-column: 1 / -1;
+  color: #bba39e;
+}
+
+.v51-ninjutsu-box select,
+.v51-goad-box select {
+  min-width: 0;
+  padding: 9px;
+}
+
+.v51-choice-overlay {
+  place-items: center;
+}
+
+.v51-choice-overlay > section {
+  width: min(720px,100%);
+  max-height: 90dvh;
+  overflow: auto;
+  padding: 17px;
+  border: 1px solid rgba(255, 120, 91, .55);
+  border-radius: 17px;
+  background:
+    radial-gradient(circle at 10% 5%, rgba(195, 53, 31, .22), transparent 35%),
+    #1a0906;
+  color: #fff4f0;
+}
+
+.v51-choice-overlay h2 {
+  margin: 4px 0;
+}
+
+.v51-choice-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill,minmax(120px,1fr));
+  gap: 8px;
+}
+
+.v51-choice-grid label {
+  position: relative;
+  display: grid !important;
+  gap: 4px;
+}
+
+.v51-choice-grid input {
+  position: absolute;
+  top: 7px;
+  left: 7px;
+  width: 19px;
+  height: 19px;
+  z-index: 2;
+}
+
+.v51-choice-grid img,
+.v51-choice-grid .v51-card-back {
+  width: 100%;
+  aspect-ratio: 488 / 680;
+  object-fit: contain;
+  border-radius: 7px;
+}
+
+.v51-confirm-choice {
+  width: 100%;
+  min-height: 48px;
+  margin-top: 12px;
+}
+
+@media (max-width: 650px) {
+  .v51-attacker {
+    grid-template-columns: 65px minmax(0,1fr);
+  }
+
+  .v51-attacker > img,
+  .v51-attacker > .v51-card-back {
+    width: 65px;
+  }
+
+  .v51-blocker-order {
+    grid-column: 1 / -1;
+  }
+
+  .v51-damage-buttons,
+  .v51-ninjutsu-box,
+  .v51-goad-box {
+    grid-template-columns: 1fr;
+  }
+}
