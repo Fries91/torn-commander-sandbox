@@ -1,6 +1,6 @@
 "use strict";
 
-const CACHE_NAME = "arena-commander-multiplayer-v56.0.0";
+const CACHE_NAME = "arena-commander-replacement-v57.0.0";
 const APP_SHELL = [
   "/",
   "/index.html",
@@ -27,6 +27,7 @@ const APP_SHELL = [
   "/copies-v54.css?v=54.0.0",
   "/commander-v55.css?v=55.0.0",
   "/multiplayer-v56.css?v=56.0.0",
+  "/replacement-v57.css?v=57.0.0",
   "/app.js",
   "/deck-import-fix.js?v=39.2.0",
   "/card-automation-ui.js?v=40.0.0",
@@ -48,6 +49,7 @@ const APP_SHELL = [
   "/copies-v54.js?v=54.0.0",
   "/commander-v55.js?v=55.0.0",
   "/multiplayer-v56.js?v=56.0.0",
+  "/replacement-v57.js?v=57.0.0",
   "/clean-home.js?v=39.0.0",
   "/meta-library.js?v=39.0.0",
   "/lobby-notifier-ui.js?v=39.1.0",
