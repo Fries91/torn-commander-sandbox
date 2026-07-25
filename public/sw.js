@@ -1,7 +1,7 @@
 "use strict";
 
 const CACHE_NAME =
-  "arena-commander-final-v61.0.0";
+  "arena-commander-autodraw-v61.1.0";
 
 const STARTUP_FILES = [
   "/arena-final-v61.css?v=61.0.0",
