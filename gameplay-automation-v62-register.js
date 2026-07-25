@@ -4,7 +4,7 @@ const path = require("path");
 const Module = require("module");
 
 const SERVER_PATH = path.resolve(__dirname, "server.js");
-const VERSION = "62.1.0";
+const VERSION = "62.2.0";
 const MARKER = "Arena Commander v62 automated gameplay integration";
 
 function injectGameplayAutomationV62(sourceInput) {
@@ -772,6 +772,37 @@ function injectGameplayAutomationV62(sourceInput) {
     if (type === "combat-damage") {
       return v62FinishAction(auth, response, processGameAction(auth.room, auth.player, { type: "resolve-combat-damage", pass: request.body?.pass === "first" ? "first" : "normal" }), "Automatic combat damage");
     }
+    if (type === "move-card") {
+      const zones = new Set(["hand", "battlefield", "graveyard", "exile", "commandZone"]);
+      const fromZone = String(request.body?.fromZone || "");
+      const toZone = String(request.body?.toZone || "");
+      if (!zones.has(fromZone) || !zones.has(toZone) || fromZone === toZone) {
+        return response.status(400).json({ success: false, error: "Choose a valid different card zone." });
+      }
+      return v62FinishAction(
+        auth,
+        response,
+        processGameAction(auth.room, auth.player, {
+          type: "move-card",
+          cardId: String(request.body?.cardId || ""),
+          fromZone,
+          toZone
+        }),
+        "Move card"
+      );
+    }
+    if (type === "declare-attacker") {
+      return v62FinishAction(
+        auth,
+        response,
+        processGameAction(auth.room, auth.player, {
+          type: "declare-attacker",
+          cardId: String(request.body?.cardId || ""),
+          defenderPlayerId: String(request.body?.defenderPlayerId || "")
+        }),
+        "Declare attacker"
+      );
+    }
     return response.status(400).json({ success: false, error: "Unsupported v62 gameplay action." });
   });
 
@@ -793,7 +824,9 @@ function injectGameplayAutomationV62(sourceInput) {
         "simple static power/toughness bonuses",
         "simple granted creature keywords",
         "state-based actions and new-trigger checks",
-        "phase advancement after every player passes on an empty stack"
+        "phase advancement after every player passes on an empty stack",
+        "direct mobile card movement between public zones",
+        "direct mobile attack declaration"
       ],
       assisted: [
         "may choices",
