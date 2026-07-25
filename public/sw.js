@@ -1,39 +1,79 @@
 "use strict";
 
-const CACHE_NAME = "arena-commander-connection-v60.4.0";
+const CACHE_NAME = "arena-commander-safe-start-v60.5.0";
 
-const APP_SHELL = [
+const STARTUP_FILES = [
   "/",
   "/index.html",
   "/styles.css",
   "/clean-home.css?v=39.0.0",
   "/meta-library.css?v=39.0.0",
   "/commander-theme.css?v=39.0.0",
-  "/card-automation.css?v=40.0.0",
-  "/gameplay-hotfix.css?v=40.1.0",
-  "/arena-table-v41.css?v=41.0.0",
-  "/arena-table-v41-1.css?v=41.1.0",
-  "/arena-autotap-v42.css?v=42.0.0",
-  "/zone-choices-v43.css?v=43.0.0",
-  "/targeting-v44.css?v=44.0.0",
-  "/effects-v45.css?v=45.0.0",
-  "/mechanics-v46.css?v=46.0.0",
-  "/permissions-v47.css?v=47.0.0",
-  "/triggers-v48.css?v=48.0.0",
-  "/forms-v49.css?v=49.0.0",
-  "/casting-v50.css?v=50.0.0",
-  "/combat-v51.css?v=51.0.0",
-  "/walkers-v52.css?v=52.0.0",
-  "/attachments-v53.css?v=53.0.0",
-  "/copies-v54.css?v=54.0.0",
-  "/commander-v55.css?v=55.0.0",
-  "/multiplayer-v56.css?v=56.0.0",
-  "/replacement-v57.css?v=57.0.0",
-  "/control-v58.css?v=58.0.0",
-  "/hidden-v59.css?v=59.0.0",
-  "/turn-v60.css?v=60.0.0",
-  "/match-handoff-v60-3.css?v=60.3.0",
+  "/mobile-safe-v60-5.css?v=60.5.0",
   "/socket-mobile-v60-4.js?v=60.4.0",
+  "/startup-safe-v60-5.js?v=60.5.0",
+  "/app.js?v=60.5.0",
+  "/deck-import-fix.js?v=39.2.0",
+  "/clean-home.js?v=39.0.0",
+  "/meta-library.js?v=39.0.0",
+  "/lobby-notifier-ui.js?v=39.1.0",
+  "/mobile-loader-v60-5.js?v=60.5.0",
+  "/reset-session.html",
+  "/manifest.webmanifest",
+  "/icon.svg"
+];
+
+self.addEventListener("install", (event) => {
+  event.waitUntil(
+    caches.open(CACHE_NAME)
+      .then((cache) => cache.addAll(STARTUP_FILES))
+      .then(() => self.skipWaiting())
+  );
+});
+
+self.addEventListener("activate", (event) => {
+  event.waitUntil(
+    caches.keys()
+      .then((keys) => Promise.all(
+        keys
+          .filter((key) => key !== CACHE_NAME)
+          .map((key) => caches.delete(key))
+      ))
+      .then(() => self.clients.claim())
+  );
+});
+
+self.addEventListener("fetch", (event) => {
+  const request = event.request;
+  if (request.method !== "GET") return;
+
+  const url = new URL(request.url);
+
+  if (
+    url.origin !== self.location.origin ||
+    url.pathname.startsWith("/socket.io/") ||
+    url.pathname.startsWith("/api/")
+  ) {
+    return;
+  }
+
+  event.respondWith(
+    fetch(request)
+      .then((response) => {
+        if (response.ok) {
+          caches.open(CACHE_NAME)
+            .then((cache) => cache.put(request, response.clone()))
+            .catch(() => undefined);
+        }
+
+        return response;
+      })
+      .catch(() =>
+        caches.match(request)
+          .then((cached) => cached || caches.match("/index.html"))
+      )
+  );
+});
   "/app.js?v=60.4.0",
   "/match-handoff-v60-4.js?v=60.4.0",
   "/manifest.webmanifest",
