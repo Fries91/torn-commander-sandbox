@@ -1,0 +1,37 @@
+/* Arena Commander v60.6 — mobile performance mode */
+
+.arena-performance-mode *,
+.arena-performance-mode *::before,
+.arena-performance-mode *::after {
+  animation-duration: 0.001ms !important;
+  animation-iteration-count: 1 !important;
+  scroll-behavior: auto !important;
+}
+
+.v606-performance-badge {
+  display: inline-flex;
+  align-items: center;
+  min-height: 30px;
+  padding: 4px 9px;
+  border: 1px solid rgba(91, 235, 170, 0.5);
+  border-radius: 999px;
+  background: rgba(9, 47, 32, 0.92);
+  color: #8ff0bb;
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: 0.03em;
+  white-space: nowrap;
+}
+
+.toast-region,
+.toast-region .toast {
+  pointer-events: none !important;
+}
+
+@media (pointer: coarse) {
+  button,
+  [role="button"],
+  .arena-card {
+    touch-action: manipulation;
+  }
+}
