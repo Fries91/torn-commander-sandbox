@@ -1,0 +1,197 @@
+/* Arena Commander v62.1 — real library back, fullscreen self-board mode and lower hand */
+
+.arena-v621 .arena-zone-pile[data-zone="library"] .v621-real-card-back {
+  display: block !important;
+  width: 42px !important;
+  height: 59px !important;
+  padding: 0 !important;
+  overflow: hidden !important;
+  border: 1px solid rgba(240, 216, 143, .38) !important;
+  border-radius: 6px !important;
+  background: #080603 !important;
+  box-shadow: 0 5px 11px rgba(0,0,0,.42) !important;
+}
+
+.arena-v621 .arena-zone-pile[data-zone="library"] .v621-library-back {
+  display: block !important;
+  width: 100% !important;
+  height: 100% !important;
+  object-fit: cover !important;
+  transform: none !important;
+  filter: none !important;
+}
+
+.arena-v621 .v621-board-switcher {
+  display: none;
+}
+
+body.v621-fullscreen {
+  --v610-hand-card-w: clamp(64px, 16vw, 78px);
+  --v610-hand-card-h: calc(var(--v610-hand-card-w) * 1.397);
+  overflow: hidden !important;
+}
+
+body.v621-fullscreen .arena-game-shell.arena-v621 {
+  height: 100dvh !important;
+  min-height: 100dvh !important;
+  overflow-y: auto !important;
+  overscroll-behavior: contain;
+}
+
+body.v621-fullscreen .arena-v621 .v621-board-switcher {
+  position: fixed;
+  z-index: 190;
+  right: max(6px, env(safe-area-inset-right));
+  top: 158px;
+  display: grid;
+  grid-template-columns: 32px minmax(82px, auto) 32px 48px;
+  gap: 4px;
+  padding: 4px;
+  border: 1px solid rgba(112,226,218,.35);
+  border-radius: 12px;
+  background: rgba(1, 12, 9, .94);
+  box-shadow: 0 8px 22px rgba(0,0,0,.42);
+  backdrop-filter: blur(8px);
+}
+
+body.v621-fullscreen .arena-v621 .v621-board-switcher button {
+  min-width: 0;
+  min-height: 34px;
+  padding: 3px 6px;
+  border: 1px solid rgba(112,226,218,.3);
+  border-radius: 9px;
+  background: linear-gradient(155deg, rgba(7,38,29,.98), rgba(1,15,11,.98));
+  color: #e8f4ee;
+  font-size: .58rem;
+  font-weight: 900;
+}
+
+body.v621-fullscreen .arena-v621 .v621-board-switcher button:first-child,
+body.v621-fullscreen .arena-v621 .v621-board-switcher button:nth-child(3) {
+  font-size: 1.25rem;
+}
+
+body.v621-fullscreen .arena-v621 .v621-board-toggle {
+  border-color: rgba(94,168,255,.65) !important;
+  color: #b9dcff !important;
+}
+
+body.v621-fullscreen .arena-v621 .v621-table-button {
+  border-color: rgba(215,189,114,.55) !important;
+  color: #ead586 !important;
+}
+
+/* Fullscreen opens on the user's own battlefield only. */
+body.v621-fullscreen:not(.v621-opponent-open) .arena-v621 .arena-opponent-ring,
+body.v621-fullscreen:not(.v621-opponent-open) .arena-v621 .arena-center-zone,
+body.v621-fullscreen:not(.v621-opponent-open) .arena-v621 .v61-focus-bar {
+  display: none !important;
+}
+
+body.v621-fullscreen:not(.v621-opponent-open) .arena-v621 .self-slot {
+  position: relative !important;
+  inset: auto !important;
+  order: 1 !important;
+  display: block !important;
+  width: 100% !important;
+  max-width: none !important;
+  height: auto !important;
+  min-height: 0 !important;
+  margin: 0 !important;
+  transform: none !important;
+}
+
+/* Opponent mode swaps the main view without crowding both boards together. */
+body.v621-fullscreen.v621-opponent-open .arena-v621 .self-slot,
+body.v621-fullscreen.v621-opponent-open .arena-v621 .arena-center-zone,
+body.v621-fullscreen.v621-opponent-open .arena-v621 .v61-focus-bar {
+  display: none !important;
+}
+
+body.v621-fullscreen.v621-opponent-open .arena-v621 .arena-opponent-ring {
+  position: relative !important;
+  inset: auto !important;
+  order: 1 !important;
+  display: block !important;
+  width: 100% !important;
+  height: auto !important;
+  min-height: 0 !important;
+  padding: 0 !important;
+}
+
+body.v621-fullscreen.v621-opponent-open .arena-v621 .opponent-slot.v61-focus-visible {
+  position: relative !important;
+  inset: auto !important;
+  display: block !important;
+  width: 100% !important;
+  height: auto !important;
+  transform: none !important;
+}
+
+body.v621-fullscreen .arena-v621 .arena-stage {
+  position: relative !important;
+  display: flex !important;
+  flex-direction: column !important;
+  width: 100% !important;
+  height: auto !important;
+  min-height: calc(100dvh - 148px) !important;
+  padding: 8px 7px 210px !important;
+  overflow: visible !important;
+}
+
+body.v621-fullscreen .arena-v621 .arena-seat.is-self,
+body.v621-fullscreen .arena-v621 .arena-seat.is-opponent {
+  width: 100% !important;
+  min-height: calc(100dvh - 370px) !important;
+}
+
+body.v621-fullscreen .arena-v621 .arena-seat-board,
+body.v621-fullscreen .arena-v621 .arena-battlefield-cards,
+body.v621-fullscreen .arena-v621 .v610-playmat {
+  min-height: clamp(330px, 51dvh, 570px) !important;
+}
+
+/* Keep the hand close to the bottom rather than covering the middle of the board. */
+body.v621-fullscreen .arena-hand-tray {
+  z-index: 185 !important;
+  bottom: calc(56px + env(safe-area-inset-bottom)) !important;
+  height: 142px !important;
+  padding: 0 5px !important;
+  background: linear-gradient(180deg, transparent, rgba(1,8,6,.88) 42%, rgba(0,5,3,.98)) !important;
+}
+
+body.v621-fullscreen .arena-hand-tray .hand-label {
+  height: 17px !important;
+  font-size: .5rem !important;
+}
+
+body.v621-fullscreen .arena-hand-fan {
+  height: 125px !important;
+  padding-top: 0 !important;
+  transform: translateY(18px) !important;
+}
+
+body.v621-fullscreen .hand-card-wrap {
+  margin-left: calc(var(--v610-hand-card-w) * -.38) !important;
+}
+
+body.v621-fullscreen .hand-card-wrap:hover,
+body.v621-fullscreen .hand-card-wrap:focus-within {
+  transform: translateY(-24px) rotate(0deg) !important;
+}
+
+@media (max-width: 540px) {
+  body.v621-fullscreen .arena-v621 .v621-board-switcher {
+    top: 150px;
+    grid-template-columns: 29px minmax(76px, auto) 29px 43px;
+  }
+
+  body.v621-fullscreen .arena-v621 .v621-board-switcher button {
+    min-height: 31px;
+    font-size: .52rem;
+  }
+
+  body.v621-fullscreen .arena-v621 .arena-stage {
+    padding-bottom: 194px !important;
+  }
+}
