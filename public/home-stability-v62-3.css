@@ -1,0 +1,44 @@
+/* Arena Commander v62.3 — restore home scrolling and Play button responsiveness */
+
+html,
+body.v623-home-ready {
+  overflow-x: hidden !important;
+  overflow-y: auto !important;
+  height: auto !important;
+  min-height: 100% !important;
+  touch-action: pan-y !important;
+  overscroll-behavior-y: auto !important;
+}
+
+body.v623-home-ready #app,
+body.v623-home-ready .app-main {
+  position: relative !important;
+  min-height: calc(100dvh - 128px) !important;
+  overflow: visible !important;
+  touch-action: pan-y !important;
+}
+
+body.v623-home-ready #bottomNav,
+body.v623-home-ready #bottomNav button,
+body.v623-home-ready #bottomNav [data-nav="game"] {
+  pointer-events: auto !important;
+}
+
+body.v623-home-ready #bottomNav {
+  z-index: 500 !important;
+}
+
+body.v623-home-ready .v621-board-switcher,
+body.v623-home-ready .v622-drag-ghost,
+body.v623-home-ready .arena-action-bar,
+body.v623-home-ready .arena-hand-tray,
+body.v623-home-ready .v62-dock {
+  display: none !important;
+  pointer-events: none !important;
+}
+
+.modal-backdrop.is-hidden,
+.reconnect-overlay.is-hidden {
+  display: none !important;
+  pointer-events: none !important;
+}
