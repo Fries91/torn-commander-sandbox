@@ -1,31 +1,72 @@
 (() => {
   "use strict";
 
-  const VERSION = "62.1.0";
+  const VERSION = "62.3.0";
   const CARD_BACK_URL = "/mtg-card-back-v62-1.png?v=62.1.0";
   let repairQueued = false;
 
-  function isFullscreen() {
+  function gameShell() {
+    return document.querySelector(".arena-game-shell");
+  }
+
+  function isFullscreenGame() {
+    if (!gameShell()) return false;
     return Boolean(document.fullscreenElement) ||
       Boolean(window.matchMedia?.("(display-mode: fullscreen)")?.matches);
   }
 
+  function clearGameOnlyClasses() {
+    const body = document.body;
+    if (!body) return;
+    for (const name of [
+      "v621-fullscreen",
+      "v621-opponent-open",
+      "v621-game-visible",
+      "v622-game-visible",
+      "v622-dragging",
+      "v622-moving-card",
+      "v610-game-visible",
+      "v609-game-visible",
+      "is-dragging-card",
+      "in-game"
+    ]) body.classList.remove(name);
+
+    body.style.removeProperty("overflow");
+    body.style.removeProperty("overflow-x");
+    body.style.removeProperty("overflow-y");
+    body.style.removeProperty("position");
+    body.style.removeProperty("height");
+    body.style.removeProperty("touch-action");
+    document.documentElement.style.removeProperty("overflow");
+    document.documentElement.style.removeProperty("overflow-y");
+    document.documentElement.style.removeProperty("height");
+
+    document.querySelectorAll(".v621-board-switcher,.v622-drag-ghost").forEach((element) => element.remove());
+  }
+
   function syncFullscreenState() {
-    const active = isFullscreen();
+    const shell = gameShell();
+    if (!shell) {
+      clearGameOnlyClasses();
+      return false;
+    }
+
+    const active = isFullscreenGame();
     document.body.classList.toggle("v621-fullscreen", active);
     if (!active) document.body.classList.remove("v621-opponent-open");
+    return active;
   }
 
   function repairLibraryBacks(root = document) {
     for (const pile of root.querySelectorAll('.arena-zone-pile[data-zone="library"]')) {
-      let preview = pile.querySelector(':scope > .v610-zone-preview');
+      let preview = pile.querySelector(":scope > .v610-zone-preview");
       if (!preview) {
         preview = document.createElement("div");
         preview.className = "v610-zone-preview is-library";
         pile.insertBefore(preview, pile.firstChild);
       }
 
-      let image = preview.querySelector(':scope > img.v621-library-back');
+      let image = preview.querySelector(":scope > img.v621-library-back");
       if (!image) {
         preview.replaceChildren();
         image = document.createElement("img");
@@ -36,15 +77,13 @@
         preview.appendChild(image);
       }
 
-      if (!image.src.includes("mtg-card-back-v62-1.png")) {
-        image.src = CARD_BACK_URL;
-      }
+      if (!image.src.includes("mtg-card-back-v62-1.png")) image.src = CARD_BACK_URL;
       preview.classList.add("is-library", "v621-real-card-back");
     }
   }
 
   function ensureBoardSwitcher(shell) {
-    let switcher = shell.querySelector(':scope > .v621-board-switcher');
+    let switcher = shell.querySelector(":scope > .v621-board-switcher");
     if (!switcher) {
       switcher = document.createElement("nav");
       switcher.className = "v621-board-switcher";
@@ -78,23 +117,26 @@
   }
 
   function clickV61(action) {
-    const button = document.querySelector(`[data-v61-action="${action}"]`);
-    button?.click();
+    document.querySelector(`[data-v61-action="${action}"]`)?.click();
     window.setTimeout(scheduleRepair, 30);
   }
 
   function showOpponent(open) {
+    if (!gameShell()) return;
     document.body.classList.toggle("v621-opponent-open", Boolean(open));
     window.ArenaCommanderFinalV61?.repair?.();
     scheduleRepair();
   }
 
   function repair() {
-    syncFullscreenState();
-    const shell = document.querySelector(".arena-game-shell");
-    document.body.classList.toggle("v621-game-visible", Boolean(shell));
-    if (!shell) return;
+    const shell = gameShell();
+    if (!shell) {
+      clearGameOnlyClasses();
+      return;
+    }
 
+    syncFullscreenState();
+    document.body.classList.add("v621-game-visible");
     shell.classList.add("arena-v621");
     repairLibraryBacks(shell);
     ensureBoardSwitcher(shell);
@@ -110,51 +152,38 @@
     });
   }
 
-  document.addEventListener("fullscreenchange", () => {
-    syncFullscreenState();
-    scheduleRepair();
-  });
-
+  document.addEventListener("fullscreenchange", scheduleRepair);
   window.matchMedia?.("(display-mode: fullscreen)")?.addEventListener?.("change", scheduleRepair);
+  window.addEventListener("pageshow", scheduleRepair);
+  document.addEventListener("visibilitychange", () => {
+    if (!document.hidden) scheduleRepair();
+  });
 
   document.addEventListener("click", (event) => {
     const button = event.target.closest?.("[data-v621-action]");
-    if (!button) return;
+    if (!button || !gameShell()) return;
 
     const action = button.dataset.v621Action;
     if (action === "toggle-board") {
       event.preventDefault();
       showOpponent(!document.body.classList.contains("v621-opponent-open"));
-      return;
-    }
-
-    if (action === "previous") {
+    } else if (action === "previous") {
       event.preventDefault();
       showOpponent(true);
       clickV61("previous-player");
-      return;
-    }
-
-    if (action === "next") {
+    } else if (action === "next") {
       event.preventDefault();
       showOpponent(true);
       clickV61("next-player");
-      return;
-    }
-
-    if (action === "table") {
+    } else if (action === "table") {
       event.preventDefault();
       clickV61("open-overview");
     }
   }, true);
 
   function start() {
-    syncFullscreenState();
     const app = document.getElementById("app");
     if (app) new MutationObserver(scheduleRepair).observe(app, { childList: true, subtree: true });
-    const toastRegion = document.getElementById("toastRegion");
-    if (toastRegion) new MutationObserver(scheduleRepair).observe(toastRegion, { childList: true });
-    window.setInterval(scheduleRepair, 500);
     scheduleRepair();
   }
 
@@ -167,6 +196,7 @@
   window.ArenaCommanderTabletopFixV621 = {
     version: VERSION,
     repair,
-    showOpponent
+    showOpponent,
+    clearGameOnlyClasses
   };
 })();
