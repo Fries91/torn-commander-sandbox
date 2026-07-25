@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#08110f">
+  <title>Repair Arena Commander</title>
+  <style>
+    body {
+      margin: 0;
+      min-height: 100dvh;
+      display: grid;
+      place-items: center;
+      padding: 20px;
+      box-sizing: border-box;
+      background: #06100c;
+      color: #edf7f0;
+      font-family: system-ui, sans-serif;
+    }
+
+    main {
+      width: min(540px, 100%);
+      padding: 22px;
+      border: 1px solid #39795a;
+      border-radius: 18px;
+      background: #0b1c14;
+      box-shadow: 0 18px 60px rgba(0,0,0,.4);
+    }
+
+    button {
+      width: 100%;
+      min-height: 54px;
+      border: 0;
+      border-radius: 12px;
+      background: #2ca56b;
+      color: white;
+      font-size: 1rem;
+      font-weight: 900;
+    }
+
+    #status {
+      min-height: 24px;
+      margin-top: 12px;
+      color: #9ce7bc;
+    }
+  </style>
+</head>
+<body>
+<main>
+  <h1>Repair Arena Commander</h1>
+  <p>
+    This removes old service workers and cached app files.
+    Your imported decks and saved room are not deleted.
+  </p>
+
+  <button id="repairButton" type="button">
+    Repair cache and reopen
+  </button>
+
+  <p id="status"></p>
+</main>
+
+<script>
+document.getElementById("repairButton").addEventListener(
+  "click",
+  async () => {
+    const status = document.getElementById("status");
+    status.textContent = "Removing old app cache…";
+
+    try {
+      const registrations =
+        await navigator.serviceWorker?.getRegistrations?.() || [];
+
+      await Promise.all(
+        registrations.map(
+          (registration) => registration.unregister()
+        )
+      );
+
+      const keys = await caches.keys();
+
+      await Promise.all(
+        keys
+          .filter((key) =>
+            key.startsWith("arena-commander")
+          )
+          .map((key) => caches.delete(key))
+      );
+
+      status.textContent = "Repair complete. Reopening…";
+
+      setTimeout(() => {
+        location.replace("/?repaired=60.6.0");
+      }, 500);
+    } catch (error) {
+      status.textContent =
+        "Repair failed: " +
+        (error?.message || String(error));
+    }
+  }
+);
+</script>
+</body>
+</html>
