@@ -1,0 +1,55 @@
+/* Arena Commander v60.5 — safe startup and lazy rules UI */
+
+.v605-recovery-card {
+  display: grid;
+  gap: 12px;
+  margin: 14px 0 18px;
+  padding: 16px;
+  border: 1px solid rgba(90, 231, 165, .45);
+  border-radius: 18px;
+  background:
+    linear-gradient(145deg, rgba(18, 67, 48, .95), rgba(6, 20, 15, .98));
+  box-shadow: 0 12px 35px rgba(0, 0, 0, .3);
+}
+
+.v605-recovery-card small {
+  color: #78e7b1;
+  font-weight: 900;
+  letter-spacing: .09em;
+}
+
+.v605-recovery-card strong {
+  display: block;
+  margin-top: 4px;
+  font-size: 1.15rem;
+}
+
+.v605-recovery-card p {
+  margin: 5px 0 0;
+  color: #c6d7ce;
+}
+
+.v605-recovery-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 9px;
+}
+
+.v605-recovery-actions button {
+  min-height: 48px;
+  touch-action: manipulation;
+}
+
+.v605-recovery-actions button:first-child,
+.v605-advanced-button {
+  border-color: #6be9ac !important;
+  background: linear-gradient(135deg, #167448, #0b4b32) !important;
+  color: white !important;
+  font-weight: 900;
+}
+
+@media (max-width: 500px) {
+  .v605-recovery-actions {
+    grid-template-columns: 1fr;
+  }
+}
