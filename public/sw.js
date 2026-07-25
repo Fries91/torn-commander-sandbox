@@ -1,11 +1,11 @@
 "use strict";
 
 const CACHE_NAME =
-  "arena-commander-realcards-v60.10.0";
+  "arena-commander-final-v61.0.0";
 
 const STARTUP_FILES = [
-  "/playmat-board-v60-10.css?v=60.10.0",
-  "/playmat-board-v60-10.js?v=60.10.0",
+  "/arena-final-v61.css?v=61.0.0",
+  "/arena-final-v61.js?v=61.0.0",
   "/",
   "/index.html",
   "/styles.css",
@@ -17,7 +17,7 @@ const STARTUP_FILES = [
   "/socket-mobile-v60-4.js?v=60.4.0",
   "/startup-session-v60-7.js?v=60.7.0",
   "/performance-bootstrap-v60-6.js?v=60.6.0",
-  "/app.js?v=60.10.0",
+  "/app.js?v=61.0.0",
   "/deck-import-fix.js?v=39.2.0",
   "/clean-home.js?v=39.0.0",
   "/meta-library.js?v=39.0.0",
