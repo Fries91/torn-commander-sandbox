@@ -1,9 +1,11 @@
 "use strict";
 
 const CACHE_NAME =
-  "arena-commander-artwork-leave-v61.2.0";
+  "arena-commander-automated-gameplay-v62.0.0";
 
 const STARTUP_FILES = [
+  "/gameplay-automation-v62.css?v=62.0.0",
+  "/gameplay-automation-v62.js?v=62.0.0",
   "/artwork-leave-fix-v61-2.css?v=61.2.0",
   "/artwork-leave-fix-v61-2.js?v=61.2.0",
   "/arena-final-v61.css?v=61.0.0",
@@ -19,7 +21,7 @@ const STARTUP_FILES = [
   "/socket-mobile-v60-4.js?v=60.4.0",
   "/startup-session-v60-7.js?v=60.7.0",
   "/performance-bootstrap-v60-6.js?v=60.6.0",
-  "/app.js?v=61.2.0",
+  "/app.js?v=62.0.0",
   "/deck-import-fix.js?v=39.2.0",
   "/clean-home.js?v=39.0.0",
   "/meta-library.js?v=39.0.0",
