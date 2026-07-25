@@ -1,0 +1,137 @@
+/* Arena Commander v61.2 — full printed card faces and restored Leave Match control */
+
+.arena-v612 .arena-card.v612-full-card {
+  overflow: hidden !important;
+  border: 0 !important;
+  border-radius: 8px !important;
+  background: #000 !important;
+  box-shadow: 0 8px 18px rgba(0, 0, 0, .42) !important;
+}
+
+.arena-v612 .arena-card.v612-full-card .arena-card-frame {
+  position: relative !important;
+  display: block !important;
+  width: 100% !important;
+  height: 100% !important;
+  min-height: 100% !important;
+  padding: 0 !important;
+  border: 0 !important;
+  background: #000 !important;
+}
+
+/* Remove the artificial mini-card frame. The printed card face already includes
+   the title, mana cost, art, rules text and power/toughness. */
+.arena-v612 .arena-card.v612-full-card .arena-card-frame > header,
+.arena-v612 .arena-card.v612-full-card .arena-card-type,
+.arena-v612 .arena-card.v612-full-card .arena-card-frame > footer {
+  display: none !important;
+}
+
+.arena-v612 .arena-card.v612-full-card .arena-card-image {
+  position: absolute !important;
+  inset: 0 !important;
+  display: block !important;
+  width: 100% !important;
+  height: 100% !important;
+  min-height: 100% !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  overflow: hidden !important;
+  background: #000 !important;
+}
+
+.arena-v612 .arena-card.v612-full-card .arena-card-image img {
+  position: absolute !important;
+  inset: 0 !important;
+  display: block !important;
+  width: 100% !important;
+  height: 100% !important;
+  max-width: none !important;
+  max-height: none !important;
+  margin: 0 !important;
+  object-fit: contain !important;
+  object-position: center !important;
+  opacity: 1 !important;
+  visibility: visible !important;
+  filter: none !important;
+  background: #000 !important;
+}
+
+.arena-v612 .arena-card.v612-full-card .arena-card-badges {
+  position: absolute !important;
+  z-index: 5 !important;
+  left: 3px !important;
+  right: 3px !important;
+  bottom: 3px !important;
+  display: flex !important;
+  flex-wrap: wrap !important;
+  gap: 3px !important;
+  pointer-events: none !important;
+}
+
+.arena-v612 .arena-card.v612-full-card .arena-card-badges > * {
+  padding: 2px 4px !important;
+  border: 1px solid rgba(255,255,255,.28) !important;
+  border-radius: 6px !important;
+  background: rgba(0,0,0,.82) !important;
+  color: #fff !important;
+  font-size: .46rem !important;
+  line-height: 1.1 !important;
+  text-shadow: 0 1px 2px #000 !important;
+}
+
+.arena-v612 .arena-card.v612-full-card.is-tapped {
+  transform: rotate(90deg) scale(.86) !important;
+}
+
+/* Keep the real printed faces readable in the hand. */
+body.v612-game-visible .arena-hand-tray .arena-card.v612-full-card {
+  width: var(--v610-hand-card-w) !important;
+  height: var(--v610-hand-card-h) !important;
+}
+
+/* Restored in-game exit control. */
+.arena-v612 .v612-leave-match {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 4px !important;
+  min-width: 58px !important;
+  min-height: 34px !important;
+  padding: 5px 8px !important;
+  border: 1px solid rgba(255, 113, 113, .72) !important;
+  border-radius: 10px !important;
+  background: linear-gradient(180deg, rgba(112, 25, 25, .94), rgba(50, 8, 8, .98)) !important;
+  color: #fff !important;
+  font-size: .62rem !important;
+  font-weight: 900 !important;
+  letter-spacing: .04em !important;
+  box-shadow: 0 0 14px rgba(222, 66, 66, .18) !important;
+}
+
+.arena-v612 .v612-leave-match span {
+  font-size: .95rem !important;
+  line-height: 1 !important;
+}
+
+.arena-v612 .v612-leave-match:hover,
+.arena-v612 .v612-leave-match:focus-visible {
+  border-color: #ffaaaa !important;
+  background: linear-gradient(180deg, #8d2424, #480a0a) !important;
+}
+
+@media (max-width: 620px) {
+  .arena-v612 .arena-game-topbar .arena-top-actions {
+    gap: 4px !important;
+  }
+
+  .arena-v612 .v612-leave-match {
+    min-width: 38px !important;
+    width: 38px !important;
+    padding: 4px !important;
+  }
+
+  .arena-v612 .v612-leave-match b {
+    display: none !important;
+  }
+}
