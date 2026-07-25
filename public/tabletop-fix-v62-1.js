@@ -1,24 +1,25 @@
 (() => {
   "use strict";
 
-  const VERSION = "62.3.0";
-  const CARD_BACK_URL = "/mtg-card-back-v62-1.png?v=62.1.0";
+  const VERSION = "62.4.0";
+  const CARD_BACK_URL = "/mtg-card-back-v62-1.png?v=62.4.0";
   let repairQueued = false;
+  let nativeFullscreenWasActive = false;
 
   function gameShell() {
     return document.querySelector(".arena-game-shell");
   }
 
-  function isFullscreenGame() {
-    if (!gameShell()) return false;
-    return Boolean(document.fullscreenElement) ||
-      Boolean(window.matchMedia?.("(display-mode: fullscreen)")?.matches);
+  function focusModeActive() {
+    return document.body?.classList.contains("v624-focus-mode") || false;
   }
 
   function clearGameOnlyClasses() {
     const body = document.body;
     if (!body) return;
+
     for (const name of [
+      "v624-focus-mode",
       "v621-fullscreen",
       "v621-opponent-open",
       "v621-game-visible",
@@ -41,20 +42,57 @@
     document.documentElement.style.removeProperty("overflow-y");
     document.documentElement.style.removeProperty("height");
 
-    document.querySelectorAll(".v621-board-switcher,.v622-drag-ghost").forEach((element) => element.remove());
+    document.querySelectorAll(
+      ".v621-board-switcher,.v622-drag-ghost,.v624-drop-ready,.v622-drop-target"
+    ).forEach((element) => {
+      element.classList?.remove("v624-drop-ready", "v622-drop-target");
+      if (element.classList?.contains("v621-board-switcher") || element.classList?.contains("v622-drag-ghost")) {
+        element.remove();
+      }
+    });
   }
 
-  function syncFullscreenState() {
+  function syncFocusState() {
     const shell = gameShell();
     if (!shell) {
       clearGameOnlyClasses();
       return false;
     }
 
-    const active = isFullscreenGame();
+    const active = focusModeActive();
     document.body.classList.toggle("v621-fullscreen", active);
     if (!active) document.body.classList.remove("v621-opponent-open");
     return active;
+  }
+
+  async function toggleFocusMode() {
+    if (!gameShell()) return;
+
+    if (focusModeActive()) {
+      document.body.classList.remove("v624-focus-mode", "v621-fullscreen", "v621-opponent-open");
+      if (document.fullscreenElement) {
+        try { await document.exitFullscreen?.(); } catch {}
+      }
+      nativeFullscreenWasActive = false;
+      scheduleRepair();
+      window.setTimeout(() => {
+        document.querySelector(".self-slot")?.scrollIntoView({ behavior: "smooth", block: "start" });
+      }, 40);
+      return;
+    }
+
+    document.body.classList.add("v624-focus-mode", "v621-fullscreen");
+    document.body.classList.remove("v621-opponent-open");
+    scheduleRepair();
+
+    if (!document.fullscreenElement && document.documentElement.requestFullscreen) {
+      try {
+        await document.documentElement.requestFullscreen();
+        nativeFullscreenWasActive = true;
+      } catch {
+        nativeFullscreenWasActive = false;
+      }
+    }
   }
 
   function repairLibraryBacks(root = document) {
@@ -86,21 +124,36 @@
     let switcher = shell.querySelector(":scope > .v621-board-switcher");
     if (!switcher) {
       switcher = document.createElement("nav");
-      switcher.className = "v621-board-switcher";
-      switcher.setAttribute("aria-label", "Fullscreen board selector");
+      switcher.className = "v621-board-switcher v624-board-switcher";
+      switcher.setAttribute("aria-label", "Board selector");
       switcher.innerHTML = `
         <button type="button" data-v621-action="previous" aria-label="Previous opponent">‹</button>
         <button type="button" class="v621-board-toggle" data-v621-action="toggle-board">OPPONENT</button>
         <button type="button" data-v621-action="next" aria-label="Next opponent">›</button>
         <button type="button" class="v621-table-button" data-v621-action="table">TABLE</button>`;
-      shell.appendChild(switcher);
     }
+
+    const focusBar = shell.querySelector(":scope > .v61-focus-bar");
+    const topbar = shell.querySelector(":scope > .arena-game-topbar");
+    const anchor = focusBar || topbar;
+    if (anchor && switcher.previousElementSibling !== anchor) anchor.insertAdjacentElement("afterend", switcher);
+    else if (!switcher.isConnected) shell.prepend(switcher);
 
     const opponentOpen = document.body.classList.contains("v621-opponent-open");
     const toggle = switcher.querySelector('[data-v621-action="toggle-board"]');
     if (toggle) {
-      toggle.textContent = opponentOpen ? "MY BOARD" : "OPPONENT";
+      toggle.textContent = focusModeActive() && opponentOpen ? "MY BOARD" : "OPPONENT";
       toggle.setAttribute("aria-pressed", opponentOpen ? "true" : "false");
+    }
+  }
+
+  function normalizeBoardLayouts(shell) {
+    window.ArenaCommanderPlaymatV610?.repairPlaymat?.();
+    window.ArenaCommanderFinalV61?.repair?.();
+
+    for (const seat of shell.querySelectorAll(".arena-seat.is-self,.arena-seat.is-opponent")) {
+      seat.classList.add("v624-unified-seat");
+      seat.querySelector(".arena-seat-board")?.classList.add("v624-unified-board");
     }
   }
 
@@ -118,14 +171,31 @@
 
   function clickV61(action) {
     document.querySelector(`[data-v61-action="${action}"]`)?.click();
-    window.setTimeout(scheduleRepair, 30);
+    window.setTimeout(scheduleRepair, 35);
+  }
+
+  function scrollToOpponent() {
+    window.setTimeout(() => {
+      document.querySelector(".opponent-slot.v61-focus-visible")?.scrollIntoView({
+        behavior: "smooth",
+        block: "start"
+      });
+    }, 40);
   }
 
   function showOpponent(open) {
     if (!gameShell()) return;
-    document.body.classList.toggle("v621-opponent-open", Boolean(open));
+
+    if (focusModeActive()) {
+      document.body.classList.toggle("v621-opponent-open", Boolean(open));
+      window.ArenaCommanderFinalV61?.repair?.();
+      scheduleRepair();
+      return;
+    }
+
     window.ArenaCommanderFinalV61?.repair?.();
     scheduleRepair();
+    if (open) scrollToOpponent();
   }
 
   function repair() {
@@ -135,9 +205,10 @@
       return;
     }
 
-    syncFullscreenState();
+    syncFocusState();
     document.body.classList.add("v621-game-visible");
-    shell.classList.add("arena-v621");
+    shell.classList.add("arena-v621", "arena-v624");
+    normalizeBoardLayouts(shell);
     repairLibraryBacks(shell);
     ensureBoardSwitcher(shell);
     dedupeToasts();
@@ -152,12 +223,29 @@
     });
   }
 
-  document.addEventListener("fullscreenchange", scheduleRepair);
-  window.matchMedia?.("(display-mode: fullscreen)")?.addEventListener?.("change", scheduleRepair);
+  document.addEventListener("fullscreenchange", () => {
+    if (document.fullscreenElement) {
+      nativeFullscreenWasActive = true;
+      document.body.classList.add("v624-focus-mode");
+    } else if (nativeFullscreenWasActive) {
+      nativeFullscreenWasActive = false;
+      document.body.classList.remove("v624-focus-mode", "v621-fullscreen", "v621-opponent-open");
+    }
+    scheduleRepair();
+  });
+
   window.addEventListener("pageshow", scheduleRepair);
   document.addEventListener("visibilitychange", () => {
     if (!document.hidden) scheduleRepair();
   });
+
+  window.addEventListener("click", (event) => {
+    const fullscreenButton = event.target.closest?.('#fullscreenButton,[data-action="toggle-fullscreen"]');
+    if (!fullscreenButton || !gameShell()) return;
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    toggleFocusMode();
+  }, true);
 
   document.addEventListener("click", (event) => {
     const button = event.target.closest?.("[data-v621-action]");
@@ -169,12 +257,14 @@
       showOpponent(!document.body.classList.contains("v621-opponent-open"));
     } else if (action === "previous") {
       event.preventDefault();
-      showOpponent(true);
+      if (focusModeActive()) document.body.classList.add("v621-opponent-open");
       clickV61("previous-player");
+      if (!focusModeActive()) scrollToOpponent();
     } else if (action === "next") {
       event.preventDefault();
-      showOpponent(true);
+      if (focusModeActive()) document.body.classList.add("v621-opponent-open");
       clickV61("next-player");
+      if (!focusModeActive()) scrollToOpponent();
     } else if (action === "table") {
       event.preventDefault();
       clickV61("open-overview");
@@ -197,6 +287,7 @@
     version: VERSION,
     repair,
     showOpponent,
+    toggleFocusMode,
     clearGameOnlyClasses
   };
 })();
