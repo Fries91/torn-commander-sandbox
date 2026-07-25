@@ -4,7 +4,7 @@ const path = require("path");
 const Module = require("module");
 
 const SERVER_PATH = path.resolve(__dirname, "server.js");
-const VERSION = "62.0.0";
+const VERSION = "62.1.0";
 const MARKER = "Arena Commander v62 automated gameplay integration";
 
 function injectGameplayAutomationV62(sourceInput) {
@@ -642,8 +642,41 @@ function injectGameplayAutomationV62(sourceInput) {
     const before = v62Snapshot(room);
     const oldPhase = Number(room?.turn?.phaseIndex || 0);
     const oldTurn = Number(room?.turn?.number || 0);
+
+    // v62.1: when the last active player passes on an empty stack, the
+    // priority round is complete and the active player advances the phase.
+    // The legacy handler only reset priority, which left Upkeep stuck.
+    const v621ActiveIds = action?.type === "pass-priority"
+      ? activePlayerIds(room)
+      : [];
+    const v621PassedBefore = new Set(room?.priority?.passedPlayerIds || []);
+    if (action?.type === "pass-priority") v621PassedBefore.add(actor.id);
+    const v621AdvanceEmptyPhase =
+      action?.type === "pass-priority" &&
+      v621ActiveIds.length > 0 &&
+      v621PassedBefore.size >= v621ActiveIds.length &&
+      !(room?.stack || []).length &&
+      !(room?.triggerQueue || []).length;
+
     const result = v62LegacyProcessGameAction(room, actor, action);
     if (!result?.success) return result;
+
+    if (
+      v621AdvanceEmptyPhase &&
+      !(room?.stack || []).length &&
+      !(room?.triggerQueue || []).length
+    ) {
+      const v621ActivePlayer = findPlayer(room, room?.turn?.activePlayerId);
+      if (v621ActivePlayer?.game) {
+        const v621PhaseResult = v62LegacyProcessGameAction(
+          room,
+          v621ActivePlayer,
+          { type: "next-phase" }
+        );
+        if (!v621PhaseResult?.success) return v621PhaseResult;
+        result.phaseAdvanced = true;
+      }
+    }
 
     if (action?.type === "block-card") {
       const blocker = locateCard(room, String(action?.sourceCardId || ""))?.card;
@@ -759,7 +792,8 @@ function injectGameplayAutomationV62(sourceInput) {
         "simple activated ability costs",
         "simple static power/toughness bonuses",
         "simple granted creature keywords",
-        "state-based actions and new-trigger checks"
+        "state-based actions and new-trigger checks",
+        "phase advancement after every player passes on an empty stack"
       ],
       assisted: [
         "may choices",
