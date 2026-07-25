@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#08110f">
+  <title>Reset Saved Room — Arena Commander</title>
+  <style>
+    body {
+      margin: 0;
+      min-height: 100dvh;
+      display: grid;
+      place-items: center;
+      padding: 20px;
+      box-sizing: border-box;
+      background: #06100c;
+      color: #edf7f0;
+      font-family: system-ui, sans-serif;
+    }
+    main {
+      width: min(520px, 100%);
+      padding: 22px;
+      border: 1px solid #39795a;
+      border-radius: 18px;
+      background: #0b1c14;
+    }
+    button {
+      width: 100%;
+      min-height: 52px;
+      border: 0;
+      border-radius: 12px;
+      background: #2ca56b;
+      color: white;
+      font-weight: 900;
+      font-size: 1rem;
+    }
+  </style>
+</head>
+<body>
+<main>
+  <h1>Reset saved match</h1>
+  <p>This removes only the saved room connection. Your imported decks remain on the device.</p>
+  <button id="resetButton" type="button">Reset room and reopen app</button>
+</main>
+<script>
+document.getElementById("resetButton").addEventListener("click", () => {
+  for (const key of [
+    "tornCommander.session.v5",
+    "tornCommander.spectator.v20"
+  ]) {
+    localStorage.removeItem(key);
+  }
+
+  for (const key of [
+    "arenaCommander.savedRoom.v60.5",
+    "arenaCommander.pendingMetaMatch.v60.3",
+    "arenaCommander.pendingMetaMatch.v60.4"
+  ]) {
+    sessionStorage.removeItem(key);
+  }
+
+  location.replace("/?roomReset=1");
+});
+</script>
+</body>
+</html>
