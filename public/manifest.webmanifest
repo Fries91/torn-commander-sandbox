@@ -1,8 +1,9 @@
 {
-  "name": "Arena Commander Table & Meta Library",
-  "short_name": "Commander v39",
-  "description": "Commander, Brawl and Custom tables with AI Test Lab, Meta Opponents, Torn game alerts and 2\u20136 player support.",
-  "start_url": "/",
+  "id": "/",
+  "name": "Arena Commander",
+  "short_name": "Commander",
+  "description": "Commander, Brawl and custom MTG tables with AI opponents, saved rooms and mobile-friendly play.",
+  "start_url": "/?source=pwa",
   "scope": "/",
   "display": "standalone",
   "display_override": [
@@ -17,12 +18,25 @@
     "games",
     "entertainment"
   ],
+  "prefer_related_applications": false,
   "icons": [
     {
-      "src": "/icon.svg",
-      "sizes": "any",
-      "type": "image/svg+xml",
-      "purpose": "any maskable"
+      "src": "/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon-maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
     }
   ]
 }
