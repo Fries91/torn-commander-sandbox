@@ -1,0 +1,288 @@
+/* Arena Commander v62.2 — reliable card movement and clean fullscreen board */
+
+body.v622-dragging {
+  user-select: none !important;
+  -webkit-user-select: none !important;
+  cursor: grabbing !important;
+}
+
+body.v622-dragging .arena-card,
+body.v622-dragging .hand-card-wrap {
+  touch-action: none !important;
+}
+
+.v622-drag-source {
+  opacity: .32 !important;
+  filter: grayscale(.35) !important;
+}
+
+.v622-drag-ghost {
+  position: fixed !important;
+  z-index: 10050 !important;
+  width: 82px !important;
+  height: 115px !important;
+  margin: 0 !important;
+  transform: translate(-50%, -58%) rotate(2deg) !important;
+  pointer-events: none !important;
+  opacity: .95 !important;
+  filter: drop-shadow(0 12px 18px rgba(0,0,0,.58)) !important;
+}
+
+.v622-drop-target {
+  outline: 3px solid rgba(94, 168, 255, .92) !important;
+  outline-offset: -3px !important;
+  box-shadow: inset 0 0 0 999px rgba(54, 139, 224, .15), 0 0 22px rgba(94,168,255,.42) !important;
+}
+
+body.v622-moving-card::after {
+  content: "Moving card…";
+  position: fixed;
+  z-index: 11000;
+  left: 50%;
+  bottom: calc(74px + env(safe-area-inset-bottom));
+  transform: translateX(-50%);
+  padding: 7px 13px;
+  border: 1px solid rgba(112,226,218,.5);
+  border-radius: 999px;
+  background: rgba(1,14,10,.96);
+  color: #eafff4;
+  font-size: .68rem;
+  font-weight: 800;
+  pointer-events: none;
+}
+
+/* Touch devices should not leave a card permanently enlarged after a tap. */
+@media (hover: none), (pointer: coarse) {
+  body.v622-game-visible .hand-card-wrap:hover,
+  body.v622-game-visible .hand-card-wrap:focus,
+  body.v622-game-visible .hand-card-wrap:focus-within {
+    z-index: auto !important;
+    transform: translateY(calc(var(--hand-lift, 0px) * .2)) rotate(calc(var(--hand-rotate, 0deg) * .55)) !important;
+  }
+
+  body.v622-game-visible .hand-card-wrap .arena-card:hover,
+  body.v622-game-visible .hand-card-wrap .arena-card:focus,
+  body.v622-game-visible .hand-card-wrap .arena-card:focus-visible {
+    transform: none !important;
+  }
+}
+
+/* Fullscreen is a true tabletop view: one board, a low hand and compact controls. */
+body.v621-fullscreen.v622-game-visible {
+  --v610-action-height: 56px;
+  --v610-hand-card-w: clamp(58px, 10.8vw, 72px);
+  --v610-hand-card-h: calc(var(--v610-hand-card-w) * 1.397);
+  overflow: hidden !important;
+}
+
+body.v621-fullscreen.v622-game-visible .v62-dock,
+body.v621-fullscreen.v622-game-visible .arena-phase-bar {
+  display: none !important;
+}
+
+body.v621-fullscreen.v622-game-visible .arena-game-topbar {
+  position: fixed !important;
+  z-index: 210 !important;
+  top: 0 !important;
+  left: 0 !important;
+  right: 0 !important;
+  min-height: 54px !important;
+  height: 54px !important;
+  padding: 3px 7px !important;
+  overflow: hidden !important;
+  background: rgba(1, 10, 7, .98) !important;
+}
+
+body.v621-fullscreen.v622-game-visible .arena-game-topbar .priority-label {
+  display: none !important;
+}
+
+body.v621-fullscreen.v622-game-visible .arena-room-meta {
+  min-width: 0 !important;
+  gap: 5px !important;
+  white-space: nowrap !important;
+  overflow: hidden !important;
+}
+
+body.v621-fullscreen.v622-game-visible .arena-room-meta > * {
+  flex: 0 0 auto;
+}
+
+body.v621-fullscreen.v622-game-visible .arena-room-meta strong {
+  max-width: 90px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+body.v621-fullscreen.v622-game-visible .arena-top-actions {
+  gap: 4px !important;
+}
+
+body.v621-fullscreen.v622-game-visible .arena-top-actions > button,
+body.v621-fullscreen.v622-game-visible .arena-top-actions .turn-clock {
+  min-width: 44px !important;
+  min-height: 42px !important;
+  height: 42px !important;
+  padding: 3px 8px !important;
+}
+
+body.v621-fullscreen.v622-game-visible .arena-v621 .v621-board-switcher {
+  position: fixed !important;
+  z-index: 215 !important;
+  top: 59px !important;
+  right: max(5px, env(safe-area-inset-right)) !important;
+  display: grid !important;
+  grid-template-columns: 28px minmax(76px, auto) 28px 42px !important;
+  gap: 3px !important;
+  padding: 3px !important;
+  border-radius: 10px !important;
+  background: rgba(1,12,9,.92) !important;
+}
+
+body.v621-fullscreen.v622-game-visible:not(.v621-opponent-open) .v621-board-switcher [data-v621-action="previous"],
+body.v621-fullscreen.v622-game-visible:not(.v621-opponent-open) .v621-board-switcher [data-v621-action="next"] {
+  display: none !important;
+}
+
+body.v621-fullscreen.v622-game-visible:not(.v621-opponent-open) .arena-v621 .v621-board-switcher {
+  grid-template-columns: minmax(84px, auto) 44px !important;
+}
+
+body.v621-fullscreen.v622-game-visible .arena-v621 .v621-board-switcher button {
+  min-height: 30px !important;
+  height: 30px !important;
+  padding: 2px 5px !important;
+  font-size: .5rem !important;
+}
+
+body.v621-fullscreen.v622-game-visible .arena-stage {
+  position: fixed !important;
+  z-index: 1 !important;
+  top: 54px !important;
+  right: 0 !important;
+  bottom: calc(150px + env(safe-area-inset-bottom)) !important;
+  left: 0 !important;
+  width: auto !important;
+  height: auto !important;
+  min-height: 0 !important;
+  padding: 5px !important;
+  overflow: hidden !important;
+}
+
+body.v621-fullscreen.v622-game-visible .self-slot,
+body.v621-fullscreen.v622-game-visible.v621-opponent-open .arena-opponent-ring,
+body.v621-fullscreen.v622-game-visible.v621-opponent-open .opponent-slot.v61-focus-visible {
+  width: 100% !important;
+  height: 100% !important;
+  min-height: 0 !important;
+  max-height: none !important;
+}
+
+body.v621-fullscreen.v622-game-visible .arena-seat.is-self,
+body.v621-fullscreen.v622-game-visible .arena-seat.is-opponent {
+  display: flex !important;
+  flex-direction: column !important;
+  width: 100% !important;
+  height: 100% !important;
+  min-height: 0 !important;
+  max-height: none !important;
+  border-radius: 12px !important;
+}
+
+body.v621-fullscreen.v622-game-visible .arena-seat-header {
+  flex: 0 0 36px !important;
+  min-height: 36px !important;
+  height: 36px !important;
+  padding: 3px 8px !important;
+}
+
+body.v621-fullscreen.v622-game-visible .v610-seat-content {
+  flex: 1 1 auto !important;
+  height: auto !important;
+  min-height: 0 !important;
+  padding: 4px !important;
+}
+
+body.v621-fullscreen.v622-game-visible .v610-field-column,
+body.v621-fullscreen.v622-game-visible .arena-seat-board,
+body.v621-fullscreen.v622-game-visible .arena-battlefield-cards,
+body.v621-fullscreen.v622-game-visible .v610-playmat {
+  height: 100% !important;
+  min-height: 0 !important;
+  max-height: none !important;
+}
+
+body.v621-fullscreen.v622-game-visible .v610-playmat {
+  grid-template-rows: minmax(0, 1fr) minmax(84px, .42fr) !important;
+}
+
+body.v621-fullscreen.v622-game-visible .seat-secondary {
+  display: none !important;
+}
+
+body.v621-fullscreen.v622-game-visible .arena-hand-tray {
+  z-index: 220 !important;
+  right: 0 !important;
+  bottom: calc(56px + env(safe-area-inset-bottom)) !important;
+  left: 0 !important;
+  height: 94px !important;
+  padding: 0 4px !important;
+  overflow: visible !important;
+  background: linear-gradient(180deg, transparent, rgba(1,8,6,.92) 46%, rgba(0,5,3,.99)) !important;
+}
+
+body.v621-fullscreen.v622-game-visible .arena-hand-tray .hand-label {
+  display: none !important;
+}
+
+body.v621-fullscreen.v622-game-visible .arena-hand-fan {
+  height: 94px !important;
+  padding: 0 5px 2px !important;
+  transform: none !important;
+}
+
+body.v621-fullscreen.v622-game-visible .hand-card-wrap {
+  margin-left: calc(var(--v610-hand-card-w) * -.34) !important;
+  transform: translateY(8px) rotate(calc(var(--hand-rotate, 0deg) * .48)) !important;
+}
+
+body.v621-fullscreen.v622-game-visible .hand-card-wrap:first-child {
+  margin-left: 0 !important;
+}
+
+body.v621-fullscreen.v622-game-visible .arena-action-bar {
+  z-index: 225 !important;
+  min-height: calc(56px + env(safe-area-inset-bottom)) !important;
+  height: calc(56px + env(safe-area-inset-bottom)) !important;
+  grid-template-columns: repeat(6, minmax(44px, 1fr)) !important;
+  gap: 3px !important;
+  padding: 3px 4px env(safe-area-inset-bottom) !important;
+}
+
+body.v621-fullscreen.v622-game-visible .arena-action-bar > button {
+  min-height: 48px !important;
+  height: 48px !important;
+  padding: 2px !important;
+  border-radius: 9px !important;
+  font-size: .48rem !important;
+  line-height: 1.05 !important;
+}
+
+body.v621-fullscreen.v622-game-visible .arena-action-bar > button span {
+  font-size: .85rem !important;
+}
+
+@media (orientation: portrait) and (max-width: 820px) {
+  body.v621-fullscreen.v622-game-visible .arena-stage {
+    bottom: calc(174px + env(safe-area-inset-bottom)) !important;
+  }
+
+  body.v621-fullscreen.v622-game-visible .arena-hand-tray {
+    bottom: calc(62px + env(safe-area-inset-bottom)) !important;
+    height: 112px !important;
+  }
+
+  body.v621-fullscreen.v622-game-visible .arena-hand-fan {
+    height: 112px !important;
+  }
+}
