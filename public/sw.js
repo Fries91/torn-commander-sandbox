@@ -1,29 +1,23 @@
 "use strict";
 
-const CACHE_NAME =
-  "arena-commander-card-hold-v62.8.0";
+const CACHE_NAME = "arena-commander-stable-v63.0.0";
 
 const STARTUP_FILES = [
-  "/mobile-table-v62-8.css?v=62.8.0",
-  "/mobile-table-v62-8.js?v=62.8.0",
-  "/hand-collapse-v62-6.css?v=62.6.0",
-  "/hand-collapse-v62-6.js?v=62.6.0",
+  "/arena-commander-ui.css?v=63.0.0",
+  "/arena-commander-runtime.js?v=63.0.0",
+  "/arena-commander-mobile.js?v=63.0.0",
+  "/arena-final-v61.css?v=63.0.0",
+  "/artwork-leave-fix-v61-2.css?v=63.0.0",
+  "/gameplay-automation-v62.css?v=63.0.0",
+  "/tabletop-fix-v62-1.css?v=63.0.0",
+  "/tabletop-fix-v62-2.css?v=63.0.0",
+  "/home-stability-v62-3.css?v=63.0.0",
+  "/tabletop-fix-v62-4.css?v=63.0.0",
+  "/hand-collapse-v62-6.css?v=63.0.0",
+  "/mobile-table-v62-8.css?v=63.0.0",
   "/hidden-v59.css?v=62.5.0",
   "/hidden-v59.js?v=62.5.0",
-  "/tabletop-fix-v62-4.css?v=62.4.0",
-  "/home-stability-v62-3.css?v=62.3.0",
-  "/home-stability-v62-3.js?v=62.3.0",
-  "/tabletop-fix-v62-2.css?v=62.2.0",
-  "/tabletop-fix-v62-2.js?v=62.8.0",
-  "/tabletop-fix-v62-1.css?v=62.1.0",
-  "/tabletop-fix-v62-1.js?v=62.4.0",
   "/mtg-card-back-v62-1.png?v=62.1.0",
-  "/gameplay-automation-v62.css?v=62.0.0",
-  "/gameplay-automation-v62.js?v=62.0.0",
-  "/artwork-leave-fix-v61-2.css?v=61.2.0",
-  "/artwork-leave-fix-v61-2.js?v=61.2.0",
-  "/arena-final-v61.css?v=61.0.0",
-  "/arena-final-v61.js?v=61.0.0",
   "/",
   "/index.html",
   "/styles.css",
@@ -35,7 +29,7 @@ const STARTUP_FILES = [
   "/socket-mobile-v60-4.js?v=60.4.0",
   "/startup-session-v60-7.js?v=60.7.0",
   "/performance-bootstrap-v60-6.js?v=60.6.0",
-  "/app.js?v=62.8.0",
+  "/app.js?v=63.0.0",
   "/deck-import-fix.js?v=39.2.0",
   "/clean-home.js?v=39.0.0",
   "/meta-library.js?v=39.0.0",
@@ -51,78 +45,46 @@ const STARTUP_FILES = [
 
 self.addEventListener("install", (event) => {
   event.waitUntil(
-    caches
-      .open(CACHE_NAME)
-      .then((cache) =>
-        cache.addAll(STARTUP_FILES)
-      )
+    caches.open(CACHE_NAME)
+      .then((cache) => cache.addAll(STARTUP_FILES))
       .then(() => self.skipWaiting())
   );
 });
 
 self.addEventListener("activate", (event) => {
   event.waitUntil(
-    caches
-      .keys()
-      .then((keys) =>
-        Promise.all(
-          keys
-            .filter(
-              (key) =>
-                key.startsWith("arena-commander") &&
-                key !== CACHE_NAME
-            )
-            .map((key) =>
-              caches.delete(key)
-            )
-        )
-      )
+    caches.keys()
+      .then((keys) => Promise.all(
+        keys
+          .filter((key) => key.startsWith("arena-commander") && key !== CACHE_NAME)
+          .map((key) => caches.delete(key))
+      ))
       .then(() => self.clients.claim())
   );
 });
 
 self.addEventListener("fetch", (event) => {
   const request = event.request;
-
-  if (request.method !== "GET") {
-    return;
-  }
+  if (request.method !== "GET") return;
 
   const url = new URL(request.url);
-
   if (
     url.origin !== self.location.origin ||
     url.pathname.startsWith("/socket.io/") ||
     url.pathname.startsWith("/api/")
-  ) {
-    return;
-  }
+  ) return;
 
   event.respondWith(
     fetch(request)
       .then((response) => {
         if (response.ok) {
-          caches
-            .open(CACHE_NAME)
-            .then((cache) =>
-              cache.put(
-                request,
-                response.clone()
-              )
-            )
+          caches.open(CACHE_NAME)
+            .then((cache) => cache.put(request, response.clone()))
             .catch(() => undefined);
         }
-
         return response;
       })
-      .catch(() =>
-        caches
-          .match(request)
-          .then(
-            (cached) =>
-              cached ||
-              caches.match("/index.html")
-          )
-      )
+      .catch(() => caches.match(request)
+        .then((cached) => cached || caches.match("/index.html")))
   );
 });
