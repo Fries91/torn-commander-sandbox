@@ -1,0 +1,58 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Commander Sandbox Card Script",
+  "type": "object",
+  "required": [
+    "definitionId",
+    "name",
+    "abilities"
+  ],
+  "properties": {
+    "definitionId": {
+      "type": "string"
+    },
+    "name": {
+      "type": "string"
+    },
+    "abilities": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "kind",
+          "handler"
+        ],
+        "properties": {
+          "kind": {
+            "enum": [
+              "static",
+              "activated",
+              "triggered",
+              "spell"
+            ]
+          },
+          "handler": {
+            "type": "string"
+          },
+          "zone": {
+            "type": "string"
+          },
+          "cost": {
+            "type": "object"
+          },
+          "trigger": {
+            "type": "object"
+          },
+          "targets": {
+            "type": "array"
+          },
+          "parameters": {
+            "type": "object"
+          }
+        },
+        "additionalProperties": true
+      }
+    }
+  },
+  "additionalProperties": true
+}
