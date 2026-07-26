@@ -1,0 +1,208 @@
+/* Arena Commander v62.6 — complete hand cards and collapsible mobile hand */
+:root {
+  --v626-hand-gap: 8px;
+  --v626-hand-expanded-height: clamp(206px, 31dvh, 254px);
+  --v626-hand-collapsed-height: 42px;
+}
+
+body.v626-game-visible {
+  --v610-hand-card-w: clamp(86px, 23vw, 118px);
+  --v610-hand-card-h: calc(var(--v610-hand-card-w) * 1.397);
+}
+
+/* The tray ends above the action bar and is tall enough for the entire printed card. */
+body.v626-game-visible .arena-hand-tray.v626-hand-ready {
+  position: fixed !important;
+  z-index: 226 !important;
+  left: 0 !important;
+  right: 0 !important;
+  bottom: calc(var(--v610-action-height, 72px) + env(safe-area-inset-bottom) + 3px) !important;
+  width: 100% !important;
+  height: var(--v626-hand-expanded-height) !important;
+  min-height: var(--v626-hand-expanded-height) !important;
+  padding: 4px 5px 8px !important;
+  overflow: visible !important;
+  pointer-events: none !important;
+  background:
+    linear-gradient(180deg, rgba(0,0,0,0) 0%, rgba(1,12,9,.74) 19%, rgba(0,7,5,.98) 100%) !important;
+  transition: height .2s ease, min-height .2s ease, transform .2s ease !important;
+}
+
+body.v626-game-visible .arena-hand-tray.v626-hand-ready .v626-hand-label {
+  position: relative !important;
+  z-index: 5 !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  height: 34px !important;
+  min-height: 34px !important;
+  padding: 0 !important;
+  pointer-events: none !important;
+}
+
+/* Hide the older label text; the new button contains the count and state. */
+body.v626-game-visible .arena-hand-tray.v626-hand-ready .v626-hand-label > strong,
+body.v626-game-visible .arena-hand-tray.v626-hand-ready .v626-hand-label > span {
+  display: none !important;
+}
+
+body.v626-game-visible .v626-hand-toggle {
+  display: inline-grid !important;
+  grid-template-columns: auto auto auto !important;
+  align-items: center !important;
+  gap: 7px !important;
+  min-width: 154px !important;
+  min-height: 32px !important;
+  height: 32px !important;
+  padding: 3px 12px !important;
+  border: 1px solid rgba(215,189,114,.7) !important;
+  border-radius: 999px !important;
+  background: linear-gradient(180deg, rgba(13,47,36,.98), rgba(2,20,15,.99)) !important;
+  color: #f4e4a8 !important;
+  box-shadow: 0 5px 16px rgba(0,0,0,.42) !important;
+  font-size: .61rem !important;
+  font-weight: 900 !important;
+  letter-spacing: .07em !important;
+  pointer-events: auto !important;
+  touch-action: manipulation !important;
+}
+
+body.v626-game-visible .v626-hand-toggle em {
+  display: grid !important;
+  place-items: center !important;
+  min-width: 22px !important;
+  height: 22px !important;
+  padding: 0 5px !important;
+  border-radius: 999px !important;
+  background: rgba(94,168,255,.22) !important;
+  color: #d9edff !important;
+  font-style: normal !important;
+  font-size: .68rem !important;
+}
+
+body.v626-game-visible .v626-hand-toggle b {
+  color: #8ed9ff !important;
+  font-size: .72rem !important;
+}
+
+body.v626-game-visible .arena-hand-tray.v626-hand-ready .arena-hand-fan {
+  display: flex !important;
+  align-items: flex-start !important;
+  justify-content: center !important;
+  width: 100% !important;
+  height: calc(100% - 34px) !important;
+  min-height: 0 !important;
+  padding: 3px 7px 10px !important;
+  overflow-x: auto !important;
+  overflow-y: visible !important;
+  overscroll-behavior-inline: contain !important;
+  scrollbar-width: none !important;
+  pointer-events: none !important;
+}
+
+body.v626-game-visible .arena-hand-tray.v626-hand-ready .arena-hand-fan::-webkit-scrollbar {
+  display: none !important;
+}
+
+body.v626-game-visible .arena-hand-tray.v626-hand-ready .hand-card-wrap {
+  flex: 0 0 var(--v610-hand-card-w) !important;
+  width: var(--v610-hand-card-w) !important;
+  height: var(--v610-hand-card-h) !important;
+  min-width: var(--v610-hand-card-w) !important;
+  min-height: var(--v610-hand-card-h) !important;
+  margin-left: calc(var(--v610-hand-card-w) * -.36) !important;
+  transform: translateY(0) rotate(calc(var(--hand-rotate, 0deg) * .45)) !important;
+  transform-origin: 50% 100% !important;
+  pointer-events: auto !important;
+  touch-action: none !important;
+}
+
+body.v626-game-visible .arena-hand-tray.v626-hand-ready .hand-card-wrap:first-child {
+  margin-left: 0 !important;
+}
+
+body.v626-game-visible .arena-hand-tray.v626-hand-ready .hand-card-wrap .arena-card-nest,
+body.v626-game-visible .arena-hand-tray.v626-hand-ready .hand-card-wrap .arena-card,
+body.v626-game-visible .arena-hand-tray.v626-hand-ready .hand-card-wrap .arena-card-frame,
+body.v626-game-visible .arena-hand-tray.v626-hand-ready .hand-card-wrap .arena-card-image,
+body.v626-game-visible .arena-hand-tray.v626-hand-ready .hand-card-wrap .arena-card-image img {
+  width: var(--v610-hand-card-w) !important;
+  height: var(--v610-hand-card-h) !important;
+  min-width: var(--v610-hand-card-w) !important;
+  min-height: var(--v610-hand-card-h) !important;
+  max-height: var(--v610-hand-card-h) !important;
+}
+
+body.v626-game-visible .arena-hand-tray.v626-hand-ready .hand-card-wrap .arena-card-image img {
+  display: block !important;
+  object-fit: contain !important;
+  object-position: center center !important;
+  background: #000 !important;
+}
+
+/* Collapsed state leaves a compact count button above the controls. */
+body.v626-game-visible.v626-hand-collapsed .arena-hand-tray.v626-hand-ready {
+  height: var(--v626-hand-collapsed-height) !important;
+  min-height: var(--v626-hand-collapsed-height) !important;
+  padding: 4px !important;
+  overflow: hidden !important;
+  background: linear-gradient(180deg, rgba(2,18,13,.97), rgba(0,8,6,.99)) !important;
+}
+
+body.v626-game-visible.v626-hand-collapsed .arena-hand-tray.v626-hand-ready .v626-hand-label {
+  height: 34px !important;
+}
+
+body.v626-game-visible.v626-hand-collapsed .arena-hand-tray.v626-hand-ready .arena-hand-fan {
+  display: none !important;
+}
+
+/* Give the board the space released by a collapsed hand. */
+@media (max-width: 820px) {
+  body.v626-game-visible:not(.v621-fullscreen) .arena-stage {
+    padding-bottom: calc(var(--v626-hand-expanded-height) + var(--v610-action-height, 72px) + 20px) !important;
+  }
+
+  body.v626-game-visible.v626-hand-collapsed:not(.v621-fullscreen) .arena-stage {
+    padding-bottom: calc(var(--v626-hand-collapsed-height) + var(--v610-action-height, 72px) + 18px) !important;
+  }
+}
+
+/* Fullscreen gets the same full-card behavior without covering the action bar. */
+body.v621-fullscreen.v626-game-visible .arena-hand-tray.v626-hand-ready {
+  bottom: calc(56px + env(safe-area-inset-bottom) + 3px) !important;
+  height: clamp(176px, 29dvh, 224px) !important;
+  min-height: clamp(176px, 29dvh, 224px) !important;
+}
+
+body.v621-fullscreen.v626-game-visible.v626-hand-collapsed .arena-hand-tray.v626-hand-ready {
+  height: var(--v626-hand-collapsed-height) !important;
+  min-height: var(--v626-hand-collapsed-height) !important;
+}
+
+body.v621-fullscreen.v626-game-visible .arena-stage {
+  bottom: calc(clamp(176px, 29dvh, 224px) + 59px + env(safe-area-inset-bottom)) !important;
+}
+
+body.v621-fullscreen.v626-game-visible.v626-hand-collapsed .arena-stage {
+  bottom: calc(var(--v626-hand-collapsed-height) + 59px + env(safe-area-inset-bottom)) !important;
+}
+
+@media (orientation: landscape) and (max-height: 700px) {
+  body.v626-game-visible {
+    --v610-hand-card-w: clamp(68px, 10vw, 84px);
+  }
+
+  body.v621-fullscreen.v626-game-visible .arena-hand-tray.v626-hand-ready {
+    height: 132px !important;
+    min-height: 132px !important;
+  }
+
+  body.v621-fullscreen.v626-game-visible .arena-stage {
+    bottom: calc(191px + env(safe-area-inset-bottom)) !important;
+  }
+
+  body.v621-fullscreen.v626-game-visible.v626-hand-collapsed .arena-stage {
+    bottom: calc(var(--v626-hand-collapsed-height) + 59px + env(safe-area-inset-bottom)) !important;
+  }
+}
