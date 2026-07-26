@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Arena Commander - Torn Game Notifier
 // @namespace    https://torn-commander-sandbox.onrender.com/
-// @version      1.3.0
+// @version      1.3.1
 // @description  Adds a lightweight Arena Commander notifier and quick host launcher inside Torn's real header icon row.
 // @author       Fries91
 // @homepageURL  https://torn-commander-sandbox.onrender.com/notifier-install.html
@@ -26,11 +26,15 @@
 (() => {
   "use strict";
 
-  const SCRIPT_VERSION = "1.3.0";
+  const SCRIPT_VERSION = "1.3.1";
   const API_ROOT = "https://torn-commander-sandbox.onrender.com";
   const OPEN_GAMES_URL = `${API_ROOT}/api/lobbies/open`;
   const INSTALL_URL = `${API_ROOT}/notifier-install.html`;
   const STORAGE_KEY = "arenaCommanderTornNotifier.v1";
+  const SINGLETON_ATTRIBUTE = "data-arena-commander-notifier-owner";
+  const INSTANCE_TOKEN = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  const SLOT_SELECTOR = "#arena-commander-notifier-slot, .acn-header-slot[data-acn-owner]";
+  const POPUP_SELECTOR = "#arena-commander-notifier-popup, .acn-popup[data-acn-owner]";
 
   const POLL_VISIBLE_MS = 45_000;
   const POLL_HIDDEN_MS = 180_000;
@@ -68,8 +72,42 @@
     badge: null,
     popup: null,
     popupOpen: false,
-    audioContext: null
+    audioContext: null,
+    stopped: false
   };
+
+  function ownsSingleton() {
+    return document.documentElement?.getAttribute(SINGLETON_ATTRIBUTE) === INSTANCE_TOKEN;
+  }
+
+  function claimSingleton() {
+    document.documentElement?.setAttribute(SINGLETON_ATTRIBUTE, INSTANCE_TOKEN);
+    document.querySelectorAll(SLOT_SELECTOR).forEach((node) => node.remove());
+    document.querySelectorAll(POPUP_SELECTOR).forEach((node) => node.remove());
+  }
+
+  function stopThisInstance() {
+    if (state.stopped) return;
+    state.stopped = true;
+    clearTimeout(state.headerTimer);
+    clearTimeout(state.pollTimer);
+    if (state.slot?.dataset?.acnOwner === INSTANCE_TOKEN) state.slot.remove();
+    if (state.popup?.dataset?.acnOwner === INSTANCE_TOKEN) state.popup.remove();
+    state.slot = null;
+    state.button = null;
+    state.badge = null;
+    state.popup = null;
+    state.popupOpen = false;
+  }
+
+  function removeDuplicateIcons(keep = state.slot) {
+    document.querySelectorAll(SLOT_SELECTOR).forEach((node) => {
+      if (node !== keep) node.remove();
+    });
+    document.querySelectorAll(POPUP_SELECTOR).forEach((node) => {
+      if (node !== state.popup) node.remove();
+    });
+  }
 
   function safeParse(value, fallback) {
     try { return JSON.parse(value); } catch { return fallback; }
@@ -239,11 +277,13 @@
     const slot = document.createElement(mode === "list" ? "li" : "span");
     slot.id = "arena-commander-notifier-slot";
     slot.className = "acn-header-slot";
+    slot.dataset.acnOwner = INSTANCE_TOKEN;
 
     const button = document.createElement("button");
     button.id = "arena-commander-notifier-button";
     button.type = "button";
     button.className = "acn-header-button acn-idle";
+    button.dataset.acnOwner = INSTANCE_TOKEN;
     button.innerHTML = `<span class="acn-icon">${crownMarkup()}</span><span class="acn-badge" hidden>0</span>`;
     button.addEventListener("click", (event) => {
       event.preventDefault();
@@ -261,10 +301,15 @@
   }
 
   function ensureHeaderIcon() {
+    if (!ownsSingleton()) {
+      stopThisInstance();
+      return;
+    }
+
     const location = locateTornHeaderRow();
     if (!location) {
       // Never float over the Torn page. Wait until the real icon row is available.
-      state.slot?.remove();
+      if (state.slot?.dataset?.acnOwner === INSTANCE_TOKEN) state.slot.remove();
       state.slot = null;
       state.button = null;
       state.badge = null;
@@ -273,10 +318,13 @@
       return;
     }
 
-    if (!state.slot || state.slot.tagName !== (location.mode === "list" ? "LI" : "SPAN")) {
-      state.slot?.remove();
+    const expectedTag = location.mode === "list" ? "LI" : "SPAN";
+    if (!state.slot || !state.slot.isConnected || state.slot.tagName !== expectedTag) {
+      if (state.slot?.dataset?.acnOwner === INSTANCE_TOKEN) state.slot.remove();
       buildHeaderSlot(location.mode);
     }
+
+    removeDuplicateIcons(state.slot);
 
     if (state.slot.parentElement !== location.host) {
       if (location.before && location.before.parentElement === location.host) location.host.insertBefore(state.slot, location.before);
@@ -285,6 +333,7 @@
       location.host.insertBefore(state.slot, location.before);
     }
 
+    removeDuplicateIcons(state.slot);
     updateIcon();
     if (state.popupOpen) positionPopup();
     scheduleHeaderRetry();
@@ -292,6 +341,7 @@
 
   function scheduleHeaderRetry() {
     clearTimeout(state.headerTimer);
+    if (!ownsSingleton() || state.stopped) return;
     state.headerTimer = setTimeout(ensureHeaderIcon, document.hidden ? HEADER_RETRY_HIDDEN_MS : HEADER_RETRY_VISIBLE_MS);
   }
 
@@ -437,6 +487,7 @@
   }
 
   async function refresh({ notify = true } = {}) {
+    if (!ownsSingleton() || state.stopped) return;
     if (state.loading || !state.settings.enabled) return;
     state.loading = true;
     state.error = "";
@@ -462,6 +513,7 @@
 
   function schedulePoll() {
     clearTimeout(state.pollTimer);
+    if (!ownsSingleton() || state.stopped) return;
     if (!state.settings.enabled) return;
     const base = document.hidden ? POLL_HIDDEN_MS : POLL_VISIBLE_MS;
     const delay = state.errorCount ? Math.min(POLL_ERROR_MAX_MS, base * (2 ** state.errorCount)) : base;
@@ -469,9 +521,12 @@
   }
 
   function createPopup() {
+    if (!ownsSingleton() || state.stopped) return;
+    removeDuplicateIcons(state.slot);
     const popup = document.createElement("section");
     popup.id = "arena-commander-notifier-popup";
     popup.className = "acn-popup";
+    popup.dataset.acnOwner = INSTANCE_TOKEN;
     popup.hidden = true;
     popup.addEventListener("click", onPopupClick);
     popup.addEventListener("change", onPopupChange);
@@ -647,6 +702,7 @@
   }
 
   function start() {
+    claimSingleton();
     loadSettings();
     installStyles();
     registerMenu();
@@ -654,14 +710,30 @@
     if (state.settings.enabled) refresh({ notify: false });
 
     document.addEventListener("visibilitychange", () => {
+      if (!ownsSingleton()) {
+        stopThisInstance();
+        return;
+      }
       scheduleHeaderRetry();
       schedulePoll();
       if (!document.hidden) ensureHeaderIcon();
     });
 
-    // Torn uses client-side navigation. A very small interval is safer than observing the whole page.
-    addEventListener("hashchange", () => setTimeout(ensureHeaderIcon, 250));
-    addEventListener("popstate", () => setTimeout(ensureHeaderIcon, 250));
+    // Torn uses client-side navigation. Keep a single owner and clean stale icons after route changes.
+    addEventListener("hashchange", () => {
+      if (!ownsSingleton()) return stopThisInstance();
+      setTimeout(ensureHeaderIcon, 250);
+    });
+    addEventListener("popstate", () => {
+      if (!ownsSingleton()) return stopThisInstance();
+      setTimeout(ensureHeaderIcon, 250);
+    });
+    addEventListener("pagehide", () => {
+      if (ownsSingleton()) {
+        clearTimeout(state.headerTimer);
+        clearTimeout(state.pollTimer);
+      }
+    });
   }
 
   start();
