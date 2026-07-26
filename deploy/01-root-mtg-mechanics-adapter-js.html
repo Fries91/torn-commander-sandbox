@@ -1,0 +1,365 @@
+<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>mtg-mechanics-adapter.js</title><style>body{background:#07100b;color:#eef8f1;font-family:system-ui;padding:18px}textarea{width:100%;min-height:82vh;background:#020805;color:#e8fff0;border:1px solid #55735f;border-radius:12px;padding:12px;box-sizing:border-box;font:13px/1.45 monospace}</style></head><body><h1>mtg-mechanics-adapter.js</h1><p>Use the complete file below.</p><textarea readonly>&quot;use strict&quot;;
+
+const fs = require(&quot;fs&quot;);
+const path = require(&quot;path&quot;);
+const { pathToFileURL } = require(&quot;url&quot;);
+
+const ROOT = path.join(__dirname, &quot;mtg-mechanics&quot;);
+const ENGINE_URL = pathToFileURL(path.join(ROOT, &quot;src&quot;, &quot;engine&quot;, &quot;index.mjs&quot;)).href;
+const MODE = String(process.env.MTG_MECHANICS_MODE || &quot;shadow&quot;).toLowerCase();
+const ROOM_SYNC_DELAY_MS = Math.max(10, Number(process.env.MTG_MECHANICS_SYNC_DELAY_MS) || 75);
+const MAX_STATUS_EVENTS = 20;
+
+let enginePromise = null;
+let catalogPromise = null;
+const roomStatus = new Map();
+const roomTimers = new Map();
+
+function clone(value) {
+  if (value == null) return value;
+  try {
+    return structuredClone(value);
+  } catch {
+    return JSON.parse(JSON.stringify(value));
+  }
+}
+
+function normalizeZone(zone) {
+  if (zone === &quot;commandZone&quot;) return &quot;command&quot;;
+  if (zone === &quot;command&quot;) return &quot;command&quot;;
+  return zone;
+}
+
+function phaseToStep(room, turnSequence) {
+  const phase = String(
+    room?.turn?.phase ||
+    room?.turn?.phaseName ||
+    room?.phase ||
+    &quot;&quot;
+  ).toLowerCase();
+  const index = Number(room?.turn?.phaseIndex);
+  const serverPhases = [
+    &quot;untap&quot;, &quot;upkeep&quot;, &quot;draw&quot;, &quot;precombat_main&quot;, &quot;begin_combat&quot;,
+    &quot;declare_attackers&quot;, &quot;declare_blockers&quot;, &quot;combat_damage&quot;, &quot;combat_damage&quot;,
+    &quot;end_combat&quot;, &quot;postcombat_main&quot;, &quot;end&quot;, &quot;cleanup&quot;
+  ];
+  let step = Number.isInteger(index) ? serverPhases[index] : null;
+  if (!step) {
+    if (phase.includes(&quot;main 1&quot;)) step = &quot;precombat_main&quot;;
+    else if (phase.includes(&quot;main 2&quot;)) step = &quot;postcombat_main&quot;;
+    else if (phase.includes(&quot;begin&quot;) &amp;&amp; phase.includes(&quot;combat&quot;)) step = &quot;begin_combat&quot;;
+    else if (phase.includes(&quot;attack&quot;)) step = &quot;declare_attackers&quot;;
+    else if (phase.includes(&quot;block&quot;)) step = &quot;declare_blockers&quot;;
+    else if (phase.includes(&quot;damage&quot;)) step = &quot;combat_damage&quot;;
+    else if (phase.includes(&quot;end combat&quot;)) step = &quot;end_combat&quot;;
+    else if (phase.includes(&quot;cleanup&quot;)) step = &quot;cleanup&quot;;
+    else if (phase.includes(&quot;upkeep&quot;)) step = &quot;upkeep&quot;;
+    else if (phase.includes(&quot;draw&quot;)) step = &quot;draw&quot;;
+    else if (phase.includes(&quot;untap&quot;)) step = &quot;untap&quot;;
+    else if (phase === &quot;end&quot;) step = &quot;end&quot;;
+  }
+  const found = turnSequence.indexOf(step);
+  return found &gt;= 0 ? found : 0;
+}
+
+function cardDefinition(card) {
+  const data = card?.cardData || card?.base || card || {};
+  const face = Array.isArray(data.faces) ? data.faces[Number(card?.faceIndex || 0)] : null;
+  return {
+    id: data.scryfallId || data.id || card?.definitionId || card?.id || card?.name,
+    oracle_id: data.oracleId || data.oracle_id || null,
+    name: face?.name || data.name || card?.name || &quot;Unknown card&quot;,
+    mana_cost: face?.manaCost || face?.mana_cost || data.manaCost || data.mana_cost || &quot;&quot;,
+    type_line: face?.typeLine || face?.type_line || data.typeLine || data.type_line || card?.typeLine || &quot;&quot;,
+    oracle_text: face?.oracleText || face?.oracle_text || data.oracleText || data.oracle_text || card?.oracleText || &quot;&quot;,
+    color_identity: data.colorIdentity || data.color_identity || card?.colorIdentity || [],
+    power: face?.power ?? data.power ?? card?.power ?? null,
+    toughness: face?.toughness ?? data.toughness ?? card?.toughness ?? null,
+    loyalty: face?.loyalty ?? data.loyalty ?? card?.loyalty ?? null,
+    keywords: data.keywords || card?.keywords || []
+  };
+}
+
+function roomPlayers(room) {
+  return (Array.isArray(room?.players) ? room.players : [])
+    .filter((player) =&gt; player?.id)
+    .map((player) =&gt; ({
+      id: String(player.id),
+      name: String(player.name || player.id),
+      life: Number(player.game?.life ?? player.life ?? 40)
+    }));
+}
+
+async function loadEngine() {
+  if (!enginePromise) enginePromise = import(ENGINE_URL);
+  return enginePromise;
+}
+
+async function loadCatalog() {
+  if (!catalogPromise) {
+    catalogPromise = Promise.resolve().then(() =&gt; {
+      const mechanics = JSON.parse(fs.readFileSync(path.join(ROOT, &quot;data&quot;, &quot;mechanics-index.json&quot;), &quot;utf8&quot;));
+      const digital = JSON.parse(fs.readFileSync(path.join(ROOT, &quot;data&quot;, &quot;arena-digital-mechanics.json&quot;), &quot;utf8&quot;));
+      const model = JSON.parse(fs.readFileSync(path.join(ROOT, &quot;data&quot;, &quot;core-game-model.json&quot;), &quot;utf8&quot;));
+      return {
+        officialMechanics: Number(mechanics?.counts?.total || mechanics?.mechanics?.length || 0),
+        keywordActions: Number(mechanics?.counts?.keyword_actions || 0),
+        keywordAbilities: Number(mechanics?.counts?.keyword_abilities || 0),
+        digitalMechanics: Array.isArray(digital?.mechanics) ? digital.mechanics.map((entry) =&gt; entry.id) : [],
+        rulesBaseline: mechanics?.generated_from || model?.rules_baseline || null,
+        supportedPlayers: model?.supported_game_shape || null
+      };
+    });
+  }
+  return catalogPromise;
+}
+
+async function initialize() {
+  const [engine, catalog] = await Promise.all([loadEngine(), loadCatalog()]);
+  return {
+    mode: MODE,
+    engineExports: Object.keys(engine).sort(),
+    mechanics: catalog
+  };
+}
+
+function replaceGeneratedId(game, object, desiredId) {
+  if (!desiredId || game.objects.has(desiredId)) return object.id;
+  const oldId = object.id;
+  game.objects.delete(oldId);
+  object.id = desiredId;
+  game.objects.set(desiredId, object);
+  for (const player of game.players.values()) {
+    for (const zone of Object.values(player.zones)) {
+      const index = zone.indexOf(oldId);
+      if (index &gt;= 0) zone[index] = desiredId;
+    }
+  }
+  return desiredId;
+}
+
+async function createShadowGame(room) {
+  const engine = await loadEngine();
+  const players = roomPlayers(room);
+  if (players.length &lt; 2) throw new Error(&quot;A room needs at least two players for the mechanics engine.&quot;);
+
+  const game = engine.registerDefaultMechanics(new engine.GameState({
+    format: room?.format === &quot;commander&quot; || room?.settings?.format === &quot;commander&quot; ? &quot;commander&quot; : (room?.format || room?.settings?.format || &quot;commander&quot;),
+    players,
+    startingPlayerId: String(room?.turn?.activePlayerId || players[0].id)
+  }));
+
+  game.turnNumber = Math.max(1, Number(room?.turn?.number || 1));
+  game.stepIndex = phaseToStep(room, engine.TURN_SEQUENCE);
+  if (game.players.has(String(room?.turn?.activePlayerId || &quot;&quot;))) {
+    game.activePlayerId = String(room.turn.activePlayerId);
+  }
+  const priorityId = String(room?.priority?.playerId || room?.turn?.priorityPlayerId || game.activePlayerId);
+  game.priorityPlayerId = game.players.has(priorityId) ? priorityId : game.activePlayerId;
+  game.consecutivePasses = Array.isArray(room?.priority?.passedPlayerIds)
+    ? Math.min(room.priority.passedPlayerIds.length, game.livingPlayers.length)
+    : 0;
+
+  const zoneNames = [&quot;library&quot;, &quot;hand&quot;, &quot;battlefield&quot;, &quot;graveyard&quot;, &quot;exile&quot;, &quot;commandZone&quot;];
+  let cardCount = 0;
+  for (const roomPlayer of room.players || []) {
+    const playerId = String(roomPlayer.id);
+    const enginePlayer = game.players.get(playerId);
+    if (!enginePlayer) continue;
+    enginePlayer.life = Number(roomPlayer.game?.life ?? roomPlayer.life ?? enginePlayer.life);
+    enginePlayer.poison = Number(roomPlayer.game?.poison ?? roomPlayer.poison ?? 0);
+    enginePlayer.hasLost = Boolean(roomPlayer.game?.hasLost ?? roomPlayer.hasLost ?? roomPlayer.conceded);
+    enginePlayer.manaPool = clone(roomPlayer.game?.manaPool || {});
+
+    for (const roomZone of zoneNames) {
+      const cards = Array.isArray(roomPlayer.game?.[roomZone]) ? roomPlayer.game[roomZone] : [];
+      const engineZone = normalizeZone(roomZone);
+      for (const card of cards) {
+        const object = game.createCardInstance(cardDefinition(card), {
+          ownerId: String(card.ownerId || playerId),
+          controllerId: String(card.controllerId || playerId),
+          zone: engineZone,
+          token: Boolean(card.token),
+          conjured: Boolean(card.conjured)
+        });
+        replaceGeneratedId(game, object, String(card.id || &quot;&quot;));
+        object.tapped = Boolean(card.tapped);
+        object.counters = clone(card.counters || {});
+        object.damageMarked = Number(card.damageMarked || card.damage || 0);
+        object.perpetualModifiers = clone(card.perpetualModifiers || card.perpetual || []);
+        object.temporaryModifiers = clone(card.temporaryModifiers || []);
+        object.metadata = {
+          sourceRoomCode: room.code || room.id || null,
+          sourceCardId: card.id || null,
+          attackingPlayerId: card.attackingPlayerId || card.defenderPlayerId || null,
+          faceIndex: Number(card.faceIndex || 0)
+        };
+        cardCount += 1;
+      }
+    }
+  }
+
+  game.stack = (Array.isArray(room?.stack) ? room.stack : []).map((item) =&gt; ({
+    id: String(item.id || `${Date.now()}-${Math.random()}`),
+    controllerId: String(item.controllerId || game.activePlayerId),
+    sourceId: item.sourceCardId || item.sourceId || null,
+    kind: item.kind || &quot;unknown&quot;,
+    label: item.name || item.label || item.text || &quot;Stack item&quot;,
+    targets: clone(item.targets || []),
+    metadata: clone(item.metadata || {}),
+    resolve: async () =&gt; undefined
+  }));
+
+  const commanderDamage = room?.commanderDamage || room?.game?.commanderDamage || null;
+  if (commanderDamage &amp;&amp; typeof commanderDamage === &quot;object&quot;) {
+    for (const [key, amount] of Object.entries(commanderDamage)) {
+      const numeric = Number(amount || 0);
+      if (numeric &gt; 0) game.commanderDamage.set(key, numeric);
+    }
+  }
+
+  return { game, cardCount };
+}
+
+function publicStatus(status) {
+  if (!status) return {
+    mode: MODE,
+    ready: false,
+    synchronized: false,
+    error: null
+  };
+  return {
+    mode: status.mode,
+    ready: status.ready,
+    synchronized: status.synchronized,
+    roomCode: status.roomCode,
+    syncedAt: status.syncedAt,
+    revision: status.revision,
+    players: status.players,
+    cards: status.cards,
+    stackItems: status.stackItems,
+    step: status.step,
+    activePlayerId: status.activePlayerId,
+    priorityPlayerId: status.priorityPlayerId,
+    error: status.error || null,
+    recent: status.recent || []
+  };
+}
+
+async function syncRoom(room, context = {}) {
+  const roomCode = String(room?.code || room?.id || &quot;unknown&quot;);
+  const previous = roomStatus.get(roomCode);
+  try {
+    const [{ game, cardCount }, catalog] = await Promise.all([createShadowGame(room), loadCatalog()]);
+    const viewers = {};
+    for (const player of game.players.values()) {
+      const view = game.sanitizeFor(player.id);
+      viewers[player.id] = {
+        handCount: view.players[player.id]?.handCount || 0,
+        libraryCount: view.players[player.id]?.libraryCount || 0,
+        visibleOpponentHands: Object.values(view.players)
+          .filter((entry) =&gt; entry.id !== player.id)
+          .reduce((sum, entry) =&gt; sum + (entry.hand?.length || 0), 0)
+      };
+    }
+    const recent = [...(previous?.recent || []), {
+      at: new Date().toISOString(),
+      reason: String(context.reason || context.actionType || &quot;sync&quot;).slice(0, 80),
+      ok: true
+    }].slice(-MAX_STATUS_EVENTS);
+    const status = {
+      mode: MODE,
+      ready: true,
+      synchronized: true,
+      roomCode,
+      syncedAt: new Date().toISOString(),
+      revision: Number(room?.revision || room?.updatedAt || game.revision || 0),
+      players: game.players.size,
+      cards: cardCount,
+      stackItems: game.stack.length,
+      step: game.currentStep,
+      activePlayerId: game.activePlayerId,
+      priorityPlayerId: game.priorityPlayerId,
+      viewers,
+      catalog,
+      error: null,
+      recent
+    };
+    roomStatus.set(roomCode, status);
+    return publicStatus(status);
+  } catch (error) {
+    const recent = [...(previous?.recent || []), {
+      at: new Date().toISOString(),
+      reason: String(context.reason || context.actionType || &quot;sync&quot;).slice(0, 80),
+      ok: false,
+      error: String(error?.message || error).slice(0, 300)
+    }].slice(-MAX_STATUS_EVENTS);
+    const status = {
+      mode: MODE,
+      ready: true,
+      synchronized: false,
+      roomCode,
+      syncedAt: new Date().toISOString(),
+      error: String(error?.message || error),
+      recent
+    };
+    roomStatus.set(roomCode, status);
+    throw error;
+  }
+}
+
+function scheduleRoomSync(room, context = {}) {
+  if (MODE === &quot;off&quot; || !room) return;
+  const roomCode = String(room?.code || room?.id || &quot;unknown&quot;);
+  clearTimeout(roomTimers.get(roomCode));
+  const timer = setTimeout(() =&gt; {
+    roomTimers.delete(roomCode);
+    syncRoom(room, context).catch((error) =&gt; {
+      if (process.env.MTG_MECHANICS_LOG_ERRORS === &quot;1&quot;) {
+        console.warn(&quot;MTG mechanics shadow sync failed:&quot;, error?.message || error);
+      }
+    });
+  }, ROOM_SYNC_DELAY_MS);
+  timer.unref?.();
+  roomTimers.set(roomCode, timer);
+}
+
+function getRoomStatus(roomOrCode) {
+  const roomCode = typeof roomOrCode === &quot;string&quot;
+    ? roomOrCode
+    : String(roomOrCode?.code || roomOrCode?.id || &quot;unknown&quot;);
+  return publicStatus(roomStatus.get(roomCode));
+}
+
+function validateCardScript(script) {
+  const errors = [];
+  if (!script || typeof script !== &quot;object&quot; || Array.isArray(script)) errors.push(&quot;Card script must be an object.&quot;);
+  if (!String(script?.definitionId || &quot;&quot;).trim()) errors.push(&quot;definitionId is required.&quot;);
+  if (!String(script?.name || &quot;&quot;).trim()) errors.push(&quot;name is required.&quot;);
+  if (!Array.isArray(script?.abilities)) errors.push(&quot;abilities must be an array.&quot;);
+  for (const [index, ability] of (script?.abilities || []).entries()) {
+    if (!ability || typeof ability !== &quot;object&quot;) {
+      errors.push(`abilities[${index}] must be an object.`);
+      continue;
+    }
+    if (![&quot;static&quot;, &quot;activated&quot;, &quot;triggered&quot;, &quot;spell&quot;].includes(ability.kind)) {
+      errors.push(`abilities[${index}].kind is unsupported.`);
+    }
+    if (!String(ability.handler || &quot;&quot;).trim()) errors.push(`abilities[${index}].handler is required.`);
+  }
+  return { valid: errors.length === 0, errors };
+}
+
+module.exports = {
+  version: &quot;63.1.0&quot;,
+  mode: MODE,
+  initialize,
+  loadEngine,
+  loadCatalog,
+  createShadowGame,
+  syncRoom,
+  scheduleRoomSync,
+  getRoomStatus,
+  validateCardScript
+};
+</textarea></body></html>
