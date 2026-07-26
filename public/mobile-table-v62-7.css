@@ -1,0 +1,641 @@
+/* Arena Commander v62.7 — one-screen mobile table and clean collapsible hand */
+:root {
+  --v627-topbar-h: 42px;
+  --v627-switch-h: 42px;
+  --v627-dock-h: 42px;
+  --v627-action-h: 58px;
+  --v627-hand-collapsed-h: 40px;
+  --v627-hand-expanded-h: min(210px, 34dvh);
+  --v627-zone-rail: clamp(78px, 22vw, 92px);
+}
+
+html.v627-mobile-table,
+body.v627-mobile-table {
+  width: 100% !important;
+  height: 100dvh !important;
+  min-height: 100dvh !important;
+  overflow: hidden !important;
+  overscroll-behavior: none !important;
+}
+
+body.v627-mobile-table {
+  touch-action: manipulation !important;
+  background: #020b08 !important;
+}
+
+body.v627-mobile-table .app-header,
+body.v627-mobile-table #bottomNav {
+  display: none !important;
+}
+
+body.v627-mobile-table #app,
+body.v627-mobile-table .app-main {
+  position: fixed !important;
+  inset: 0 !important;
+  width: 100% !important;
+  height: 100dvh !important;
+  min-height: 0 !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  overflow: hidden !important;
+}
+
+body.v627-mobile-table .arena-game-shell.arena-v627 {
+  position: fixed !important;
+  inset: 0 !important;
+  width: 100% !important;
+  height: 100dvh !important;
+  min-height: 0 !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  overflow: hidden !important;
+  background:
+    radial-gradient(ellipse at 50% 44%, rgba(20,73,54,.36), transparent 62%),
+    #020b08 !important;
+}
+
+/* Compact room controls. The automation dock already shows turn, phase and priority. */
+body.v627-mobile-table .arena-game-topbar {
+  position: absolute !important;
+  z-index: 310 !important;
+  inset: 0 0 auto 0 !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  gap: 4px !important;
+  width: 100% !important;
+  height: var(--v627-topbar-h) !important;
+  min-height: var(--v627-topbar-h) !important;
+  padding: 3px 5px !important;
+  overflow: hidden !important;
+  border-bottom: 1px solid rgba(215,189,114,.36) !important;
+  background: rgba(1,12,9,.99) !important;
+}
+
+body.v627-mobile-table .arena-room-meta {
+  display: flex !important;
+  align-items: center !important;
+  gap: 5px !important;
+  min-width: 0 !important;
+  overflow: hidden !important;
+  white-space: nowrap !important;
+}
+
+body.v627-mobile-table .arena-room-meta > span:not(.badge),
+body.v627-mobile-table .arena-room-meta > strong,
+body.v627-mobile-table .arena-room-meta .ai-badge,
+body.v627-mobile-table .arena-room-meta .persistence-badge {
+  display: none !important;
+}
+
+body.v627-mobile-table .arena-room-meta .room-pill {
+  flex: 0 0 auto !important;
+  min-width: 72px !important;
+  min-height: 34px !important;
+  padding: 3px 9px !important;
+  font-size: .68rem !important;
+}
+
+body.v627-mobile-table .arena-room-meta .badge {
+  min-width: 0 !important;
+  max-width: min(46vw, 190px) !important;
+  overflow: hidden !important;
+  padding: 5px 8px !important;
+  text-overflow: ellipsis !important;
+  white-space: nowrap !important;
+  font-size: .6rem !important;
+}
+
+body.v627-mobile-table .arena-top-actions {
+  display: flex !important;
+  flex: 0 0 auto !important;
+  align-items: center !important;
+  gap: 3px !important;
+}
+
+body.v627-mobile-table .arena-top-actions .priority-label,
+body.v627-mobile-table .arena-top-actions .turn-clock {
+  display: none !important;
+}
+
+body.v627-mobile-table .arena-top-actions > button,
+body.v627-mobile-table .arena-top-actions .v612-leave-match {
+  width: 34px !important;
+  min-width: 34px !important;
+  height: 34px !important;
+  min-height: 34px !important;
+  padding: 3px !important;
+  border-radius: 9px !important;
+  font-size: .82rem !important;
+}
+
+body.v627-mobile-table .arena-top-actions .v612-leave-match b {
+  display: none !important;
+}
+
+/* One compact board selector. */
+body.v627-mobile-table .arena-v627 .v621-board-switcher {
+  position: absolute !important;
+  z-index: 309 !important;
+  inset: var(--v627-topbar-h) 0 auto 0 !important;
+  display: grid !important;
+  grid-template-columns: 36px minmax(0,1fr) 36px 58px !important;
+  gap: 4px !important;
+  width: 100% !important;
+  max-width: none !important;
+  height: var(--v627-switch-h) !important;
+  margin: 0 !important;
+  padding: 4px 6px !important;
+  border: 0 !important;
+  border-bottom: 1px solid rgba(112,226,218,.24) !important;
+  border-radius: 0 !important;
+  background: rgba(2,17,13,.99) !important;
+  box-shadow: none !important;
+}
+
+body.v627-mobile-table .arena-v627 .v621-board-switcher button {
+  min-width: 0 !important;
+  min-height: 34px !important;
+  height: 34px !important;
+  padding: 3px 5px !important;
+  border-radius: 9px !important;
+  font-size: .58rem !important;
+}
+
+/* Keep only the useful single-line automation status. */
+body.v627-mobile-table .v62-dock {
+  position: absolute !important;
+  z-index: 308 !important;
+  inset: calc(var(--v627-topbar-h) + var(--v627-switch-h)) 0 auto 0 !important;
+  display: block !important;
+  width: 100% !important;
+  height: var(--v627-dock-h) !important;
+  padding: 4px 6px !important;
+  overflow: hidden !important;
+  border-bottom: 1px solid rgba(215,189,114,.22) !important;
+  background: rgba(1,13,10,.99) !important;
+  box-shadow: none !important;
+}
+
+body.v627-mobile-table .v62-dock-main {
+  display: grid !important;
+  grid-template-columns: 36px minmax(72px,1fr) minmax(72px,1fr) 54px !important;
+  gap: 4px !important;
+  height: 34px !important;
+}
+
+body.v627-mobile-table .v62-engine-button,
+body.v627-mobile-table .v62-pass {
+  min-height: 34px !important;
+  height: 34px !important;
+  padding: 3px 5px !important;
+  border-radius: 9px !important;
+}
+
+body.v627-mobile-table .v62-engine-button strong,
+body.v627-mobile-table .v62-priority-track,
+body.v627-mobile-table .v62-dock-tools,
+body.v627-mobile-table .arena-phase-bar {
+  display: none !important;
+}
+
+body.v627-mobile-table .v62-phase,
+body.v627-mobile-table .v62-priority {
+  padding: 2px 5px !important;
+}
+
+body.v627-mobile-table .v62-phase small,
+body.v627-mobile-table .v62-priority small {
+  font-size: .42rem !important;
+}
+
+body.v627-mobile-table .v62-phase strong,
+body.v627-mobile-table .v62-priority strong {
+  font-size: .64rem !important;
+}
+
+/* The battlefield occupies the rest of the viewport. There is no page scroll. */
+body.v627-mobile-table .arena-stage {
+  position: absolute !important;
+  z-index: 20 !important;
+  inset:
+    calc(var(--v627-topbar-h) + var(--v627-switch-h) + var(--v627-dock-h))
+    0
+    calc(var(--v627-action-h) + var(--v627-hand-collapsed-h) + env(safe-area-inset-bottom))
+    0 !important;
+  display: block !important;
+  width: 100% !important;
+  height: auto !important;
+  min-height: 0 !important;
+  padding: 5px !important;
+  overflow: hidden !important;
+}
+
+body.v627-mobile-table .arena-center-zone,
+body.v627-mobile-table .arena-lines {
+  display: none !important;
+}
+
+body.v627-mobile-table .arena-opponent-ring,
+body.v627-mobile-table .self-slot {
+  position: absolute !important;
+  inset: 5px !important;
+  width: auto !important;
+  height: auto !important;
+  min-height: 0 !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  transform: none !important;
+  overflow: hidden !important;
+}
+
+body.v627-mobile-table:not(.v627-opponent-open) .arena-opponent-ring {
+  display: none !important;
+}
+
+body.v627-mobile-table.v627-opponent-open .self-slot {
+  display: none !important;
+}
+
+body.v627-mobile-table.v627-opponent-open .arena-opponent-ring {
+  display: block !important;
+}
+
+body.v627-mobile-table .arena-opponent-ring .opponent-slot {
+  display: none !important;
+}
+
+body.v627-mobile-table .arena-opponent-ring .opponent-slot.v61-focus-visible {
+  position: absolute !important;
+  inset: 0 !important;
+  display: block !important;
+  width: 100% !important;
+  height: 100% !important;
+  transform: none !important;
+}
+
+/* Same compact board geometry for your board and the selected opponent. */
+body.v627-mobile-table .arena-seat.is-self,
+body.v627-mobile-table .arena-seat.is-opponent,
+body.v627-mobile-table .arena-seat.v624-unified-seat {
+  display: flex !important;
+  flex-direction: column !important;
+  width: 100% !important;
+  height: 100% !important;
+  min-height: 0 !important;
+  max-height: 100% !important;
+  overflow: hidden !important;
+  border-radius: 14px !important;
+}
+
+body.v627-mobile-table .arena-seat-header {
+  flex: 0 0 42px !important;
+  min-height: 42px !important;
+  height: 42px !important;
+  padding: 4px 7px !important;
+  overflow: hidden !important;
+}
+
+body.v627-mobile-table .seat-name strong {
+  font-size: .74rem !important;
+}
+
+body.v627-mobile-table .seat-name small {
+  font-size: .52rem !important;
+}
+
+body.v627-mobile-table .v610-seat-content {
+  display: grid !important;
+  grid-template-columns: minmax(0,1fr) var(--v627-zone-rail) !important;
+  flex: 1 1 auto !important;
+  gap: 5px !important;
+  width: 100% !important;
+  height: calc(100% - 42px) !important;
+  min-height: 0 !important;
+  padding: 5px !important;
+  overflow: hidden !important;
+}
+
+body.v627-mobile-table .v610-field-column,
+body.v627-mobile-table .arena-seat-board,
+body.v627-mobile-table .arena-battlefield-cards,
+body.v627-mobile-table .v610-playmat {
+  width: 100% !important;
+  height: 100% !important;
+  min-height: 0 !important;
+  max-height: 100% !important;
+  overflow: hidden !important;
+}
+
+body.v627-mobile-table .v610-playmat {
+  display: grid !important;
+  grid-template-rows: minmax(0,1fr) minmax(78px,28%) !important;
+}
+
+body.v627-mobile-table .v610-card-row {
+  gap: 4px !important;
+  padding: 22px 5px 5px !important;
+  overflow-x: auto !important;
+  overflow-y: hidden !important;
+}
+
+body.v627-mobile-table {
+  --v610-board-card-w: clamp(55px, 15.5vw, 72px);
+  --v610-board-card-h: calc(var(--v610-board-card-w) * 1.397);
+}
+
+body.v627-mobile-table .v610-card-row > .arena-card-group,
+body.v627-mobile-table .v610-card-row > .arena-card-nest,
+body.v627-mobile-table .v610-card-row .arena-card,
+body.v627-mobile-table .v610-card-row .arena-card-nest {
+  width: var(--v610-board-card-w) !important;
+  min-width: var(--v610-board-card-w) !important;
+}
+
+body.v627-mobile-table .v610-card-row .arena-card,
+body.v627-mobile-table .v610-card-row .arena-card-nest {
+  height: var(--v610-board-card-h) !important;
+  min-height: var(--v610-board-card-h) !important;
+}
+
+body.v627-mobile-table .v610-zone-label {
+  top: 4px !important;
+  left: 5px !important;
+  padding: 1px 5px !important;
+  font-size: .45rem !important;
+}
+
+body.v627-mobile-table .v610-empty-board,
+body.v627-mobile-table .arena-empty-board.v610-empty-board {
+  font-size: .6rem !important;
+}
+
+body.v627-mobile-table .v610-zone-column {
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 4px !important;
+  height: 100% !important;
+  min-height: 0 !important;
+  overflow: hidden !important;
+}
+
+body.v627-mobile-table .v610-zone-column .seat-life {
+  flex: 0 0 56px !important;
+  min-height: 56px !important;
+  height: 56px !important;
+  border-radius: 11px !important;
+}
+
+body.v627-mobile-table .v610-zone-column .seat-life strong {
+  font-size: 1.45rem !important;
+}
+
+body.v627-mobile-table .arena-zone-piles {
+  display: grid !important;
+  grid-template-columns: 1fr 1fr !important;
+  grid-template-rows: repeat(2, minmax(54px,1fr)) 42px !important;
+  flex: 1 1 auto !important;
+  gap: 4px !important;
+  width: 100% !important;
+  min-height: 0 !important;
+  overflow: hidden !important;
+}
+
+body.v627-mobile-table .arena-zone-pile {
+  min-height: 0 !important;
+  height: auto !important;
+  padding: 2px !important;
+  border-radius: 9px !important;
+}
+
+body.v627-mobile-table .arena-zone-pile[data-zone="hand"] {
+  grid-column: 1 / -1 !important;
+  min-height: 42px !important;
+  height: 42px !important;
+}
+
+body.v627-mobile-table .arena-zone-pile span,
+body.v627-mobile-table .arena-zone-pile strong {
+  font-size: .72rem !important;
+}
+
+body.v627-mobile-table .arena-zone-pile small {
+  font-size: .39rem !important;
+}
+
+body.v627-mobile-table .v610-zone-preview {
+  width: 28px !important;
+  height: 39px !important;
+  border-radius: 4px !important;
+}
+
+body.v627-mobile-table .seat-secondary {
+  display: none !important;
+}
+
+/* Clean bottom action row. */
+body.v627-mobile-table .arena-action-bar {
+  position: fixed !important;
+  z-index: 420 !important;
+  inset: auto 0 0 0 !important;
+  display: grid !important;
+  grid-template-columns: repeat(6,minmax(0,1fr)) !important;
+  gap: 3px !important;
+  width: 100% !important;
+  height: calc(var(--v627-action-h) + env(safe-area-inset-bottom)) !important;
+  min-height: calc(var(--v627-action-h) + env(safe-area-inset-bottom)) !important;
+  padding: 3px 3px env(safe-area-inset-bottom) !important;
+  overflow: hidden !important;
+}
+
+body.v627-mobile-table .arena-action-bar > button {
+  min-width: 0 !important;
+  min-height: 52px !important;
+  height: 52px !important;
+  padding: 2px !important;
+  border-radius: 10px !important;
+  font-size: .48rem !important;
+}
+
+/* The collapsed hand is a small one-line tab. Expanded hand is a temporary drawer. */
+body.v627-mobile-table .arena-hand-tray.v626-hand-ready {
+  position: fixed !important;
+  z-index: 430 !important;
+  inset: auto 0 calc(var(--v627-action-h) + env(safe-area-inset-bottom)) 0 !important;
+  width: 100% !important;
+  height: var(--v627-hand-expanded-h) !important;
+  min-height: var(--v627-hand-expanded-h) !important;
+  padding: 4px 6px 7px !important;
+  overflow: hidden !important;
+  border-top: 1px solid rgba(215,189,114,.48) !important;
+  border-radius: 16px 16px 0 0 !important;
+  background: linear-gradient(180deg, rgba(3,24,18,.99), rgba(0,8,6,.995)) !important;
+  box-shadow: 0 -12px 28px rgba(0,0,0,.5) !important;
+  pointer-events: none !important;
+}
+
+body.v627-mobile-table .arena-hand-tray .v626-hand-label {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  height: 36px !important;
+  min-height: 36px !important;
+}
+
+body.v627-mobile-table .v626-hand-toggle {
+  display: inline-grid !important;
+  grid-template-columns: auto auto auto !important;
+  align-items: center !important;
+  gap: 7px !important;
+  width: auto !important;
+  min-width: 112px !important;
+  height: 32px !important;
+  min-height: 32px !important;
+  padding: 3px 10px !important;
+  white-space: nowrap !important;
+  pointer-events: auto !important;
+}
+
+body.v627-mobile-table .v626-hand-toggle > span {
+  display: none !important;
+}
+
+body.v627-mobile-table .v626-hand-toggle::before {
+  content: "HAND";
+  font-size: .6rem;
+  font-weight: 900;
+  letter-spacing: .08em;
+}
+
+body.v627-mobile-table .v626-hand-toggle em {
+  min-width: 23px !important;
+  height: 22px !important;
+}
+
+body.v627-mobile-table .arena-hand-tray .arena-hand-fan {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: flex-start !important;
+  gap: 8px !important;
+  width: 100% !important;
+  height: calc(100% - 36px) !important;
+  padding: 4px 8px 8px !important;
+  overflow-x: auto !important;
+  overflow-y: hidden !important;
+  scroll-snap-type: x proximity !important;
+  scrollbar-width: none !important;
+  pointer-events: auto !important;
+}
+
+body.v627-mobile-table .arena-hand-tray .arena-hand-fan::-webkit-scrollbar {
+  display: none !important;
+}
+
+body.v627-mobile-table {
+  --v610-hand-card-w: clamp(88px, 25vw, 104px);
+  --v610-hand-card-h: calc(var(--v610-hand-card-w) * 1.397);
+}
+
+body.v627-mobile-table .arena-hand-tray .hand-card-wrap,
+body.v627-mobile-table .arena-hand-tray .hand-card-wrap:first-child {
+  flex: 0 0 var(--v610-hand-card-w) !important;
+  width: var(--v610-hand-card-w) !important;
+  height: var(--v610-hand-card-h) !important;
+  min-width: var(--v610-hand-card-w) !important;
+  min-height: var(--v610-hand-card-h) !important;
+  margin: 0 !important;
+  transform: none !important;
+  transform-origin: center !important;
+  scroll-snap-align: center !important;
+  pointer-events: auto !important;
+}
+
+body.v627-mobile-table .arena-hand-tray .hand-card-wrap:hover,
+body.v627-mobile-table .arena-hand-tray .hand-card-wrap:focus-within {
+  transform: none !important;
+}
+
+body.v627-mobile-table .arena-hand-tray .hand-card-wrap .arena-card-nest,
+body.v627-mobile-table .arena-hand-tray .hand-card-wrap .arena-card,
+body.v627-mobile-table .arena-hand-tray .hand-card-wrap .arena-card-frame,
+body.v627-mobile-table .arena-hand-tray .hand-card-wrap .arena-card-image,
+body.v627-mobile-table .arena-hand-tray .hand-card-wrap .arena-card-image img {
+  width: var(--v610-hand-card-w) !important;
+  height: var(--v610-hand-card-h) !important;
+  min-width: var(--v610-hand-card-w) !important;
+  min-height: var(--v610-hand-card-h) !important;
+  max-height: var(--v610-hand-card-h) !important;
+  overflow: hidden !important;
+}
+
+body.v627-mobile-table .arena-hand-tray .hand-card-wrap .arena-card-image img {
+  object-fit: contain !important;
+  object-position: center !important;
+  background: #000 !important;
+}
+
+body.v627-mobile-table.v626-hand-collapsed .arena-hand-tray.v626-hand-ready {
+  height: var(--v627-hand-collapsed-h) !important;
+  min-height: var(--v627-hand-collapsed-h) !important;
+  padding: 3px !important;
+  border-radius: 0 !important;
+  background: rgba(1,13,10,.99) !important;
+  box-shadow: none !important;
+}
+
+body.v627-mobile-table.v626-hand-collapsed .arena-hand-tray .v626-hand-label {
+  height: 34px !important;
+  min-height: 34px !important;
+}
+
+body.v627-mobile-table.v626-hand-collapsed .arena-hand-tray .arena-hand-fan {
+  display: none !important;
+}
+
+/* Existing focus/native fullscreen uses the exact same one-screen geometry. */
+body.v627-mobile-table.v621-fullscreen .arena-stage {
+  inset:
+    calc(var(--v627-topbar-h) + var(--v627-switch-h) + var(--v627-dock-h))
+    0
+    calc(var(--v627-action-h) + var(--v627-hand-collapsed-h) + env(safe-area-inset-bottom))
+    0 !important;
+}
+
+@media (max-height: 620px) {
+  :root {
+    --v627-topbar-h: 36px;
+    --v627-switch-h: 36px;
+    --v627-dock-h: 36px;
+    --v627-action-h: 50px;
+    --v627-hand-collapsed-h: 36px;
+    --v627-hand-expanded-h: min(174px, 36dvh);
+  }
+
+  body.v627-mobile-table .arena-game-topbar {
+    padding-block: 1px !important;
+  }
+
+  body.v627-mobile-table .arena-v627 .v621-board-switcher,
+  body.v627-mobile-table .v62-dock {
+    padding-block: 2px !important;
+  }
+
+  body.v627-mobile-table .arena-seat-header {
+    flex-basis: 36px !important;
+    height: 36px !important;
+    min-height: 36px !important;
+  }
+
+  body.v627-mobile-table .v610-seat-content {
+    height: calc(100% - 36px) !important;
+  }
+
+  body.v627-mobile-table .arena-action-bar > button {
+    min-height: 44px !important;
+    height: 44px !important;
+  }
+
+  body.v627-mobile-table {
+    --v610-hand-card-w: clamp(76px, 15vw, 88px);
+  }
+}
