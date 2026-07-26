@@ -1285,53 +1285,114 @@ function parseDestination(text) {
     };
   }
 
-  if (/\binto (?:their|your|its owner'?s) graveyard\b/i.test(source)) {
+  if (/\b(?:put|puts?|move|moves?)\b[^.]{0,90}\b(?:into|in) (?:their|your|its owner'?s|that player'?s|a) graveyard\b/i.test(source)) {
     return destinationDefaults("graveyard");
   }
 
-  if (/\bexile (?:it|that card|them|those cards)\b/i.test(source)) {
+  if (/\b(?:exile|put[^.]{0,60}into exile)\b/i.test(source)) {
     return destinationDefaults("exile");
   }
 
-  if (/\bon top of (?:your|that player'?s|their) library\b/i.test(source)) {
+  if (/\b(?:on|onto) top of (?:your|that player'?s|their|its owner'?s) (?:library|deck)\b/i.test(source)) {
     return destinationDefaults("library-top");
   }
 
-  if (/\bon the bottom of (?:your|that player'?s|their) library\b/i.test(source)) {
+  if (/\b(?:on|onto) the bottom of (?:your|that player'?s|their|its owner'?s) (?:library|deck)\b/i.test(source)) {
     return destinationDefaults("library-bottom");
   }
 
   return destinationDefaults("hand");
 }
 
-function parseSearchInstruction(text) {
-  const source = String(text || "").replace(/\s+/g, " ");
-
-  const match = source.match(
-    /\bsearch (your|target player'?s|target opponent'?s|that player'?s|their) library for (up to )?(a|an|one|two|three|four|five|six|\d+)\s+(.+?)(?:,|\.| then )/i
-  );
-
-  if (!match) return null;
-
-  let quality = String(match[4] || "")
-    .replace(/\s+(?:card|cards)$/i, " card")
+function normalizeSearchQuality(value) {
+  let quality = String(value || "card")
+    .replace(/\s+/g, " ")
+    .replace(/^(?:a|an|one)\s+/i, "")
+    .replace(/\s+(?:and|then)\s+(?:put|reveal|exile|shuffle).*$/i, "")
+    .replace(/[,.]+$/g, "")
     .trim();
 
-  if (!/\bcards?\b/i.test(quality)) {
-    quality += " card";
+  if (!quality || /^(?:one|a|an)$/i.test(quality)) quality = "card";
+  if (!/\bcards?\b/i.test(quality)) quality += " card";
+  return quality;
+}
+
+function searchAmount(value) {
+  if (/any number/i.test(String(value || ""))) return 99;
+  return Math.max(1, wordNumber(value));
+}
+
+function parseSearchInstruction(text) {
+  const source = String(text || "").replace(/\s+/g, " ").trim();
+  if (!source) return null;
+
+  // Top-N look/reveal effects belong to the separate look/reorder session.
+  if (/\b(?:look at|reveal) the top\b/i.test(source)) return null;
+
+  const reference = "(your|target player'?s|target opponent'?s|an opponent'?s|that player'?s|their)";
+  const amount = "(any number of|a|an|one|two|three|four|five|six|seven|eight|nine|ten|\\d+)";
+  let match = source.match(new RegExp(
+    "\\b(?:search|look through)\\s+" + reference +
+    "\\s+(?:library|deck)\\s+for\\s+(up to\\s+)?" + amount +
+    "\\s+(.+?)(?=,|\\.|\\bthen\\b|\\band\\s+(?:put|reveal|exile|shuffle)\\b|$)",
+    "i"
+  ));
+
+  let libraryReference = "";
+  let upTo = false;
+  let amountValue = 1;
+  let quality = "card";
+
+  if (match) {
+    libraryReference = match[1].toLowerCase();
+    upTo = Boolean(match[2]) || /any number/i.test(match[3]);
+    amountValue = searchAmount(match[3]);
+    quality = normalizeSearchQuality(match[4]);
+  } else {
+    match = source.match(new RegExp(
+      "\\b(?:choose|select|find)\\s+(up to\\s+)?" + amount +
+      "?\\s*(.+?)\\s+from\\s+" + reference +
+      "\\s+(?:library|deck)(?=,|\\.|\\bthen\\b|\\band\\s+(?:put|reveal|exile|shuffle)\\b|$)",
+      "i"
+    ));
+
+    if (match) {
+      upTo = Boolean(match[1]) || /any number/i.test(match[2]);
+      amountValue = searchAmount(match[2] || "one");
+      quality = normalizeSearchQuality(match[3]);
+      libraryReference = match[4].toLowerCase();
+    } else {
+      // Broad/custom wording such as “look through your library” or
+      // “look at your deck and choose a card” opens the entire legal library.
+      match = source.match(new RegExp(
+        "\\b(?:search|look through|look at)\\s+" + reference +
+        "\\s+(?:library|deck)\\b",
+        "i"
+      ));
+      if (!match) return null;
+
+      libraryReference = match[1].toLowerCase();
+      const choice = source.match(
+        /\b(?:choose|select|find)\s+(up to\s+)?(any number of|a|an|one|two|three|four|five|six|seven|eight|nine|ten|\d+)?\s*([^,.]*?\bcards?\b)?/i
+      );
+      if (choice) {
+        upTo = Boolean(choice[1]) || /any number/i.test(choice[2] || "");
+        amountValue = searchAmount(choice[2] || "one");
+        quality = normalizeSearchQuality(choice[3] || "card");
+      }
+    }
   }
 
   return {
-    libraryReference: match[1].toLowerCase(),
-    upTo: Boolean(match[2]),
-    amount: Math.max(1, wordNumber(match[3])),
+    libraryReference,
+    upTo,
+    amount: amountValue,
     quality,
     filter: parseQuality(quality),
-    revealFound:
-      /\breveal (?:it|that card|them|those cards)\b/i.test(source),
-    shuffleAfter:
-      /\bshuffle\b/i.test(source),
-    destination: parseDestination(source)
+    revealFound: /\breveal (?:it|that card|them|those cards|the chosen card)\b/i.test(source),
+    shuffleAfter: /\bshuffle\b/i.test(source),
+    destination: parseDestination(source),
+    fullLibraryBrowse: true
   };
 }
 
@@ -1454,7 +1515,10 @@ function afterResolve(room, item, beforeZones, result, deps) {
           revealFound: search.revealFound,
           shuffleAfter: search.shuffleAfter,
           destination: search.destination,
-          destinationPlayerId: owner.id
+          destinationPlayerId:
+            /\b(?:into|in) your hand\b|\bunder your control\b/i.test(text)
+              ? searcher.id
+              : owner.id
         },
         deps
       );
@@ -1515,7 +1579,7 @@ function pendingForViewer(room, viewerId, deps) {
   if (!session) {
     return {
       success: true,
-      version: "59.0.0",
+      version: "62.5.0",
       session: null
     };
   }
@@ -1523,7 +1587,7 @@ function pendingForViewer(room, viewerId, deps) {
   if (session.kind === "search") {
     return {
       success: true,
-      version: "59.0.0",
+      version: "62.5.0",
       session: {
         id: session.id,
         kind: session.kind,
@@ -1541,6 +1605,9 @@ function pendingForViewer(room, viewerId, deps) {
         shuffleAfter: session.shuffleAfter,
         searchTopLimit: session.searchTopLimit,
         destination: clone(session.destination),
+        destinationPlayerId: session.destinationPlayerId,
+        libraryCount:
+          findPlayer(room, session.libraryOwnerId, deps)?.game?.library?.length || 0,
         candidates: candidateCards(room, session, deps)
       }
     };
@@ -1548,7 +1615,7 @@ function pendingForViewer(room, viewerId, deps) {
 
   return {
     success: true,
-    version: "59.0.0",
+    version: "62.5.0",
     session: {
       id: session.id,
       kind: session.kind,
@@ -1598,7 +1665,7 @@ function stateForViewer(room, viewerId, deps) {
 
   return {
     success: true,
-    version: "59.0.0",
+    version: "62.5.0",
     phase: deps.PHASES[room.turn?.phaseIndex || 0] || "",
     isHost: room.hostId === viewerId,
     players: room.players.map((player) => ({
@@ -1753,7 +1820,7 @@ function summary(room) {
   const state = normalizeState(room);
 
   return {
-    version: "59.0.0",
+    version: "62.5.0",
     openHiddenSessions: state.sessions.length,
     activeReveals: state.reveals.length,
     totalShuffles: Object.values(state.shuffleCounts)
@@ -1764,7 +1831,7 @@ function summary(room) {
 
 function createHiddenSearchEngine(deps) {
   return {
-    version: "59.0.0",
+    version: "62.5.0",
 
     processGameAction(room, actor, action, legacy) {
       return processGameAction(room, actor, action, legacy, deps);
@@ -1793,7 +1860,7 @@ function createHiddenSearchEngine(deps) {
     status() {
       return {
         success: true,
-        version: "59.0.0",
+        version: "62.5.0",
         automatic: [
           "private per-player library search sessions",
           "library-owner and searcher separation",
