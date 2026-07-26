@@ -1,0 +1,42 @@
+{
+  "definitionId": "example-forest-mage",
+  "name": "Example Forest Mage",
+  "abilities": [
+    {
+      "kind": "activated",
+      "zone": "battlefield",
+      "handler": "draw",
+      "cost": {
+        "tapSource": true,
+        "mana": {
+          "G": 1
+        }
+      },
+      "targets": [],
+      "parameters": {
+        "count": 1
+      }
+    },
+    {
+      "kind": "triggered",
+      "zone": "battlefield",
+      "handler": "perpetual",
+      "trigger": {
+        "event": "CARD_CONJURED",
+        "controller": "you"
+      },
+      "targets": [
+        {
+          "selector": "thatCard"
+        }
+      ],
+      "parameters": {
+        "modifier": {
+          "type": "modify",
+          "field": "power",
+          "amount": 1
+        }
+      }
+    }
+  ]
+}
