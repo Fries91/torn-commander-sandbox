@@ -1,9 +1,11 @@
 "use strict";
 
 const CACHE_NAME =
-  "arena-commander-library-choice-v62.5.0";
+  "arena-commander-hand-fix-v62.6.0";
 
 const STARTUP_FILES = [
+  "/hand-collapse-v62-6.css?v=62.6.0",
+  "/hand-collapse-v62-6.js?v=62.6.0",
   "/hidden-v59.css?v=62.5.0",
   "/hidden-v59.js?v=62.5.0",
   "/tabletop-fix-v62-4.css?v=62.4.0",
@@ -31,7 +33,7 @@ const STARTUP_FILES = [
   "/socket-mobile-v60-4.js?v=60.4.0",
   "/startup-session-v60-7.js?v=60.7.0",
   "/performance-bootstrap-v60-6.js?v=60.6.0",
-  "/app.js?v=62.5.0",
+  "/app.js?v=62.6.0",
   "/deck-import-fix.js?v=39.2.0",
   "/clean-home.js?v=39.0.0",
   "/meta-library.js?v=39.0.0",
