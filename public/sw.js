@@ -5,6 +5,7 @@ const CACHE_NAME = "arena-commander-stable-v63.0.0";
 const STARTUP_FILES = [
   "/arena-commander-ui.css?v=63.0.0",
   "/arena-commander-runtime.js?v=63.0.0",
+  "/arena-commander-multiplayer.js?v=63.0.0",
   "/arena-commander-mobile.js?v=63.0.0",
   "/arena-final-v61.css?v=63.0.0",
   "/artwork-leave-fix-v61-2.css?v=63.0.0",
