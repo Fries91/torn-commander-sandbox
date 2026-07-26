@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1">
   <meta name="theme-color" content="#08110f">
   <meta name="description" content="Arena-style MTG Commander with AI opponents, saved rooms and mobile-friendly play.">
-  <title>Arena Commander — Board Fix v62.4</title>
+  <title>Arena Commander — Library Choice v62.5</title>
   <link rel="manifest" href="/manifest.webmanifest?v=60.6.0">
   <link rel="icon" href="/icon-192.png" type="image/png">
   <link rel="apple-touch-icon" href="/icon-192.png">
@@ -34,6 +34,91 @@
   <link rel="stylesheet" href="/commander-v55.css?v=55.0.0">
   <link rel="stylesheet" href="/multiplayer-v56.css?v=56.0.0">
   <link rel="stylesheet" href="/replacement-v57.css?v=57.0.0">
+  <link rel="stylesheet" href="/control-v58.css?v=58.0.0">
+  <link rel="stylesheet" href="/hidden-v59.css?v=62.5.0">
+  <link rel="stylesheet" href="/turn-v60.css?v=60.0.0">
+  <link rel="stylesheet" href="/mobile-safe-v60-5.css?v=60.5.0">
+  <link rel="stylesheet" href="/performance-v60-6.css?v=60.6.0">
+  <link rel="stylesheet" href="/arena-final-v61.css?v=61.0.0">
+  <link rel="stylesheet" href="/artwork-leave-fix-v61-2.css?v=61.2.0">
+  <link rel="stylesheet" href="/gameplay-automation-v62.css?v=62.0.0">
+  <link rel="stylesheet" href="/tabletop-fix-v62-1.css?v=62.1.0">
+  <link rel="stylesheet" href="/tabletop-fix-v62-2.css?v=62.2.0">
+  <link rel="stylesheet" href="/home-stability-v62-3.css?v=62.3.0">
+  <link rel="stylesheet" href="/tabletop-fix-v62-4.css?v=62.4.0">
+</head>
+<body>
+  <header class="app-header">
+    <button id="brandButton" class="brand-button" type="button" aria-label="Home">
+      <span class="brand-mark">♛</span>
+      <span>
+        <strong>Arena Commander</strong>
+        <small>Library Choice v62.5</small>
+      </span>
+    </button>
+
+    <div class="header-actions">
+      <div id="connectionStatus" class="connection-status offline">
+        <span></span>
+        <span id="connectionText">Connecting…</span>
+      </div>
+
+      <button id="settingsButton" class="small-button header-icon-button" type="button" aria-label="Display settings">⚙</button>
+      <button id="fullscreenButton" class="small-button header-icon-button" type="button" aria-label="Fullscreen">⛶</button>
+      <button id="installButton" class="small-button" type="button" hidden>Install</button>
+    </div>
+  </header>
+
+  <main id="app" class="app-main" aria-live="polite"></main>
+
+  <nav id="bottomNav" class="bottom-nav" aria-label="Main navigation">
+    <button type="button" data-nav="home"><span>⌂</span>Home</button>
+    <button type="button" data-nav="decks"><span>▤</span>Decks</button>
+    <button type="button" data-nav="game"><span>♛</span>Play</button>
+    <button type="button" data-meta-action="open"><span>♜</span>Meta</button>
+    <button type="button" data-nav="help"><span>?</span>Help</button>
+  </nav>
+
+  <div id="modalBackdrop" class="modal-backdrop is-hidden" aria-hidden="true">
+    <section class="modal-sheet" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
+      <header class="modal-header">
+        <h2 id="modalTitle">Menu</h2>
+        <button class="icon-button" type="button" data-action="close-modal" aria-label="Close">×</button>
+      </header>
+      <div id="modalBody" class="modal-body"></div>
+    </section>
+  </div>
+
+  <div id="reconnectOverlay" class="reconnect-overlay is-hidden" aria-live="assertive">
+    <div class="reconnect-card">
+      <span class="reconnect-spinner"></span>
+      <strong>Reconnecting to your table…</strong>
+      <small>Your PostgreSQL-saved game is safe.</small>
+    </div>
+  </div>
+
+  <div id="toastRegion" class="toast-region" aria-live="assertive"></div>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="/socket-mobile-v60-4.js?v=60.4.0"></script>
+  <script src="/startup-session-v60-7.js?v=60.7.0"></script>
+  <script src="/performance-bootstrap-v60-6.js?v=60.6.0"></script>
+
+  <script src="/arena-final-v61.js?v=61.0.0"></script>
+  <script src="/artwork-leave-fix-v61-2.js?v=61.2.0"></script>
+  <script src="/gameplay-automation-v62.js?v=62.0.0"></script>
+  <script src="/hidden-v59.js?v=62.5.0" defer></script>
+  <script src="/tabletop-fix-v62-1.js?v=62.4.0"></script>
+  <script src="/tabletop-fix-v62-2.js?v=62.4.0"></script>
+  <script src="/home-stability-v62-3.js?v=62.3.0"></script>
+  <script src="/app.js?v=62.5.0" defer></script>
+  <script src="/deck-import-fix.js?v=39.2.0" defer></script>
+  <script src="/clean-home.js?v=39.0.0" defer></script>
+  <script src="/meta-library.js?v=39.0.0" defer></script>
+  <script src="/lobby-notifier-ui.js?v=39.1.0" defer></script>
+  <script src="/performance-lite-v60-6.js?v=60.6.0" defer></script>
+</body>
+</html>
   <link rel="stylesheet" href="/control-v58.css?v=58.0.0">
   <link rel="stylesheet" href="/hidden-v59.css?v=59.0.0">
   <link rel="stylesheet" href="/turn-v60.css?v=60.0.0">
