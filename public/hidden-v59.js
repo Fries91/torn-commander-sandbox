@@ -1,7 +1,7 @@
 (() => {
   "use strict";
 
-  const VERSION = "59.0.0";
+  const VERSION = "62.5.0";
   const SESSION_KEY =
     "tornCommander.session.v5";
 
@@ -39,11 +39,10 @@
 
   function cardImage(card) {
     return (
+      card?.currentFace?.imageUrl ||
+      card?.cardData?.faces?.[card?.activeFaceIndex || 0]?.imageUrl ||
       card?.cardData?.imageUrl ||
       card?.imageUrl ||
-      card?.cardData?.faces?.[
-        card?.activeFaceIndex || 0
-      ]?.imageUrl ||
       card?.cardData?.faces?.[0]?.imageUrl ||
       ""
     );
@@ -424,30 +423,38 @@
     activeSessionId = "";
   }
 
+  function destinationLabel(destination = {}) {
+    const labels = {
+      hand: "your hand",
+      battlefield: destination.tapped ? "the battlefield tapped" : "the battlefield",
+      graveyard: "the graveyard",
+      exile: "exile",
+      "library-top": "the top of the library",
+      "library-bottom": "the bottom of the library"
+    };
+    return labels[destination.zone] || "the chosen zone";
+  }
+
   function searchCandidate(card) {
+    const type = String(card.typeLine || "Other");
+    const category =
+      type.match(/\b(Land|Creature|Artifact|Enchantment|Instant|Sorcery|Planeswalker|Battle)\b/i)?.[1] ||
+      "Other";
     return `
-      <label class="v59-candidate">
+      <label class="v59-candidate"
+        data-v625-name="${escapeHtml(String(card.name || "").toLowerCase())}"
+        data-v625-type="${escapeHtml(category.toLowerCase())}">
         <input type="checkbox"
           data-v59-select-card
-          value="${escapeHtml(
-            card.cardId
-          )}">
+          value="${escapeHtml(card.cardId)}">
+        <span class="v625-card-check">✓</span>
         ${
           cardImage(card.card)
-            ? `<img src="${escapeHtml(
-                cardImage(card.card)
-              )}" alt="">`
+            ? `<img loading="lazy" decoding="async" src="${escapeHtml(cardImage(card.card))}" alt="${escapeHtml(card.name)}">`
             : '<div class="v59-card-back">?</div>'
         }
-        <strong>${escapeHtml(
-          card.name
-        )}</strong>
-        <small>
-          ${escapeHtml(
-            card.typeLine
-          )}
-          · MV ${card.manaValue}
-        </small>
+        <strong>${escapeHtml(card.name)}</strong>
+        <small>${escapeHtml(card.typeLine)} · MV ${card.manaValue}</small>
       </label>
     `;
   }
@@ -455,121 +462,152 @@
   function lookCandidate(card, index) {
     return `
       <article class="v59-look-card"
-        data-v59-look-card="${escapeHtml(
-          card.cardId
-        )}">
+        data-v59-look-card="${escapeHtml(card.cardId)}">
         <span>${index + 1}</span>
         ${
           cardImage(card.card)
-            ? `<img src="${escapeHtml(
-                cardImage(card.card)
-              )}" alt="">`
+            ? `<img loading="lazy" decoding="async" src="${escapeHtml(cardImage(card.card))}" alt="${escapeHtml(card.name)}">`
             : '<div class="v59-card-back">?</div>'
         }
-        <strong>${escapeHtml(
-          card.name
-        )}</strong>
+        <strong>${escapeHtml(card.name)}</strong>
         <label>
-          <input type="checkbox"
-            data-v59-bottom
-            value="${escapeHtml(
-              card.cardId
-            )}">
+          <input type="checkbox" data-v59-bottom value="${escapeHtml(card.cardId)}">
           Bottom
         </label>
         <div>
-          <button type="button"
-            data-v59-look-up>↑</button>
-          <button type="button"
-            data-v59-look-down>↓</button>
+          <button type="button" data-v59-look-up>↑</button>
+          <button type="button" data-v59-look-down>↓</button>
         </div>
       </article>
     `;
   }
 
+  function typeOptions(cards) {
+    const types = [...new Set((cards || []).map((card) =>
+      String(card.typeLine || "").match(/\b(Land|Creature|Artifact|Enchantment|Instant|Sorcery|Planeswalker|Battle)\b/i)?.[1]
+    ).filter(Boolean))].sort();
+    return ['<option value="">All card types</option>', ...types.map((type) =>
+      `<option value="${escapeHtml(type.toLowerCase())}">${escapeHtml(type)}</option>`
+    )].join("");
+  }
+
+  function updateSearchSelection(changedInput = null) {
+    const overlay = document.getElementById("v59PendingOverlay");
+    if (!overlay || overlay.dataset.kind !== "search") return;
+    const max = Math.max(0, Number(overlay.dataset.max || 1));
+    let checked = [...overlay.querySelectorAll("[data-v59-select-card]:checked")];
+    if (checked.length > max && changedInput) {
+      if (max === 1) {
+        checked.forEach((input) => {
+          if (input !== changedInput) input.checked = false;
+        });
+      } else {
+        changedInput.checked = false;
+      }
+      checked = [...overlay.querySelectorAll("[data-v59-select-card]:checked")];
+    }
+    overlay.querySelectorAll(".v59-candidate").forEach((card) => {
+      card.classList.toggle("is-selected", Boolean(card.querySelector("input")?.checked));
+    });
+    const count = checked.length;
+    const selected = overlay.querySelector("[data-v625-selected]");
+    if (selected) selected.textContent = `${count} / ${max} selected`;
+    const finish = overlay.querySelector("[data-v59-finish-search]");
+    const min = Math.max(0, Number(overlay.dataset.min || 0));
+    if (finish) finish.disabled = count < min || count > max;
+  }
+
+  function filterCandidates() {
+    const overlay = document.getElementById("v59PendingOverlay");
+    if (!overlay) return;
+    const query = String(overlay.querySelector("[data-v625-card-filter]")?.value || "").trim().toLowerCase();
+    const type = String(overlay.querySelector("[data-v625-type-filter]")?.value || "").toLowerCase();
+    let shown = 0;
+    overlay.querySelectorAll(".v59-candidate").forEach((card) => {
+      const match = (!query || card.dataset.v625Name.includes(query)) &&
+        (!type || card.dataset.v625Type === type);
+      card.hidden = !match;
+      if (match) shown += 1;
+    });
+    const result = overlay.querySelector("[data-v625-results]");
+    if (result) result.textContent = `${shown} card${shown === 1 ? "" : "s"} shown`;
+  }
+
   function renderPending(next) {
     closePending();
     if (!next) return;
-
     activeSessionId = next.id;
 
-    const overlay =
-      document.createElement("div");
-    overlay.id =
-      "v59PendingOverlay";
-    overlay.className =
-      "v59-pending-overlay";
-    overlay.dataset.sessionId =
-      next.id;
-    overlay.dataset.kind =
-      next.kind;
+    const overlay = document.createElement("div");
+    overlay.id = "v59PendingOverlay";
+    overlay.className = "v59-pending-overlay v625-library-choice";
+    overlay.dataset.sessionId = next.id;
+    overlay.dataset.kind = next.kind;
+    overlay.dataset.min = String(next.min || 0);
+    overlay.dataset.max = String(next.max || 1);
 
     if (next.kind === "search") {
+      const destination = destinationLabel(next.destination);
       overlay.innerHTML = `
-        <section>
-          <small>PRIVATE LIBRARY SEARCH</small>
-          <h2>${escapeHtml(
-            next.sourceName
-          )}</h2>
-          <p>
-            Choose ${next.min}–${next.max}
-            card(s).
-            ${
-              next.allowFail
-                ? "You may legally fail to find."
-                : "A card must be found when available."
-            }
-            ${
-              next.searchTopLimit != null
-                ? `Only the top ${next.searchTopLimit} cards are searchable.`
-                : ""
-            }
-          </p>
+        <section class="v625-browser-sheet">
+          <header class="v625-browser-header">
+            <div>
+              <small>PRIVATE LIBRARY CHOICE</small>
+              <h2>${escapeHtml(next.sourceName)}</h2>
+              <p>Choose ${next.min}–${next.max} eligible card(s) and put ${next.max === 1 ? "it" : "them"} into <strong>${escapeHtml(destination)}</strong>.</p>
+            </div>
+            <button type="button" data-v625-minimize aria-label="Minimize library">–</button>
+          </header>
 
-          <div class="v59-candidate-grid">
-            ${(next.candidates || [])
-              .map(searchCandidate)
-              .join("") ||
-              "<p>No matching cards are available.</p>"}
+          <div class="v625-search-summary">
+            <span>${next.libraryCount ?? next.candidates?.length ?? 0} cards in library</span>
+            <span>${escapeHtml(next.filter?.raw || "Any card")}</span>
+            ${next.shuffleAfter ? "<span>Shuffle afterward</span>" : ""}
+            ${next.revealFound ? "<span>Reveal chosen card</span>" : ""}
           </div>
 
-          <button type="button"
-            data-v59-finish-search>
-            Finish search
-          </button>
+          <div class="v625-browser-tools">
+            <input type="search" data-v625-card-filter placeholder="Search card name…" autocomplete="off">
+            <select data-v625-type-filter>${typeOptions(next.candidates)}</select>
+            <strong data-v625-selected>0 / ${next.max} selected</strong>
+            <small data-v625-results>${next.candidates?.length || 0} cards shown</small>
+          </div>
+
+          <div class="v59-candidate-grid">
+            ${(next.candidates || []).map(searchCandidate).join("") || "<p>No legal matching cards are available.</p>"}
+          </div>
+
+          <footer class="v625-browser-footer">
+            ${next.allowFail ? '<button type="button" class="v625-fail-button" data-v59-fail-search>Fail to find</button>' : ""}
+            <button type="button" data-v59-finish-search disabled>
+              Put selected card${next.max === 1 ? "" : "s"} into ${escapeHtml(destination)}
+            </button>
+          </footer>
         </section>
       `;
     } else {
       overlay.innerHTML = `
-        <section>
-          <small>${
-            next.revealToAll
-              ? "REVEALED TOP CARDS"
-              : "PRIVATE LOOK"
-          }</small>
-          <h2>${escapeHtml(
-            next.sourceName
-          )}</h2>
-
-          <div class="v59-look-list"
-            data-v59-look-list>
-            ${(next.cards || [])
-              .map(lookCandidate)
-              .join("") ||
-              "<p>No cards are available.</p>"}
+        <section class="v625-browser-sheet">
+          <header class="v625-browser-header">
+            <div>
+              <small>${next.revealToAll ? "REVEALED TOP CARDS" : "PRIVATE LIBRARY LOOK"}</small>
+              <h2>${escapeHtml(next.sourceName)}</h2>
+              <p>Arrange the cards in the order required by the ability.</p>
+            </div>
+            <button type="button" data-v625-minimize aria-label="Minimize library">–</button>
+          </header>
+          <div class="v59-look-list" data-v59-look-list>
+            ${(next.cards || []).map(lookCandidate).join("") || "<p>No cards are available.</p>"}
           </div>
-
-          <button type="button"
-            data-v59-finish-look>
-            Finish
-          </button>
+          <footer class="v625-browser-footer">
+            <button type="button" data-v59-finish-look>Finish library choice</button>
+          </footer>
         </section>
       `;
     }
 
-    document.body.appendChild(
-      overlay
-    );
+    document.body.appendChild(overlay);
+    updateSearchSelection();
   }
 
   async function runAction(
@@ -591,12 +629,14 @@
 
       toast(message, "success");
       setTimeout(poll, 40);
+      return true;
     } catch (error) {
       toast(
         error.message ||
         "Hidden-information action failed.",
         "error"
       );
+      return false;
     }
   }
 
@@ -681,20 +721,30 @@
 
     pollTimer = setTimeout(
       poll,
-      document.hidden ? 3800 : 1100
+      document.hidden ? 4500 : 1500
     );
   }
 
   document.addEventListener(
     "click",
     (event) => {
-      if (
-        event.target.closest(
-          "#v59HiddenButton"
-        )
-      ) {
+      if (event.target.closest("#v59HiddenButton")) {
         event.preventDefault();
-        showSheet();
+        pending ? renderPending(pending) : showSheet();
+        return;
+      }
+
+      const libraryPile = event.target.closest('.arena-zone-pile[data-zone="library"]');
+      if (libraryPile && pending) {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        renderPending(pending);
+        return;
+      }
+
+      if (event.target.closest("[data-v625-minimize]")) {
+        event.preventDefault();
+        document.getElementById("v59PendingOverlay")?.remove();
         return;
       }
 
@@ -881,6 +931,30 @@
         return;
       }
 
+      const candidate = event.target.closest(".v59-candidate");
+      if (candidate) {
+        event.preventDefault();
+        const input = candidate.querySelector("[data-v59-select-card]");
+        if (input) {
+          input.checked = !input.checked;
+          updateSearchSelection(input);
+        }
+        return;
+      }
+
+      if (event.target.closest("[data-v59-fail-search]")) {
+        event.preventDefault();
+        const overlay = document.getElementById("v59PendingOverlay");
+        runAction({
+          type: "hidden-v59-resolve-search",
+          sessionId: overlay.dataset.sessionId,
+          selectedCardIds: []
+        }, "Library search finished without finding a card.", false).then((ok) => {
+          if (ok) closePending();
+        });
+        return;
+      }
+
       if (
         event.target.closest(
           "[data-v59-finish-search]"
@@ -901,16 +975,15 @@
 
         runAction(
           {
-            type:
-              "hidden-v59-resolve-search",
-            sessionId:
-              overlay.dataset.sessionId,
+            type: "hidden-v59-resolve-search",
+            sessionId: overlay.dataset.sessionId,
             selectedCardIds
           },
           "Library search resolved.",
           false
-        );
-        closePending();
+        ).then((ok) => {
+          if (ok) closePending();
+        });
         return;
       }
 
@@ -987,20 +1060,28 @@
 
         runAction(
           {
-            type:
-              "hidden-v59-resolve-look",
-            sessionId:
-              overlay.dataset.sessionId,
+            type: "hidden-v59-resolve-look",
+            sessionId: overlay.dataset.sessionId,
             bottomCardIds,
             topOrder
           },
           "Library order updated.",
           false
-        );
-        closePending();
+        ).then((ok) => {
+          if (ok) closePending();
+        });
       }
     }
   );
+
+  document.addEventListener("input", (event) => {
+    if (event.target.matches("[data-v625-card-filter]")) filterCandidates();
+  });
+
+  document.addEventListener("change", (event) => {
+    if (event.target.matches("[data-v625-type-filter]")) filterCandidates();
+    if (event.target.matches("[data-v59-select-card]")) updateSearchSelection(event.target);
+  });
 
   const observer =
     new MutationObserver(
