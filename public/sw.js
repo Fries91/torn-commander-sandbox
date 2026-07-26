@@ -1,11 +1,11 @@
 "use strict";
 
 const CACHE_NAME =
-  "arena-commander-mobile-table-v62.7.0";
+  "arena-commander-card-hold-v62.8.0";
 
 const STARTUP_FILES = [
-  "/mobile-table-v62-7.css?v=62.7.0",
-  "/mobile-table-v62-7.js?v=62.7.0",
+  "/mobile-table-v62-8.css?v=62.8.0",
+  "/mobile-table-v62-8.js?v=62.8.0",
   "/hand-collapse-v62-6.css?v=62.6.0",
   "/hand-collapse-v62-6.js?v=62.6.0",
   "/hidden-v59.css?v=62.5.0",
@@ -14,7 +14,7 @@ const STARTUP_FILES = [
   "/home-stability-v62-3.css?v=62.3.0",
   "/home-stability-v62-3.js?v=62.3.0",
   "/tabletop-fix-v62-2.css?v=62.2.0",
-  "/tabletop-fix-v62-2.js?v=62.4.0",
+  "/tabletop-fix-v62-2.js?v=62.8.0",
   "/tabletop-fix-v62-1.css?v=62.1.0",
   "/tabletop-fix-v62-1.js?v=62.4.0",
   "/mtg-card-back-v62-1.png?v=62.1.0",
@@ -35,7 +35,7 @@ const STARTUP_FILES = [
   "/socket-mobile-v60-4.js?v=60.4.0",
   "/startup-session-v60-7.js?v=60.7.0",
   "/performance-bootstrap-v60-6.js?v=60.6.0",
-  "/app.js?v=62.7.0",
+  "/app.js?v=62.8.0",
   "/deck-import-fix.js?v=39.2.0",
   "/clean-home.js?v=39.0.0",
   "/meta-library.js?v=39.0.0",
