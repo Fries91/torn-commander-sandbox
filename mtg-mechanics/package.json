@@ -1,0 +1,18 @@
+{
+  "name": "mtg-arena-mechanics-starter",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Mechanics index, Arena card sync, and multiplayer Commander engine foundation.",
+  "scripts": {
+    "sync:rules": "node src/sync-official-rules.mjs",
+    "sync:cards": "node src/sync-arena-cards.mjs",
+    "build:index": "node src/build-runtime-index.mjs",
+    "sync": "npm run sync:rules && npm run sync:cards && npm run build:index",
+    "test": "node tests/smoke.mjs",
+    "example": "node examples/server-integration.mjs"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
