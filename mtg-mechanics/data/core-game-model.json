@@ -1,0 +1,159 @@
+{
+  "version": "0.1.0",
+  "rules_baseline": "Magic Comprehensive Rules effective 2026-06-19",
+  "supported_game_shape": {
+    "players_min": 2,
+    "players_max_recommended": 6,
+    "free_for_all": true,
+    "commander": true
+  },
+  "zones": [
+    {
+      "id": "library",
+      "visibility": "hidden",
+      "ordered": true
+    },
+    {
+      "id": "hand",
+      "visibility": "owner",
+      "ordered": false
+    },
+    {
+      "id": "battlefield",
+      "visibility": "public",
+      "ordered": false
+    },
+    {
+      "id": "graveyard",
+      "visibility": "public",
+      "ordered": true
+    },
+    {
+      "id": "stack",
+      "visibility": "public",
+      "ordered": true
+    },
+    {
+      "id": "exile",
+      "visibility": "usually_public",
+      "ordered": false
+    },
+    {
+      "id": "command",
+      "visibility": "public",
+      "ordered": false
+    }
+  ],
+  "turn_structure": [
+    {
+      "phase": "beginning",
+      "steps": [
+        "untap",
+        "upkeep",
+        "draw"
+      ]
+    },
+    {
+      "phase": "precombat_main",
+      "steps": [
+        "main"
+      ]
+    },
+    {
+      "phase": "combat",
+      "steps": [
+        "begin_combat",
+        "declare_attackers",
+        "declare_blockers",
+        "combat_damage",
+        "end_combat"
+      ]
+    },
+    {
+      "phase": "postcombat_main",
+      "steps": [
+        "main"
+      ]
+    },
+    {
+      "phase": "ending",
+      "steps": [
+        "end",
+        "cleanup"
+      ]
+    }
+  ],
+  "engine_loop": [
+    "Perform the current turn-based action, if any.",
+    "Check state-based actions repeatedly until none apply.",
+    "Put waiting triggered abilities on the stack in active-player/nonactive-player order.",
+    "Give priority to the active player.",
+    "After every player passes in succession, resolve the top stack item; if the stack is empty, advance the step or phase.",
+    "After each resolution or action, repeat state-based actions and trigger processing."
+  ],
+  "continuous_effect_layers": [
+    {
+      "layer": 1,
+      "purpose": "copy effects"
+    },
+    {
+      "layer": 2,
+      "purpose": "control-changing effects"
+    },
+    {
+      "layer": 3,
+      "purpose": "text-changing effects"
+    },
+    {
+      "layer": 4,
+      "purpose": "type, subtype, and supertype changes"
+    },
+    {
+      "layer": 5,
+      "purpose": "color changes"
+    },
+    {
+      "layer": 6,
+      "purpose": "ability adding/removing effects"
+    },
+    {
+      "layer": "7a",
+      "purpose": "characteristic-defining power/toughness"
+    },
+    {
+      "layer": "7b",
+      "purpose": "set power/toughness"
+    },
+    {
+      "layer": "7c",
+      "purpose": "modify power/toughness"
+    },
+    {
+      "layer": "7d",
+      "purpose": "counters that modify power/toughness"
+    },
+    {
+      "layer": "7e",
+      "purpose": "switch power and toughness"
+    }
+  ],
+  "commander": {
+    "starting_life": 40,
+    "deck_size": 100,
+    "singleton": true,
+    "commander_zone": "command",
+    "commander_tax": "Two additional generic mana for each previous cast from the command zone.",
+    "commander_damage_loss": 21,
+    "multiplayer_first_mulligan_free": true,
+    "attack_multiple_players": true
+  },
+  "architecture_rules": [
+    "Server is authoritative for hidden information, randomness, legality, and state transitions.",
+    "Every card is a stable game object with an instance ID separate from its card-definition ID.",
+    "All changes are events; replacements can transform events before commit, prevention can reduce or stop them, and triggers observe committed events.",
+    "Costs are paid before a spell or ability is placed on the stack.",
+    "Target legality is checked when chosen and again on resolution.",
+    "Zone changes normally create a new object identity; explicitly persistent digital properties need a stable lineage ID.",
+    "Never parse English card text directly inside the UI. Convert card text to structured abilities or attach tested card scripts."
+  ]
+}
