@@ -1,0 +1,179 @@
+{
+  "generated_on": "2026-07-26",
+  "note": "Original implementation summaries. This is an engine design aid, not Arena source code.",
+  "mechanics": [
+    {
+      "id": "perpetual",
+      "name": "Perpetual",
+      "kind": "arena_digital",
+      "summary": "Applies a persistent modification to a specific card object. The modification follows that card through normal zone changes for the rest of the game.",
+      "engine_requirements": [
+        "stable game-object identity",
+        "persistent modifier list",
+        "copy rules that distinguish copiable values from perpetual changes",
+        "zone-change tracking"
+      ],
+      "events": [
+        "PERPETUAL_MODIFIER_ADDED"
+      ],
+      "source": "Wizards: Jumpstart Historic Horizons"
+    },
+    {
+      "id": "conjure",
+      "name": "Conjure",
+      "kind": "arena_digital",
+      "summary": "Creates a real card object that did not begin in a deck and places it in the instructed zone. It behaves as a card, not as a token, until the game ends.",
+      "engine_requirements": [
+        "card-definition catalog",
+        "new card-instance creation",
+        "owner/controller assignment",
+        "game-end cleanup"
+      ],
+      "events": [
+        "CARD_CONJURED",
+        "ZONE_CHANGE"
+      ],
+      "source": "Wizards: Jumpstart Historic Horizons"
+    },
+    {
+      "id": "seek",
+      "name": "Seek",
+      "kind": "arena_digital",
+      "summary": "Randomly selects a card in the library that matches stated criteria and moves it to the instructed zone without revealing the library or shuffling it.",
+      "engine_requirements": [
+        "hidden-zone predicate filtering",
+        "server-authoritative random selection",
+        "no-search/no-shuffle path",
+        "audit log that hides private information"
+      ],
+      "events": [
+        "SEEK_STARTED",
+        "CARD_SEEKED",
+        "ZONE_CHANGE"
+      ],
+      "source": "Wizards: Jumpstart Historic Horizons"
+    },
+    {
+      "id": "draft-from-spellbook",
+      "name": "Draft from a Spellbook",
+      "kind": "arena_digital",
+      "summary": "Presents a random subset from a fixed card list, lets the player choose one, then usually conjures the chosen card to the stated zone.",
+      "engine_requirements": [
+        "spellbook definitions",
+        "random sample without unintended duplicates",
+        "private choice prompt",
+        "conjure integration"
+      ],
+      "events": [
+        "SPELLBOOK_OFFERED",
+        "SPELLBOOK_CHOICE",
+        "CARD_CONJURED"
+      ],
+      "source": "Wizards: Designing for Alchemy"
+    },
+    {
+      "id": "intensity",
+      "name": "Intensity",
+      "kind": "arena_digital",
+      "summary": "Stores a numeric value on a card and changes that value perpetually when its instructions say so. Rules text or effects may read the current value.",
+      "engine_requirements": [
+        "persistent integer property",
+        "derived text/value rendering",
+        "perpetual change integration",
+        "card-instance identity"
+      ],
+      "events": [
+        "INTENSITY_CHANGED"
+      ],
+      "source": "Wizards: Alchemy Kamigawa"
+    },
+    {
+      "id": "specialize",
+      "name": "Specialize",
+      "kind": "arena_digital",
+      "summary": "Pays a cost and discards a card of a chosen color or basic land type to transform the permanent into the corresponding specialized version.",
+      "engine_requirements": [
+        "multiple linked card faces/definitions",
+        "color-choice validation",
+        "discard cost",
+        "commander color-identity deck validation"
+      ],
+      "events": [
+        "SPECIALIZE_CHOSEN",
+        "COST_PAID",
+        "CARD_TRANSFORMED"
+      ],
+      "source": "Wizards: Alchemy Horizons Baldur's Gate"
+    },
+    {
+      "id": "double-team",
+      "name": "Double Team",
+      "kind": "arena_digital",
+      "summary": "When a nontoken creature with double team attacks, it conjures a duplicate of the original into its controller's hand; both the attacker and the new card then lose double team.",
+      "engine_requirements": [
+        "attack trigger",
+        "copiable card definition snapshot",
+        "conjure integration",
+        "ability removal on both instances"
+      ],
+      "events": [
+        "ATTACKER_DECLARED",
+        "CARD_CONJURED",
+        "ABILITY_REMOVED"
+      ],
+      "source": "Wizards: Alchemy Horizons Baldur's Gate"
+    },
+    {
+      "id": "boon",
+      "name": "Boon",
+      "kind": "arena_digital",
+      "summary": "Creates a player-held delayed effect. When its condition occurs, it triggers once and then disappears unless the effect says otherwise.",
+      "engine_requirements": [
+        "player effect zone",
+        "delayed-trigger registry",
+        "single-use cleanup",
+        "public status rendering"
+      ],
+      "events": [
+        "BOON_CREATED",
+        "BOON_TRIGGERED",
+        "BOON_REMOVED"
+      ],
+      "source": "Wizards: Alchemy Horizons Baldur's Gate"
+    },
+    {
+      "id": "heist",
+      "name": "Heist",
+      "kind": "arena_digital",
+      "summary": "Builds a private offer from cards associated with an opponent, lets the heisting player choose one, and makes the selected card available under the effect's casting rules.",
+      "engine_requirements": [
+        "opponent-linked card pool",
+        "private random offer",
+        "ownership vs control distinction",
+        "cast-from-exile or generated-card permissions"
+      ],
+      "events": [
+        "HEIST_OFFERED",
+        "HEIST_CHOICE",
+        "CAST_PERMISSION_CREATED"
+      ],
+      "source": "Wizards: Alchemy digital releases"
+    },
+    {
+      "id": "rebalanced-card",
+      "name": "Rebalanced Card Version",
+      "kind": "arena_digital_system",
+      "summary": "Uses an Arena-specific rules definition for a card while preserving its identity links to the printed card for collection and format purposes.",
+      "engine_requirements": [
+        "versioned card definitions",
+        "format-dependent oracle text",
+        "deck migration",
+        "server/client version agreement"
+      ],
+      "events": [
+        "CARD_DEFINITION_SELECTED"
+      ],
+      "source": "Wizards: Alchemy format"
+    }
+  ]
+}
