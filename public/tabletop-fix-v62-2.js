@@ -1,14 +1,15 @@
 (() => {
   "use strict";
 
-  const VERSION = "62.4.0";
+  const VERSION = "62.8.0";
   const SESSION_KEY = "tornCommander.session.v5";
-  const MIN_DRAG_DISTANCE = 7;
-  const HOLD_DELAY = 95;
+  const MIN_DRAG_DISTANCE = 12;
+  const LONG_PRESS_DELAY = 430;
 
-  let drag = null;
+  let gesture = null;
   let requestPending = false;
   let suppressClicksUntil = 0;
+  let programmaticClick = false;
   let repairQueued = false;
 
   function session() {
@@ -18,6 +19,10 @@
 
   function gameShell() {
     return document.querySelector(".arena-game-shell");
+  }
+
+  function isMobilePointer(event) {
+    return ["touch", "pen"].includes(String(event.pointerType || ""));
   }
 
   function toast(message, type = "info") {
@@ -66,6 +71,7 @@
       window.ArenaCommanderPlaymatV610?.repairPlaymat?.();
       window.ArenaCommanderFinalV61?.repair?.();
       window.ArenaCommanderTabletopFixV621?.repair?.();
+      window.ArenaCommanderMobileTableV628?.repair?.();
       scheduleRepair();
       return data;
     } catch (error) {
@@ -77,7 +83,11 @@
     }
   }
 
-  function closestCard(target) {
+  function closestAnyCard(target) {
+    return target?.closest?.('.arena-card[data-card-id][data-zone]') || null;
+  }
+
+  function closestControlledCard(target) {
     return target?.closest?.('.arena-card[data-can-control="1"][data-card-id][data-zone]') || null;
   }
 
@@ -108,14 +118,17 @@
     });
 
     if (source.fromZone === "battlefield") {
-      document.querySelectorAll('.opponent-slot.v61-focus-visible [data-drop-player-id]').forEach((element) => {
+      document.querySelectorAll('.opponent-slot.v628-focus-visible [data-drop-player-id],.opponent-slot.v61-focus-visible [data-drop-player-id]').forEach((element) => {
         element.classList.add("v624-drop-ready");
       });
     }
   }
 
   function playerTargetAt(x, y) {
-    for (const slot of document.querySelectorAll(".opponent-slot.v61-focus-visible")) {
+    const slots = document.querySelectorAll(
+      ".opponent-slot.v628-focus-visible,.opponent-slot.v61-focus-visible"
+    );
+    for (const slot of slots) {
       const seat = slot.querySelector(".arena-seat.is-opponent") || slot.querySelector(".arena-seat");
       const playerId = seat?.dataset.playerSeatId || slot.dataset.dropPlayerId || "";
       if (!playerId) continue;
@@ -157,85 +170,96 @@
     return zoneTargetAt(x, y);
   }
 
-  function beginDrag(event) {
-    if (!drag || drag.active || !gameShell()) return;
-    drag.active = true;
-    drag.lastX = event.clientX;
-    drag.lastY = event.clientY;
-    document.body.classList.add("v622-dragging");
-    drag.card.classList.add("v622-drag-source");
+  function fireCardClick(card) {
+    if (!card?.isConnected) return;
+    programmaticClick = true;
+    suppressClicksUntil = Date.now() + 650;
+    try {
+      card.dispatchEvent(new MouseEvent("click", {
+        bubbles: true,
+        cancelable: true,
+        view: window
+      }));
+    } finally {
+      programmaticClick = false;
+    }
+  }
 
-    const ghost = drag.card.cloneNode(true);
+  function openLongPressPreview() {
+    if (!gesture || gesture.dragging || gesture.longPressed || !gesture.card?.isConnected) return;
+    gesture.longPressed = true;
+    gesture.card.classList.add("v628-card-hold-active");
+    navigator.vibrate?.(18);
+    fireCardClick(gesture.card);
+    window.setTimeout(() => gesture?.card?.classList.remove("v628-card-hold-active"), 250);
+  }
+
+  function beginDrag(event) {
+    if (!gesture || gesture.dragging || gesture.longPressed || !gesture.controlledCard || !gameShell()) return;
+    window.clearTimeout(gesture.timer);
+    gesture.dragging = true;
+    gesture.lastX = event.clientX;
+    gesture.lastY = event.clientY;
+    document.body.classList.add("v622-dragging");
+    gesture.controlledCard.classList.add("v622-drag-source");
+
+    const ghost = gesture.controlledCard.cloneNode(true);
     ghost.classList.add("v622-drag-ghost");
     ghost.removeAttribute("data-action");
     ghost.removeAttribute("draggable");
     ghost.style.left = `${event.clientX}px`;
     ghost.style.top = `${event.clientY}px`;
     document.body.appendChild(ghost);
-    drag.ghost = ghost;
+    gesture.ghost = ghost;
 
-    showAvailableTargets({
-      fromZone: String(drag.card.dataset.zone || "")
-    });
-    navigator.vibrate?.(18);
-  }
-
-  function maybeAutoScroll(event) {
-    if (document.body.classList.contains("v621-fullscreen")) return;
-    if (event.clientY < 92) window.scrollBy({ top: -22, behavior: "auto" });
-    else if (event.clientY > window.innerHeight - 118) window.scrollBy({ top: 22, behavior: "auto" });
+    showAvailableTargets({ fromZone: String(gesture.controlledCard.dataset.zone || "") });
+    navigator.vibrate?.(12);
   }
 
   function updateDrag(event) {
-    if (!drag?.active) return;
+    if (!gesture?.dragging) return;
     event.preventDefault();
     event.stopImmediatePropagation();
-    drag.lastX = event.clientX;
-    drag.lastY = event.clientY;
-    drag.ghost.style.left = `${event.clientX}px`;
-    drag.ghost.style.top = `${event.clientY}px`;
-    maybeAutoScroll(event);
+    gesture.lastX = event.clientX;
+    gesture.lastY = event.clientY;
+    gesture.ghost.style.left = `${event.clientX}px`;
+    gesture.ghost.style.top = `${event.clientY}px`;
 
     document.querySelectorAll(".v622-drop-target").forEach((element) => element.classList.remove("v622-drop-target"));
-    const source = { fromZone: String(drag.card.dataset.zone || "") };
-    drag.target = targetAt(event.clientX, event.clientY, source);
-    drag.target?.classList.add("v622-drop-target");
+    const source = { fromZone: String(gesture.controlledCard.dataset.zone || "") };
+    gesture.target = targetAt(event.clientX, event.clientY, source);
+    gesture.target?.classList.add("v622-drop-target");
   }
 
-  function destroyDrag() {
-    if (!drag) return;
-    window.clearTimeout(drag.timer);
-    drag.ghost?.remove();
-    drag.card?.classList.remove("v622-drag-source");
+  function destroyGesture() {
+    if (!gesture) return;
+    window.clearTimeout(gesture.timer);
+    gesture.ghost?.remove();
+    gesture.controlledCard?.classList.remove("v622-drag-source");
+    gesture.card?.classList.remove("v628-card-hold-active");
     clearHighlights();
-    drag = null;
+    gesture = null;
     document.body.classList.remove("v622-dragging");
   }
 
   async function finishDrag(event) {
-    if (!drag) return;
-    window.clearTimeout(drag.timer);
-    if (!drag.active) {
-      drag = null;
-      return;
-    }
-
+    if (!gesture?.dragging) return;
     event.preventDefault();
     event.stopImmediatePropagation();
     suppressClicksUntil = Date.now() + 700;
 
     const source = {
-      cardId: String(drag.card.dataset.cardId || ""),
-      fromZone: String(drag.card.dataset.zone || ""),
-      ownerId: String(drag.card.dataset.ownerId || "")
+      cardId: String(gesture.controlledCard.dataset.cardId || ""),
+      fromZone: String(gesture.controlledCard.dataset.zone || ""),
+      ownerId: String(gesture.controlledCard.dataset.ownerId || "")
     };
 
-    const x = Number.isFinite(event.clientX) && event.clientX > 0 ? event.clientX : drag.lastX;
-    const y = Number.isFinite(event.clientY) && event.clientY > 0 ? event.clientY : drag.lastY;
-    const target = targetAt(x, y, source) || drag.target;
+    const x = Number.isFinite(event.clientX) && event.clientX > 0 ? event.clientX : gesture.lastX;
+    const y = Number.isFinite(event.clientY) && event.clientY > 0 ? event.clientY : gesture.lastY;
+    const target = targetAt(x, y, source) || gesture.target;
     const toZone = String(target?.dataset.dropZone || "");
     const defenderPlayerId = String(target?.dataset.dropPlayerId || "");
-    destroyDrag();
+    destroyGesture();
 
     if (defenderPlayerId && source.fromZone === "battlefield") {
       const result = await post({ type: "declare-attacker", cardId: source.cardId, defenderPlayerId });
@@ -261,60 +285,101 @@
     toast("Release the card inside your highlighted battlefield or another highlighted zone.", "warning");
   }
 
-  function installReliableDrag() {
+  function installCardInteraction() {
     window.addEventListener("pointerdown", (event) => {
       if (!gameShell() || !event.isPrimary || requestPending) return;
-      if (!["touch", "pen", "mouse"].includes(event.pointerType)) return;
+      if (!["touch", "pen", "mouse"].includes(String(event.pointerType || ""))) return;
       if (event.button != null && event.button !== 0) return;
-      const card = closestCard(event.target);
+      const card = closestAnyCard(event.target);
       if (!card || event.target.closest("button,input,textarea,select,a")) return;
 
-      // Stop the older v61 touch-drag handler from starting a second drag at the same time.
+      // Window capture runs before the older document-level drag handler.
       event.stopImmediatePropagation();
 
-      drag = {
+      const controlledCard = closestControlledCard(event.target);
+      gesture = {
         pointerId: event.pointerId,
         card,
+        controlledCard,
         startX: event.clientX,
         startY: event.clientY,
         lastX: event.clientX,
         lastY: event.clientY,
-        active: false,
+        dragging: false,
+        longPressed: false,
         target: null,
         ghost: null,
-        timer: window.setTimeout(() => beginDrag(event), HOLD_DELAY)
+        timer: window.setTimeout(openLongPressPreview, LONG_PRESS_DELAY)
       };
     }, { capture: true, passive: true });
 
     window.addEventListener("pointermove", (event) => {
-      if (!drag || drag.pointerId !== event.pointerId) return;
-      const distance = Math.hypot(event.clientX - drag.startX, event.clientY - drag.startY);
-      if (!drag.active && distance >= MIN_DRAG_DISTANCE) beginDrag(event);
-      if (drag.active) updateDrag(event);
+      if (!gesture || gesture.pointerId !== event.pointerId) return;
+      const dx = event.clientX - gesture.startX;
+      const dy = event.clientY - gesture.startY;
+      const distance = Math.hypot(dx, dy);
+      if (gesture.longPressed) {
+        event.preventDefault();
+        return;
+      }
+
+      if (!gesture.dragging && distance >= MIN_DRAG_DISTANCE) {
+        const fromHand = String(gesture.card.dataset.zone || "") === "hand";
+        // Horizontal movement in the hand remains a normal sideways hand scroll.
+        if (fromHand && Math.abs(dx) > Math.abs(dy) * 1.15) {
+          window.clearTimeout(gesture.timer);
+          gesture = null;
+          return;
+        }
+        if (gesture.controlledCard) beginDrag(event);
+        else {
+          window.clearTimeout(gesture.timer);
+          gesture = null;
+          return;
+        }
+      }
+      if (gesture?.dragging) updateDrag(event);
     }, { capture: true, passive: false });
 
     window.addEventListener("pointerup", (event) => {
-      if (!drag || drag.pointerId !== event.pointerId) return;
-      finishDrag(event);
+      if (!gesture || gesture.pointerId !== event.pointerId) return;
+      window.clearTimeout(gesture.timer);
+      if (gesture.dragging) {
+        finishDrag(event);
+        return;
+      }
+      if (gesture.longPressed) {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        destroyGesture();
+        return;
+      }
+      // A normal short tap is left to the app's regular card click handler.
+      gesture = null;
     }, { capture: true, passive: false });
 
     window.addEventListener("pointercancel", (event) => {
-      if (drag?.pointerId === event.pointerId) destroyDrag();
+      if (gesture?.pointerId === event.pointerId) destroyGesture();
     }, { capture: true });
 
-    window.addEventListener("scroll", () => {
-      if (drag && !drag.active) destroyDrag();
-      if (drag?.active) {
-        const source = { fromZone: String(drag.card.dataset.zone || "") };
-        document.querySelectorAll(".v622-drop-target").forEach((element) => element.classList.remove("v622-drop-target"));
-        drag.target = targetAt(drag.lastX, drag.lastY, source);
-        drag.target?.classList.add("v622-drop-target");
-      }
-    }, { passive: true });
-
     window.addEventListener("click", (event) => {
-      if (Date.now() >= suppressClicksUntil) return;
+      if (programmaticClick || Date.now() >= suppressClicksUntil) return;
       if (!event.target.closest?.(".arena-card")) return;
+      event.preventDefault();
+      event.stopImmediatePropagation();
+    }, true);
+
+    window.addEventListener("contextmenu", (event) => {
+      const card = closestAnyCard(event.target);
+      if (!card) return;
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      if (!document.getElementById("modalBackdrop")?.classList.contains("is-hidden")) return;
+      fireCardClick(card);
+    }, { capture: true });
+
+    window.addEventListener("dragstart", (event) => {
+      if (!event.target.closest?.(".arena-card,.arena-card img")) return;
       event.preventDefault();
       event.stopImmediatePropagation();
     }, true);
@@ -371,8 +436,14 @@
     }
   }
 
+  function repairCardElements() {
+    document.querySelectorAll(".arena-card,.arena-card img").forEach((element) => {
+      element.setAttribute("draggable", "false");
+    });
+  }
+
   function clearNonGameState() {
-    if (drag) destroyDrag();
+    if (gesture) destroyGesture();
     document.body.classList.remove("v622-game-visible", "v622-dragging", "v622-moving-card");
     document.querySelectorAll(".v622-drag-ghost").forEach((element) => element.remove());
     clearHighlights();
@@ -385,10 +456,11 @@
       return;
     }
     document.body.classList.add("v622-game-visible");
-    shell.classList.add("arena-v622", "arena-v624");
+    shell.classList.add("arena-v622", "arena-v624", "arena-v628-interaction");
     window.ArenaCommanderPlaymatV610?.repairPlaymat?.();
     repairSwitcher();
     repairDropZones();
+    repairCardElements();
   }
 
   function scheduleRepair() {
@@ -401,7 +473,7 @@
   }
 
   function start() {
-    installReliableDrag();
+    installCardInteraction();
     const app = document.getElementById("app");
     if (app) new MutationObserver(scheduleRepair).observe(app, { childList: true, subtree: true });
     document.addEventListener("fullscreenchange", scheduleRepair);
