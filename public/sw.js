@@ -1,9 +1,11 @@
 "use strict";
 
 const CACHE_NAME =
-  "arena-commander-board-fix-v62.4.0";
+  "arena-commander-library-choice-v62.5.0";
 
 const STARTUP_FILES = [
+  "/hidden-v59.css?v=62.5.0",
+  "/hidden-v59.js?v=62.5.0",
   "/tabletop-fix-v62-4.css?v=62.4.0",
   "/home-stability-v62-3.css?v=62.3.0",
   "/home-stability-v62-3.js?v=62.3.0",
@@ -29,7 +31,7 @@ const STARTUP_FILES = [
   "/socket-mobile-v60-4.js?v=60.4.0",
   "/startup-session-v60-7.js?v=60.7.0",
   "/performance-bootstrap-v60-6.js?v=60.6.0",
-  "/app.js?v=62.4.0",
+  "/app.js?v=62.5.0",
   "/deck-import-fix.js?v=39.2.0",
   "/clean-home.js?v=39.0.0",
   "/meta-library.js?v=39.0.0",
