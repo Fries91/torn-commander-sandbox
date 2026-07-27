@@ -1,0 +1,80 @@
+/* Arena Commander v63.1.2 — mobile hand spread and library status guard */
+
+@media (max-width: 820px) {
+  body.v627-mobile-table:not(.v626-hand-collapsed)
+  .arena-hand-tray.v626-hand-ready {
+    height: min(48dvh, 370px) !important;
+    min-height: min(48dvh, 370px) !important;
+    overflow: hidden !important;
+  }
+
+  body.v627-mobile-table:not(.v626-hand-collapsed)
+  .arena-hand-tray.v626-hand-ready
+  .arena-hand-fan {
+    display: grid !important;
+    grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+    grid-auto-rows: max-content !important;
+    align-content: start !important;
+    align-items: start !important;
+    justify-items: center !important;
+    gap: 8px 6px !important;
+    width: 100% !important;
+    height: calc(100% - 36px) !important;
+    padding: 5px 8px 12px !important;
+    overflow-x: hidden !important;
+    overflow-y: auto !important;
+    overscroll-behavior: contain !important;
+    scroll-snap-type: none !important;
+    pointer-events: auto !important;
+  }
+
+  body.v627-mobile-table:not(.v626-hand-collapsed) {
+    --v610-hand-card-w: clamp(70px, 21vw, 88px);
+    --v610-hand-card-h: calc(var(--v610-hand-card-w) * 1.397);
+  }
+
+  body.v627-mobile-table:not(.v626-hand-collapsed)
+  .arena-hand-tray
+  .hand-card-wrap,
+  body.v627-mobile-table:not(.v626-hand-collapsed)
+  .arena-hand-tray
+  .hand-card-wrap:first-child {
+    flex: none !important;
+    width: var(--v610-hand-card-w) !important;
+    min-width: var(--v610-hand-card-w) !important;
+    max-width: var(--v610-hand-card-w) !important;
+    height: var(--v610-hand-card-h) !important;
+    min-height: var(--v610-hand-card-h) !important;
+    margin: 0 !important;
+    transform: none !important;
+    scroll-snap-align: none !important;
+    touch-action: none !important;
+  }
+
+  body.v627-mobile-table:not(.v626-hand-collapsed)
+  .v626-hand-toggle::before {
+    content: "CLOSE HAND" !important;
+  }
+
+  body.v627-mobile-table.v626-hand-collapsed
+  .v626-hand-toggle::before {
+    content: "SHOW HAND" !important;
+  }
+
+  #v59HiddenButton.v6312-api-offline {
+    opacity: .64 !important;
+    border-color: rgba(255, 115, 125, .8) !important;
+  }
+}
+
+@media (max-width: 340px) {
+  body.v627-mobile-table:not(.v626-hand-collapsed)
+  .arena-hand-tray.v626-hand-ready
+  .arena-hand-fan {
+    grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+  }
+
+  body.v627-mobile-table:not(.v626-hand-collapsed) {
+    --v610-hand-card-w: clamp(70px, 25vw, 82px);
+  }
+}
