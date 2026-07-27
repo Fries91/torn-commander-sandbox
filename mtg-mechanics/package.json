@@ -1,0 +1,26 @@
+{
+  "name": "torn-commander-sandbox",
+  "version": "63.1.0",
+  "private": true,
+  "description": "Arena Commander stable v63 with consolidated mobile UI and an integrated MTG mechanics compatibility bridge.",
+  "main": "server.js",
+  "scripts": {
+    "start": "node -r ./meta-register.js -r ./automation-register.js -r ./arena-rules-register.js -r ./zone-rules-register.js -r ./target-rules-register.js -r ./effects-rules-register.js -r ./mechanics-rules-register.js -r ./permissions-rules-register.js -r ./trigger-order-register.js -r ./permanent-forms-register.js -r ./casting-mechanics-register.js -r ./combat-rules-register.js -r ./walker-battle-register.js -r ./attachment-rules-register.js -r ./copy-rules-register.js -r ./commander-rules-register.js -r ./multiplayer-rules-register.js -r ./replacement-rules-register.js -r ./control-rules-register.js -r ./hidden-search-register.js -r ./turn-rules-register.js -r ./deck-legality-fix-register.js -r ./auto-draw-register.js -r ./gameplay-automation-v62-register.js -r ./mtg-mechanics-register.js server.js",
+    "dev": "node --watch -r ./meta-register.js -r ./automation-register.js -r ./arena-rules-register.js -r ./zone-rules-register.js -r ./target-rules-register.js -r ./effects-rules-register.js -r ./mechanics-rules-register.js -r ./permissions-rules-register.js -r ./trigger-order-register.js -r ./permanent-forms-register.js -r ./casting-mechanics-register.js -r ./combat-rules-register.js -r ./walker-battle-register.js -r ./attachment-rules-register.js -r ./copy-rules-register.js -r ./commander-rules-register.js -r ./multiplayer-rules-register.js -r ./replacement-rules-register.js -r ./control-rules-register.js -r ./hidden-search-register.js -r ./turn-rules-register.js -r ./deck-legality-fix-register.js -r ./auto-draw-register.js -r ./gameplay-automation-v62-register.js -r ./mtg-mechanics-register.js server.js",
+    "check": "node --check server.js && node --check ai-engine.js && node --check mtg-mechanics-adapter.js && node --check mtg-mechanics-register.js && node mtg-mechanics/tests/smoke.mjs && node tests/mtg-mechanics-integration.test.js",
+    "check:mtg": "node --check mtg-mechanics-adapter.js && node --check mtg-mechanics-register.js && node mtg-mechanics/tests/smoke.mjs && node tests/mtg-mechanics-integration.test.js",
+    "sync:mtg-rules": "node mtg-mechanics/src/sync-official-rules.mjs",
+    "sync:mtg-cards": "node mtg-mechanics/src/sync-arena-cards.mjs",
+    "build:mtg-index": "node mtg-mechanics/src/build-runtime-index.mjs",
+    "sync:mtg": "npm run sync:mtg-rules && npm run sync:mtg-cards && npm run build:mtg-index",
+    "sync:meta": "node scripts/sync-meta-decks.js"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "express": "^4.21.2",
+    "pg": "^8.22.0",
+    "socket.io": "^4.8.1"
+  }
+}
