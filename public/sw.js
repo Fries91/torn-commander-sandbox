@@ -1,12 +1,14 @@
 "use strict";
 
-const CACHE_NAME = "arena-commander-stable-v63.1.1";
+const CACHE_NAME = "arena-commander-stable-v63.1.2";
 
 const STARTUP_FILES = [
   "/arena-commander-ui.css?v=63.0.0",
+  "/mobile-hand-api-fix-v63-1-2.css?v=63.1.2",
   "/arena-commander-runtime.js?v=63.0.0",
   "/arena-commander-multiplayer.js?v=63.0.0",
-  "/arena-commander-mobile.js?v=63.0.0",
+  "/arena-commander-mobile.js?v=63.1.2",
+  "/mobile-hand-api-fix-v63-1-2.js?v=63.1.2",
   "/arena-final-v61.css?v=63.0.0",
   "/artwork-leave-fix-v61-2.css?v=63.0.0",
   "/gameplay-automation-v62.css?v=63.0.0",
@@ -17,7 +19,7 @@ const STARTUP_FILES = [
   "/hand-collapse-v62-6.css?v=63.0.0",
   "/mobile-table-v62-8.css?v=63.0.0",
   "/hidden-v59.css?v=62.5.0",
-  "/hidden-v59.js?v=62.5.0",
+  "/hidden-v59.js?v=63.1.2",
   "/mtg-card-back-v62-1.png?v=62.1.0",
   "/",
   "/index.html",
